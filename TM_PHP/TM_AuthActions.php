@@ -22,7 +22,7 @@ if ($action === 'login') {
     }
 
     $stmt = tm_exec(
-        'SELECT user_id, first_name, last_name, email, password_hash, role FROM TM_Users WHERE email = ?',
+        'SELECT user_id, first_name, last_name, email, password_hash, role FROM TM_Users WHERE email = :p1',
         [$email]
     );
     $user = tm_fetch_one($stmt);
@@ -67,7 +67,7 @@ if ($action === 'register') {
         header('Location: ../TM_Register.php'); exit;
     }
 
-    $chk = tm_exec('SELECT COUNT(*) FROM TM_Users WHERE email = ?', [$em]);
+    $chk = tm_exec('SELECT COUNT(*) FROM TM_Users WHERE email = :p1', [$em]);
     if ((int)tm_scalar($chk) > 0) {
         tm_flash('error', 'An account with this email already exists.');
         header('Location: ../TM_Register.php'); exit;
@@ -78,7 +78,7 @@ if ($action === 'register') {
 
     tm_exec(
         'INSERT INTO TM_Users (username, email, password_hash, first_name, last_name, phone)
-         VALUES (?, ?, ?, ?, ?, ?)',
+         VALUES (:p1, :p2, :p3, :p4, :p5, :p6)',
         [$un, $em, $hash, $fn, $ln, $ph]
     );
 

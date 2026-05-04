@@ -11,17 +11,19 @@ $stmt  = tm_exec(
     "SELECT task_id, task_name, TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
             TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
             category, custom_category, priority, color, notes
-     FROM TM_Tasks WHERE user_id = ? ORDER BY start_date ASC",
+     FROM TM_Tasks WHERE user_id = :p1 ORDER BY start_date ASC",
     [$uid]
 );
 $tasks = tm_fetch_all($stmt);
-// Convert any CLOB/resource objects to plain strings before JSON encoding
+// Convert any CLOB/OCILob/resource objects to plain strings before JSON encoding
 $tasks = array_map(function($row) {
-    if (isset($row['notes']) && is_resource($row['notes'])) {
-        $row['notes'] = stream_get_contents($row['notes']);
-    }
     if (isset($row['notes'])) {
-        $row['notes'] = (string)$row['notes'];
+        if ($row['notes'] instanceof OCILob) {
+            $row['notes'] = $row['notes']->load();
+        } elseif (is_resource($row['notes'])) {
+            $row['notes'] = stream_get_contents($row['notes']);
+        }
+        $row['notes'] = (string)($row['notes'] ?? '');
     }
     return $row;
 }, $tasks);
