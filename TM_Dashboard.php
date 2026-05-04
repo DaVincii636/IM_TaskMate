@@ -67,8 +67,9 @@ html,body{margin:0;padding:0;background:#0a0a0a!important;height:100%;}
     <div class="navbar-logo">Task<span>Mate</span></div>
     <div class="navbar-right">
         <a href="TM_Calendar.php" class="btn-logout">Calendar</a>
-        <!-- Secret Admin: Alt+Shift+C -->
-        <script>document.addEventListener("keydown",function(e){if(e.altKey&&e.shiftKey&&e.key==="C"){window.location.href='TM_UserList.php';}});</script>
+        <?php if (tm_role() === 'admin'): ?>
+        <a href="TM_UserList.php" class="btn-logout">Admin Panel</a>
+        <?php endif; ?>
         <a href="#" class="btn-logout" id="logoutBtn">Log Out</a>
     </div>
 </nav>

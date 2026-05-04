@@ -23,6 +23,18 @@ function tm_uname(): string {
     return $_SESSION['tm_first_name'] ?? 'User';
 }
 
+function tm_role(): string {
+    return $_SESSION['tm_role'] ?? 'user';
+}
+
+function tm_require_role(string $role): void {
+    tm_require_login();
+    if (tm_role() !== $role) {
+        header('Location: ../TM_Dashboard.php');
+        exit;
+    }
+}
+
 function tm_flash(string $type, string $msg): void {
     $_SESSION['tm_flash'] = ['type' => $type, 'msg' => $msg];
 }

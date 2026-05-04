@@ -1,7 +1,7 @@
 <?php
 require_once 'TM_PHP/TM_Session.php';
 require_once 'TM_PHP/TM_DB.php';
-tm_require_login();
+tm_require_role('admin');
 
 $flash     = tm_get_flash();
 $userName  = tm_uname();

@@ -22,7 +22,7 @@ if ($action === 'login') {
     }
 
     $stmt = tm_exec(
-        'SELECT user_id, first_name, last_name, email, password_hash FROM TM_Users WHERE email = ?',
+        'SELECT user_id, first_name, last_name, email, password_hash, role FROM TM_Users WHERE email = ?',
         [$email]
     );
     $user = tm_fetch_one($stmt);
@@ -36,6 +36,7 @@ if ($action === 'login') {
     $_SESSION['tm_first_name'] = $user['first_name'];
     $_SESSION['tm_last_name']  = $user['last_name'];
     $_SESSION['tm_email']      = $user['email'];
+    $_SESSION['tm_role']       = $user['role'] ?? 'user';
 
     header('Location: ../TM_Dashboard.php'); exit;
 }
