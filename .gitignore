@@ -1,0 +1,10 @@
+# Oracle / DB credentials — NEVER commit these
+TM_PHP/TM_DB.php
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+*.code-workspace
