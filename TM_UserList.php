@@ -1,13 +1,14 @@
 <?php
 require_once 'TM_PHP/TM_Session.php';
 require_once 'TM_PHP/TM_DB.php';
-tm_require_role('admin');
+tm_require_role('moderator');
 
 $flash     = tm_get_flash();
 $userName  = tm_uname();
-$stmt      = tm_exec('SELECT user_id, first_name, last_name, email, phone FROM TM_Users ORDER BY user_id DESC');
+$stmt = tm_exec('SELECT user_id, first_name, last_name, email, phone, role FROM TM_Users ORDER BY user_id DESC');
 $users     = tm_fetch_all($stmt);
 $userCount = count($users);
+$is_admin = tm_is_admin();
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -98,7 +99,9 @@ $userCount = count($users);
 
     <div class="admin-bar">
         <span class="admin-badge">⚙ User List</span>
+        <?php if ($is_admin): ?>
         <button class="btn-add-user" onclick="openAdminModal('addModal')">Add User</button>
+        <?php endif; ?>
     </div>
 
     <div class="search-wrap">
@@ -122,7 +125,7 @@ $userCount = count($users);
             <?php else: ?>
                 <table id="usersTable">
                     <thead>
-                        <tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Actions</th></tr>
+                        <tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
                         <?php foreach ($users as $i => $u): ?>
@@ -132,6 +135,17 @@ $userCount = count($users);
                             <td><?= htmlspecialchars($u['email']) ?></td>
                             <td><?= htmlspecialchars($u['phone']) ?></td>
                             <td>
+                                <?php
+                                $roleLabel = match($u['role'] ?? 'user') {
+                                    'admin'     => '<span style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">ADMIN</span>',
+                                    'moderator' => '<span style="background:#ede9fe;color:#7c3aed;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">MOD</span>',
+                                    default     => '<span style="background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">USER</span>',
+                                };
+                                echo $roleLabel;
+                                ?>
+                            </td>
+                            <td>
+                                <?php if ($is_admin): ?>
                                 <div class="td-actions">
                                     <button class="btn-edit-user"
                                         data-id="<?= $u['user_id'] ?>"
@@ -139,12 +153,16 @@ $userCount = count($users);
                                         data-lname="<?= htmlspecialchars($u['last_name']) ?>"
                                         data-email="<?= htmlspecialchars($u['email']) ?>"
                                         data-phone="<?= htmlspecialchars($u['phone']) ?>"
+                                        data-role="<?= htmlspecialchars($u['role'] ?? 'user') ?>"
                                         onclick="openEditModal(this)">Edit</button>
                                     <button class="btn-delete-user"
                                         data-userid="<?= $u['user_id'] ?>"
                                         data-username="<?= htmlspecialchars($u['first_name'] . ' ' . $u['last_name']) ?>"
                                         onclick="openDeleteUserModal(this)">Delete</button>
                                 </div>
+                                <?php else: ?>
+                                <span style="font-size:12px;color:#9ca3af">Read-only</span>
+                                <?php endif; ?>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -188,6 +206,14 @@ $userCount = count($users);
                     <label class="form-label">Password</label>
                     <input type="password" name="password" class="form-input" placeholder="Min. 6 characters" required/>
                 </div>
+                <div class="form-group">
+                <label class="form-label">Role</label>
+                <select name="role" class="form-input">
+                    <option value="user">User</option>
+                    <option value="moderator">Moderator</option>
+                    <option value="admin">Admin</option>
+                </select>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-cancel-modal" onclick="closeAdminModal('addModal')">Cancel</button>
@@ -229,6 +255,14 @@ $userCount = count($users);
                     <input type="tel" class="form-input" id="edit_phone_display"
                            style="background:#f3f4f6;color:#9ca3af;cursor:not-allowed" readonly/>
                     <input type="hidden" name="phone" id="edit_phone_hidden"/>
+                </div>
+                <div class="form-group">
+                <label class="form-label">Role</label>
+                <select name="role" class="form-input" id="edit_role">
+                    <option value="user">User</option>
+                    <option value="moderator">Moderator</option>
+                    <option value="admin">Admin</option>
+                </select>
                 </div>
                 <div class="form-group">
                     <label class="form-label">New Password <span style="font-size:11px;font-weight:400;color:#9ca3af">(leave blank to keep current)</span></label>
@@ -337,6 +371,7 @@ $userCount = count($users);
         document.getElementById('edit_email_hidden').value  = btn.dataset.email;
         document.getElementById('edit_phone_display').value = btn.dataset.phone;
         document.getElementById('edit_phone_hidden').value  = btn.dataset.phone;
+        document.getElementById('edit_role').value          = btn.dataset.role || 'user'; // ← NEW
         openAdminModal('editModal');
     }
 

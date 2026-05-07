@@ -15,6 +15,10 @@ CREATE TABLE TM_Users (
     CONSTRAINT uq_tm_email    UNIQUE (email)
 );
 
+-- Add role constraint (run once on existing DB)
+ALTER TABLE TM_Users ADD CONSTRAINT chk_tm_role 
+    CHECK (role IN ('user', 'moderator', 'admin'));
+
 -- TASKS TABLE
 
 CREATE TABLE TM_Tasks (

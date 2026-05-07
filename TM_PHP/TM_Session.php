@@ -29,9 +29,18 @@ function tm_role(): string {
 
 function tm_require_role(string $role): void {
     tm_require_login();
-    if (tm_role() !== $role) {
-        header('Location: ../TM_Dashboard.php');
-        exit;
+    // 'admin' required → only admin passes
+    // 'moderator' required → both admin and moderator pass
+    if ($role === 'moderator') {
+        if (!tm_is_moderator()) {
+            header('Location: ../TM_Dashboard.php');
+            exit;
+        }
+    } else {
+        if (tm_role() !== $role) {
+            header('Location: ../TM_Dashboard.php');
+            exit;
+        }
     }
 }
 
@@ -44,4 +53,12 @@ function tm_get_flash(): ?array {
     $f = $_SESSION['tm_flash'];
     unset($_SESSION['tm_flash']);
     return $f;
+}
+
+function tm_is_admin(): bool {
+    return tm_role() === 'admin';
+}
+
+function tm_is_moderator(): bool {
+    return in_array(tm_role(), ['admin', 'moderator']);
 }
