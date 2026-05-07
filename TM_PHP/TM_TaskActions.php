@@ -72,6 +72,25 @@ switch ($action) {
         );
         tm_flash('success', 'Task deleted.');
         break;
+
+    case 'quick_done':
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id <= 0) { tm_flash('error', 'Invalid task.'); break; }
+        tm_exec(
+            "UPDATE TM_Tasks SET status='done' WHERE task_id=:p1 AND user_id=:p2",
+            [$id, $uid]
+        );
+        tm_flash('success', 'Task marked as done!');
+        // Redirect back to whichever tasks view the user came from
+        $ref = $_SERVER['HTTP_REFERER'] ?? '';
+        if (strpos($ref, 'TM_Tasks.php') !== false) {
+            header('Location: ' . $ref); exit;
+        }
+        header('Location: ../TM_Tasks.php'); exit;
 }
 
-header('Location: ../TM_Calendar.php'); exit;
+$redirect = match($action) {
+    'quick_done' => '../TM_Tasks.php',
+    default      => '../TM_Calendar.php',
+};
+header('Location: ' . $redirect); exit;
