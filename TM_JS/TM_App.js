@@ -104,14 +104,8 @@ document.addEventListener('DOMContentLoaded', function () {
             setTimeout(type, deleting ? deleteSpeed : typeSpeed);
         }
         setTimeout(type, 600);
-    }
+}
 
-
-    document.addEventListener('keydown', function (e) {
-        if (e.altKey && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
-            window.location.href = 'TM_UserList.php';
-        }
-    });
 
     // ---- Search filter on user list ----
     const searchInput = document.getElementById('searchInput');

@@ -51,8 +51,6 @@ if ($tasksJson === false) { $tasksJson = '[]'; } // fallback if encoding fails
         <a href="TM_UserList.php" class="btn-logout">Admin Panel</a>
         <?php endif; ?>
         <a href="#" class="btn-logout" id="logoutBtn">Log Out</a>
-<!-- Secret Admin: Alt+Shift+C -->
-<script>document.addEventListener('keydown',function(e){if(e.altKey&&e.shiftKey&&e.key==='C'){window.location.href='TM_UserList.php';}});</script>
     </div>
 </nav>
 

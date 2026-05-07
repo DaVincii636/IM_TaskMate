@@ -10,6 +10,37 @@ $uid   = tm_uid();
 $view = $_GET['view'] ?? 'all';
 if (!in_array($view, ['all', 'missing', 'done'])) { $view = 'all'; }
 
+// ── Search & filter params (URL-driven, so results are bookmarkable) ──────────
+$search    = trim($_GET['q']    ?? '');
+$filterCat = trim($_GET['cat']  ?? '');
+$filterPri = trim($_GET['pri']  ?? '');
+$dateFrom  = trim($_GET['from'] ?? '');
+$dateTo    = trim($_GET['to']   ?? '');
+
+$extraWhere  = '';
+$extraParams = [$uid]; // :p1 is always user_id
+
+if ($search !== '') {
+    $extraWhere .= " AND UPPER(task_name) LIKE UPPER(:p" . (count($extraParams)+1) . ")";
+    $extraParams[] = '%' . $search . '%';
+}
+if ($filterCat !== '') {
+    $extraWhere .= " AND category = :p" . (count($extraParams)+1);
+    $extraParams[] = $filterCat;
+}
+if ($filterPri !== '') {
+    $extraWhere .= " AND priority = :p" . (count($extraParams)+1);
+    $extraParams[] = $filterPri;
+}
+if ($dateFrom !== '') {
+    $extraWhere .= " AND due_date >= TO_DATE(:p" . (count($extraParams)+1) . ",'YYYY-MM-DD')";
+    $extraParams[] = $dateFrom;
+}
+if ($dateTo !== '') {
+    $extraWhere .= " AND due_date <= TO_DATE(:p" . (count($extraParams)+1) . ",'YYYY-MM-DD')";
+    $extraParams[] = $dateTo;
+}
+
 // Build query based on active tab
 if ($view === 'done') {
     $stmt = tm_exec(
@@ -18,8 +49,9 @@ if ($view === 'done') {
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
          WHERE user_id = :p1 AND status = 'done'
+         $extraWhere
          ORDER BY due_date DESC",
-        [$uid]
+        $extraParams
     );
 } elseif ($view === 'missing') {
     $stmt = tm_exec(
@@ -30,8 +62,9 @@ if ($view === 'done') {
          WHERE user_id = :p1
            AND due_date < SYSDATE
            AND status NOT IN ('done','cancelled')
+         $extraWhere
          ORDER BY due_date ASC",
-        [$uid]
+        $extraParams
     );
 } else {
     // all
@@ -41,8 +74,9 @@ if ($view === 'done') {
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
          WHERE user_id = :p1
+         $extraWhere
          ORDER BY due_date ASC",
-        [$uid]
+        $extraParams
     );
 }
 
@@ -89,6 +123,18 @@ function priorityLabel(string $p): string {
 }
 function priorityClass(string $p): string {
     return match($p) { 'high'=>'pri-high','mid'=>'pri-mid','low'=>'pri-low', default=>'pri-mid' };
+}
+function buildUrl(array $overrides = []): string {
+    global $view, $search, $filterCat, $filterPri, $dateFrom, $dateTo;
+    $params = array_filter([
+        'view' => $overrides['view'] ?? $view,
+        'q'    => $overrides['q']    ?? $search,
+        'cat'  => $overrides['cat']  ?? $filterCat,
+        'pri'  => $overrides['pri']  ?? $filterPri,
+        'from' => $overrides['from'] ?? $dateFrom,
+        'to'   => $overrides['to']   ?? $dateTo,
+    ], fn($v) => $v !== '');
+    return 'TM_Tasks.php?' . http_build_query($params);
 }
 function categoryDisplay(array $row): string {
     if ($row['category'] === 'custom' && !empty($row['custom_category'])) {
@@ -224,6 +270,45 @@ table.task-table tbody tr.row-overdue td:first-child {
 /* ── Quick-done form (hidden) ────────────────  */
 .quick-done-form { display: none; }
 
+/* ── Filter bar ──────────────────────────────  */
+.filter-bar { margin-bottom: 1.25rem; }
+.filter-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.filter-search { position: relative; flex: 1 1 180px; }
+.filter-search i {
+    position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+    color: var(--gray-400); font-size: 13px; pointer-events: none;
+}
+.filter-input {
+    width: 100%; padding: 8px 12px 8px 32px;
+    border: 1.5px solid var(--border); border-radius: 8px;
+    font-size: 13px; font-family: 'Poppins', sans-serif;
+    background: var(--white); color: var(--black); transition: border-color .15s;
+    box-sizing: border-box;
+}
+.filter-input:focus { outline: none; border-color: var(--black); }
+.filter-select {
+    padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 8px;
+    font-size: 13px; font-family: 'Poppins', sans-serif;
+    background: var(--white); color: var(--black); cursor: pointer;
+    transition: border-color .15s;
+}
+.filter-select:focus { outline: none; border-color: var(--black); }
+.btn-filter-apply {
+    padding: 8px 18px; border-radius: 8px;
+    font-size: 13px; font-weight: 600; font-family: 'Poppins', sans-serif;
+    background: var(--black); color: #fff; border: none;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    transition: opacity .15s;
+}
+.btn-filter-apply:hover { opacity: .85; }
+.btn-filter-clear {
+    padding: 8px 14px; border-radius: 8px;
+    font-size: 13px; font-weight: 600; font-family: 'Poppins', sans-serif;
+    border: 1.5px solid var(--border); color: var(--gray-500);
+    background: transparent; text-decoration: none; transition: background .15s;
+}
+.btn-filter-clear:hover { background: var(--gray-100); }
+
 /* ── Logout modal (reuse from dashboard) ─────  */
 .pc-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;align-items:center;justify-content:center;}
 .pc-modal-overlay.active{display:flex;}
@@ -303,16 +388,51 @@ $cntDone = tm_fetch_all(tm_exec(
 
     <!-- Tab bar -->
     <div class="tab-bar">
-        <a href="TM_Tasks.php?view=all"     class="tab-btn <?= $view==='all'     ? 'active' : '' ?>">
+        <a href="<?= buildUrl(['view'=>'all']) ?>"     class="tab-btn <?= $view==='all'     ? 'active' : '' ?>">
             All <span class="tab-count"><?= (int)$cntAll ?></span>
         </a>
-        <a href="TM_Tasks.php?view=missing" class="tab-btn <?= $view==='missing' ? 'active' : '' ?>">
+        <a href="<?= buildUrl(['view'=>'missing']) ?>" class="tab-btn <?= $view==='missing' ? 'active' : '' ?>">
             Missing <span class="tab-count"><?= (int)$cntMissing ?></span>
         </a>
-        <a href="TM_Tasks.php?view=done"    class="tab-btn <?= $view==='done'    ? 'active' : '' ?>">
+        <a href="<?= buildUrl(['view'=>'done']) ?>"    class="tab-btn <?= $view==='done'    ? 'active' : '' ?>">
             Done <span class="tab-count"><?= (int)$cntDone ?></span>
         </a>
     </div>
+
+    <!-- Search & Filter bar -->
+    <form method="get" action="TM_Tasks.php" class="filter-bar">
+        <input type="hidden" name="view" value="<?= htmlspecialchars($view) ?>"/>
+        <div class="filter-row">
+            <div class="filter-search">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" name="q" class="filter-input"
+                       placeholder="Search tasks…"
+                       value="<?= htmlspecialchars($search) ?>"/>
+            </div>
+            <select name="cat" class="filter-select">
+                <option value="">All Categories</option>
+                <?php foreach (['errands','work','school','personal','health','finance','custom'] as $c): ?>
+                <option value="<?= $c ?>" <?= $filterCat===$c?'selected':'' ?>><?= ucfirst($c) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <select name="pri" class="filter-select">
+                <option value="">All Priorities</option>
+                <option value="high" <?= $filterPri==='high'?'selected':'' ?>>High</option>
+                <option value="mid"  <?= $filterPri==='mid' ?'selected':'' ?>>Mid</option>
+                <option value="low"  <?= $filterPri==='low' ?'selected':'' ?>>Low</option>
+            </select>
+            <input type="date" name="from" class="filter-select"
+                   value="<?= htmlspecialchars($dateFrom) ?>" title="Due from"/>
+            <input type="date" name="to"   class="filter-select"
+                   value="<?= htmlspecialchars($dateTo) ?>"   title="Due to"/>
+            <button type="submit" class="btn-filter-apply">
+                <i class="fa-solid fa-filter"></i> Filter
+            </button>
+            <?php if ($search || $filterCat || $filterPri || $dateFrom || $dateTo): ?>
+            <a href="TM_Tasks.php?view=<?= $view ?>" class="btn-filter-clear">Clear</a>
+            <?php endif; ?>
+        </div>
+    </form>
 
     <!-- Task table -->
     <div class="task-table-card">

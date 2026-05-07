@@ -2,7 +2,7 @@
 require_once 'TM_Session.php';
 require_once 'TM_DB.php';
 
-tm_require_login();
+tm_require_role('admin');
 
 $action = $_POST['action'] ?? '';
 
