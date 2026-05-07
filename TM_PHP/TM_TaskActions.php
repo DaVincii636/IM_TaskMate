@@ -34,15 +34,18 @@ switch ($action) {
         break;
 
     case 'edit':
-        $id    = (int)($_POST['id']            ?? 0);
-        $name  = trim($_POST['name']           ?? '');
-        $start = trim($_POST['startDate']      ?? '');
-        $due   = trim($_POST['dueDate']        ?? '');
-        $cat   = trim($_POST['category']       ?? 'errands');
-        $ccat  = trim($_POST['customCategory'] ?? '');
-        $pri   = trim($_POST['priority']       ?? 'mid');
-        $col   = trim($_POST['color']          ?? '#ef4444');
-        $notes = trim($_POST['notes']          ?? '');
+        $id     = (int)($_POST['id']            ?? 0);
+        $name   = trim($_POST['name']           ?? '');
+        $start  = trim($_POST['startDate']      ?? '');
+        $due    = trim($_POST['dueDate']        ?? '');
+        $cat    = trim($_POST['category']       ?? 'errands');
+        $ccat   = trim($_POST['customCategory'] ?? '');
+        $pri    = trim($_POST['priority']       ?? 'mid');
+        $col    = trim($_POST['color']          ?? '#ef4444');
+        $notes  = trim($_POST['notes']          ?? '');
+        $status = trim($_POST['status']         ?? 'pending');
+        $allowed_statuses = ['pending', 'in_progress', 'review', 'done', 'cancelled'];
+        if (!in_array($status, $allowed_statuses)) { $status = 'pending'; }
 
         if ($id <= 0 || !$name || !$start || !$due) {
             tm_flash('error', 'Invalid task data.'); break;
@@ -52,9 +55,10 @@ switch ($action) {
              start_date=TO_DATE(:p2,'YYYY-MM-DD'),
              due_date=TO_DATE(:p3,'YYYY-MM-DD'),
              category=:p4, custom_category=:p5,
-             priority=:p6, color=:p7, notes=:p8
-             WHERE task_id=:p9 AND user_id=:p10",
-            [$name, $start, $due, $cat, $ccat, $pri, $col, $notes, $id, $uid]
+             priority=:p6, color=:p7, notes=:p8,
+             status=:p9
+             WHERE task_id=:p10 AND user_id=:p11",
+            [$name, $start, $due, $cat, $ccat, $pri, $col, $notes, $status, $id, $uid]
         );
         tm_flash('success', 'Task updated!');
         break;

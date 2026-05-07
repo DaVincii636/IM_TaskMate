@@ -193,13 +193,20 @@ const CalendarApp = (() => {
     // ---- Tooltip ----
     const tooltip = document.getElementById('taskTooltip');
 
+    const STATUS_LABELS = {
+        pending: '⏳ Pending', in_progress: '🔄 In Progress',
+        review: '🔍 Review', done: '✅ Done', cancelled: '❌ Cancelled'
+    };
+
     function showTooltip(e, t) {
+        const statusLabel = STATUS_LABELS[t.Status] || '⏳ Pending';
         tooltip.innerHTML = `
             <div class="tooltip-name">${t.Name}</div>
             <div class="tooltip-cat">${t.Category === 'others' ? (t.CustomCategory || 'Others') : t.Category}</div>
             <div class="tooltip-dates">📅 ${friendlyDate(t.StartDate)} → ${friendlyDate(t.DueDate)}</div>
             ${t.Notes ? `<div style="margin-top:6px;font-size:11px;color:#c4c4c4">${t.Notes}</div>` : ''}
-            <span class="tooltip-priority">${t.Priority} Priority</span>`;
+            <span class="tooltip-priority">${t.Priority} Priority</span>
+            <span class="tooltip-priority" style="margin-left:6px">${statusLabel}</span>`;
         tooltip.classList.add('visible');
         posTooltip(e);
     }
@@ -268,6 +275,10 @@ const CalendarApp = (() => {
         document.getElementById('editCategoryInput').value = t.Category;
         document.getElementById('editPriorityInput').value = t.Priority;
         document.getElementById('editColorInput').value = t.Color;
+
+        // Set status dropdown
+        const statusEl = document.getElementById('editTaskStatus');
+        if (statusEl) statusEl.value = t.Status || 'pending';
 
         // Set active cat btn
         document.querySelectorAll('#editCatOptions .cat-btn').forEach(b => {

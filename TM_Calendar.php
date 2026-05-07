@@ -10,7 +10,7 @@ $uid   = tm_uid();
 $stmt  = tm_exec(
     "SELECT task_id, task_name, TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
             TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
-            category, custom_category, priority, color, notes
+            category, custom_category, priority, color, notes, status
      FROM TM_Tasks WHERE user_id = :p1 ORDER BY start_date ASC",
     [$uid]
 );
@@ -229,6 +229,16 @@ if ($tasksJson === false) { $tasksJson = '[]'; } // fallback if encoding fails
                     <input type="hidden" name="color" id="editColorInput" value="#ef4444"/>
                 </div>
                 <div class="form-group">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-input" id="editTaskStatus">
+                        <option value="pending">&#x23F3; Pending</option>
+                        <option value="in_progress">&#x1F504; In Progress</option>
+                        <option value="review">&#x1F50D; Review</option>
+                        <option value="done">&#x2705; Done</option>
+                        <option value="cancelled">&#x274C; Cancelled</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label class="form-label">Notes</label>
                     <textarea name="notes" class="form-input" id="editTaskNotes" placeholder="Optional notes..."></textarea>
                 </div>
@@ -297,7 +307,8 @@ if ($tasksJson === false) { $tasksJson = '[]'; } // fallback if encoding fails
         CustomCategory: t.custom_category,
         Priority:       t.priority,
         Color:          t.color,
-        Notes:          t.notes
+        Notes:          t.notes,
+        Status:         t.status || 'pending'
     }));
 
     function openDeleteTaskModal() {
