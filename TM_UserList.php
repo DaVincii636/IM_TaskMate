@@ -8,8 +8,30 @@ $userName  = tm_uname();
 $stmt = tm_exec('SELECT user_id, first_name, last_name, email, phone, role FROM TM_Users ORDER BY user_id DESC');
 $users     = tm_fetch_all($stmt);
 $userCount = count($users);
-$is_admin = tm_is_admin();
+$is_admin  = tm_is_admin();
+
+// ── Active tab: users | activity ─────────────────────────────────────────────
+$tab = $_GET['tab'] ?? 'users';
+if (!in_array($tab, ['users', 'activity'])) $tab = 'users';
+
+// ── Activity feed (last 100 entries, newest first) ────────────────────────────
+$auditRows = [];
+if ($tab === 'activity') {
+    $auditStmt = tm_exec(
+        "SELECT a.log_id, a.action, a.entity_type, a.entity_id,
+                a.entity_name, a.old_value, a.new_value,
+                TO_CHAR(a.created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at,
+                u.first_name || ' ' || u.last_name AS actor_name
+         FROM (
+             SELECT * FROM TM_AuditLog ORDER BY created_at DESC
+         ) a
+         JOIN TM_Users u ON u.user_id = a.user_id
+         WHERE ROWNUM <= 100"
+    );
+    $auditRows = tm_fetch_all($auditStmt);
+}
 ?><!DOCTYPE html>
+
 <html lang="en">
 <head>
     <meta charset="UTF-8"/>
@@ -59,6 +81,43 @@ $is_admin = tm_is_admin();
                         background:linear-gradient(135deg,#111,#333);color:#fff;border:none;
                         cursor:pointer;font-family:'Poppins',sans-serif;transition:all .2s;}
         .btn-save-modal:hover{opacity:.9;transform:translateY(-1px);}
+
+        /* ── Tab bar ─────────────────────────────────────────────────────── */
+        .admin-tab-bar{display:flex;gap:6px;margin-bottom:1.5rem;}
+        .admin-tab-btn{padding:8px 22px;border-radius:50px;font-size:13px;font-weight:600;
+                       font-family:'Poppins',sans-serif;text-decoration:none;
+                       border:1.5px solid var(--border,#e5e7eb);
+                       color:var(--gray-500,#6b7280);background:var(--white,#fff);
+                       transition:all .18s;}
+        .admin-tab-btn:hover{background:var(--gray-100,#f3f4f6);color:var(--black,#111);}
+        .admin-tab-btn.active{background:var(--black,#111);color:#fff;border-color:var(--black,#111);}
+
+        /* ── Activity feed ───────────────────────────────────────────────── */
+        .feed-card{background:var(--white,#fff);border-radius:var(--radius-lg,16px);
+                   border:1px solid var(--border,#e5e7eb);overflow:hidden;}
+        .feed-list{list-style:none;margin:0;padding:0;}
+        .feed-item{display:flex;align-items:flex-start;gap:12px;
+                   padding:14px 20px;border-bottom:1px solid var(--border,#e5e7eb);}
+        .feed-item:last-child{border-bottom:none;}
+        .feed-icon{width:34px;height:34px;border-radius:50%;display:flex;flex-shrink:0;
+                   align-items:center;justify-content:center;font-size:14px;margin-top:1px;}
+        .feed-icon.ic-create{background:#dcfce7;color:#15803d;}
+        .feed-icon.ic-edit{background:#dbeafe;color:#1d4ed8;}
+        .feed-icon.ic-delete{background:#fee2e2;color:#b91c1c;}
+        .feed-icon.ic-status{background:#fef9c3;color:#92400e;}
+        .feed-body{flex:1;min-width:0;}
+        .feed-actor{font-size:13px;font-weight:700;color:var(--black,#111);}
+        .feed-desc{font-size:13px;color:var(--gray-500,#6b7280);margin-top:1px;}
+        .feed-desc strong{color:var(--black,#111);font-weight:600;}
+        .feed-meta{font-size:11px;color:var(--gray-300,#9ca3af);margin-top:3px;}
+        .feed-badge{display:inline-block;font-size:10px;font-weight:700;padding:1px 7px;
+                    border-radius:50px;margin-left:4px;vertical-align:middle;}
+        .badge-task{background:#ede9fe;color:#7c3aed;}
+        .badge-user{background:#fef3c7;color:#b45309;}
+        .feed-empty{text-align:center;padding:4rem 2rem;}
+        .feed-empty i{font-size:2.5rem;color:var(--gray-300,#9ca3af);margin-bottom:.75rem;}
+        .feed-empty h3{font-size:.9rem;font-weight:700;color:var(--gray-500,#6b7280);margin:0 0 .3rem;}
+        .feed-empty p{font-size:12px;color:var(--gray-400,#9ca3af);margin:0;}
     </style>
 </head>
 <body>
@@ -97,15 +156,15 @@ $is_admin = tm_is_admin();
         </div>
     </div>
 
-    <div class="admin-bar">
-        <span class="admin-badge">⚙ User List</span>
-        <?php if ($is_admin): ?>
-        <button class="btn-add-user" onclick="openAdminModal('addModal')">Add User</button>
-        <?php endif; ?>
-    </div>
-
-    <div class="search-wrap">
-        <input type="text" class="search-input" id="searchInput" placeholder="Search by name, email, or phone..."/>
+    <!-- Tab bar -->
+    <div class="admin-tab-bar">
+        <a href="TM_UserList.php?tab=users"    class="admin-tab-btn <?= $tab==='users'    ? 'active' : '' ?>">
+            <i class="fa-solid fa-users" style="margin-right:6px"></i>Users
+            <span style="margin-left:6px;font-size:11px;background:<?= $tab==='users' ? 'rgba(255,255,255,.2)' : 'var(--gray-100,#f3f4f6)' ?>;color:inherit;padding:1px 7px;border-radius:50px"><?= (int)$userCount ?></span>
+        </a>
+        <a href="TM_UserList.php?tab=activity" class="admin-tab-btn <?= $tab==='activity' ? 'active' : '' ?>">
+            <i class="fa-solid fa-clock-rotate-left" style="margin-right:6px"></i>Activity Feed
+        </a>
     </div>
 
     <?php if ($flash): ?>
@@ -114,6 +173,16 @@ $is_admin = tm_is_admin();
         </div>
     <?php endif; ?>
 
+<?php if ($tab === 'users'): ?>
+    <div class="admin-bar">
+        <span class="admin-badge">⚙ User List</span>
+        <?php if ($is_admin): ?>
+        <button class="btn-add-user" onclick="openAdminModal('addModal')">Add User</button>
+        <?php endif; ?>
+    </div>
+    <div class="search-wrap">
+        <input type="text" class="search-input" id="searchInput" placeholder="Search by name, email, or phone..."/>
+    </div>
     <div class="table-card">
         <div class="table-wrap">
             <?php if (empty($users)): ?>
@@ -330,6 +399,79 @@ $is_admin = tm_is_admin();
         </div>
     </div>
 </div>
+
+<?php endif; /* end $tab === 'users' */ ?>
+
+<?php if ($tab === 'activity'): ?>
+<div class="feed-card">
+    <?php if (empty($auditRows)): ?>
+    <div class="feed-empty">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <h3>No activity yet</h3>
+        <p>Events will appear here as users create, edit, or delete tasks and accounts.</p>
+    </div>
+    <?php else: ?>
+    <ul class="feed-list">
+    <?php
+    foreach ($auditRows as $row):
+        $action     = strtolower($row['ACTION']      ?? $row['action']      ?? '');
+        $entityType = strtolower($row['ENTITY_TYPE'] ?? $row['entity_type'] ?? '');
+        $entityName = $row['ENTITY_NAME'] ?? $row['entity_name'] ?? '—';
+        $actorName  = $row['ACTOR_NAME']  ?? $row['actor_name']  ?? 'Someone';
+        $oldVal     = $row['OLD_VALUE']   ?? $row['old_value']   ?? '';
+        $newVal     = $row['NEW_VALUE']   ?? $row['new_value']   ?? '';
+        $createdAt  = $row['CREATED_AT']  ?? $row['created_at']  ?? '';
+
+        // Icon class
+        $iconClass = match($action) {
+            'create'        => 'ic-create',
+            'edit'          => 'ic-edit',
+            'delete'        => 'ic-delete',
+            'status_change' => 'ic-status',
+            default         => 'ic-edit',
+        };
+        // Icon glyph
+        $iconGlyph = match($action) {
+            'create'        => '<i class="fa-solid fa-plus"></i>',
+            'edit'          => '<i class="fa-solid fa-pen"></i>',
+            'delete'        => '<i class="fa-solid fa-trash"></i>',
+            'status_change' => '<i class="fa-solid fa-arrow-right-arrow-left"></i>',
+            default         => '<i class="fa-solid fa-pen"></i>',
+        };
+        // Human-readable sentence
+        $verb = match($action) {
+            'create'        => 'created',
+            'edit'          => 'edited',
+            'delete'        => 'deleted',
+            'status_change' => 'changed status on',
+            default         => $action,
+        };
+        $badgeClass = $entityType === 'task' ? 'badge-task' : 'badge-user';
+        $badgeLabel = strtoupper($entityType);
+    ?>
+    <li class="feed-item">
+        <div class="feed-icon <?= $iconClass ?>"><?= $iconGlyph ?></div>
+        <div class="feed-body">
+            <div class="feed-actor"><?= htmlspecialchars($actorName) ?></div>
+            <div class="feed-desc">
+                <?= $verb ?> <strong><?= htmlspecialchars($entityName) ?></strong>
+                <span class="feed-badge <?= $badgeClass ?>"><?= $badgeLabel ?></span>
+                <?php if ($oldVal && $newVal): ?>
+                    &nbsp;<span style="font-size:11px;color:var(--gray-300,#9ca3af)">
+                        <?= htmlspecialchars($oldVal) ?> → <?= htmlspecialchars($newVal) ?>
+                    </span>
+                <?php elseif ($oldVal): ?>
+                    &nbsp;<span style="font-size:11px;color:var(--gray-300,#9ca3af)">was: <?= htmlspecialchars($oldVal) ?></span>
+                <?php endif; ?>
+            </div>
+            <div class="feed-meta"><?= htmlspecialchars($createdAt) ?></div>
+        </div>
+    </li>
+    <?php endforeach; ?>
+    </ul>
+    <?php endif; ?>
+</div>
+<?php endif; /* end $tab === 'activity' */ ?>
 
 <form method="post" action="TM_PHP/TM_UserActions.php" id="deleteUserForm" style="display:none">
     <input type="hidden" name="action" value="delete"/>

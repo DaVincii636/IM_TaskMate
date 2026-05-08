@@ -69,7 +69,45 @@ CREATE INDEX idx_tm_users_email    ON TM_Users(email);
 
 COMMIT;
 
+-- AUDIT LOG TABLE
+-- Stores every create / edit / delete / status-change event across the system.
+-- entity_type: 'task' | 'user'
+-- action:      'create' | 'edit' | 'delete' | 'status_change'
+-- old_value / new_value: VARCHAR2 snapshots (JSON-style summary, optional)
+CREATE TABLE TM_AuditLog (
+    log_id      NUMBER(10)     NOT NULL,
+    user_id     NUMBER(10)     NOT NULL,           -- who performed the action
+    action      VARCHAR2(30)   NOT NULL,           -- create | edit | delete | status_change
+    entity_type VARCHAR2(20)   NOT NULL,           -- task | user
+    entity_id   NUMBER(10)     NOT NULL,           -- task_id or user_id affected
+    entity_name VARCHAR2(255),                     -- snapshot of the name at action time
+    old_value   VARCHAR2(500),                     -- brief before-state (optional)
+    new_value   VARCHAR2(500),                     -- brief after-state  (optional)
+    created_at  TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_tm_auditlog PRIMARY KEY (log_id),
+    CONSTRAINT fk_audit_user  FOREIGN KEY (user_id)
+        REFERENCES TM_Users(user_id) ON DELETE CASCADE
+);
+
+CREATE SEQUENCE TM_AuditLog_seq START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
+
+CREATE OR REPLACE TRIGGER trg_tm_auditlog_id
+    BEFORE INSERT ON TM_AuditLog FOR EACH ROW
+BEGIN
+    IF :NEW.log_id IS NULL THEN
+        SELECT TM_AuditLog_seq.NEXTVAL INTO :NEW.log_id FROM DUAL;
+    END IF;
+END;
+/
+
+-- Index for fast per-user feed and per-entity lookups
+CREATE INDEX idx_tm_audit_user       ON TM_AuditLog(user_id);
+CREATE INDEX idx_tm_audit_entity     ON TM_AuditLog(entity_type, entity_id);
+CREATE INDEX idx_tm_audit_created_at ON TM_AuditLog(created_at DESC);
+
 -- VERIFY
-SELECT 'TM_Users' AS tbl, COUNT(*) AS rows FROM TM_Users
+SELECT 'TM_Users'    AS tbl, COUNT(*) AS rows FROM TM_Users
 UNION ALL
-SELECT 'TM_Tasks', COUNT(*) FROM TM_Tasks;
+SELECT 'TM_Tasks',   COUNT(*) FROM TM_Tasks
+UNION ALL
+SELECT 'TM_AuditLog', COUNT(*) FROM TM_AuditLog;

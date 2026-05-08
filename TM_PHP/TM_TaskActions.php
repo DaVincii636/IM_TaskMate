@@ -7,6 +7,27 @@ tm_require_login();
 $action = $_POST['action'] ?? '';
 $uid    = tm_uid();
 
+// ── Audit helper ──────────────────────────────────────────────────────────────
+// Silently inserts one row into TM_AuditLog. Errors are intentionally swallowed
+// so a logging failure never blocks the actual user action.
+function tm_audit(int $userId, string $action, string $entityType,
+                  int $entityId, string $entityName,
+                  string $oldValue = '', string $newValue = ''): void {
+    try {
+        tm_exec(
+            "INSERT INTO TM_AuditLog
+                (user_id, action, entity_type, entity_id, entity_name, old_value, new_value)
+             VALUES (:p1, :p2, :p3, :p4, :p5, :p6, :p7)",
+            [$userId, $action, $entityType, $entityId,
+             substr($entityName, 0, 255),
+             substr($oldValue,   0, 500),
+             substr($newValue,   0, 500)]
+        );
+    } catch (Throwable $e) {
+        // Never let audit failure surface to the user
+    }
+}
+
 switch ($action) {
 
     case 'add':
@@ -30,6 +51,13 @@ switch ($action) {
              VALUES (:p1, :p2, TO_DATE(:p3,'YYYY-MM-DD'), TO_DATE(:p4,'YYYY-MM-DD'), :p5, :p6, :p7, :p8, :p9)",
             [$uid, $name, $start, $due, $cat, $ccat, $pri, $col, $notes]
         );
+        // Fetch the new task_id for the audit entry
+        $newIdRow = tm_fetch_one(tm_exec(
+            "SELECT TM_Tasks_seq.CURRVAL AS new_id FROM DUAL"
+        ));
+        $newId = (int)($newIdRow['NEW_ID'] ?? $newIdRow['new_id'] ?? 0);
+        tm_audit($uid, 'create', 'task', $newId, $name,
+                 '', "cat:{$cat}, pri:{$pri}, due:{$due}");
         tm_flash('success', 'Task added!');
         break;
 
@@ -50,6 +78,17 @@ switch ($action) {
         if ($id <= 0 || !$name || !$start || !$due) {
             tm_flash('error', 'Invalid task data.'); break;
         }
+
+        // Snapshot the old state before overwriting
+        $oldRow = tm_fetch_one(tm_exec(
+            "SELECT task_name, status, priority FROM TM_Tasks
+             WHERE task_id=:p1 AND user_id=:p2",
+            [$id, $uid]
+        ));
+        $oldName   = $oldRow['TASK_NAME'] ?? $oldRow['task_name'] ?? '';
+        $oldStatus = $oldRow['STATUS']    ?? $oldRow['status']    ?? '';
+        $oldPri    = $oldRow['PRIORITY']  ?? $oldRow['priority']  ?? '';
+
         tm_exec(
             "UPDATE TM_Tasks SET task_name=:p1,
              start_date=TO_DATE(:p2,'YYYY-MM-DD'),
@@ -60,26 +99,51 @@ switch ($action) {
              WHERE task_id=:p10 AND user_id=:p11",
             [$name, $start, $due, $cat, $ccat, $pri, $col, $notes, $status, $id, $uid]
         );
+
+        // Use status_change action type when only the status moved
+        $auditAction = ($status !== $oldStatus) ? 'status_change' : 'edit';
+        tm_audit($uid, $auditAction, 'task', $id, $name,
+                 "status:{$oldStatus}, pri:{$oldPri}",
+                 "status:{$status}, pri:{$pri}");
         tm_flash('success', 'Task updated!');
         break;
 
     case 'delete':
         $id = (int)($_POST['id'] ?? 0);
         if ($id <= 0) { tm_flash('error', 'Invalid task.'); break; }
+
+        // Snapshot name before deletion so the log is readable after the row is gone
+        $delRow = tm_fetch_one(tm_exec(
+            "SELECT task_name FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2",
+            [$id, $uid]
+        ));
+        $delName = $delRow['TASK_NAME'] ?? $delRow['task_name'] ?? "task #{$id}";
+
         tm_exec(
             'DELETE FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2',
             [$id, $uid]
         );
+        tm_audit($uid, 'delete', 'task', $id, $delName, $delName, '');
         tm_flash('success', 'Task deleted.');
         break;
 
     case 'quick_done':
         $id = (int)($_POST['id'] ?? 0);
         if ($id <= 0) { tm_flash('error', 'Invalid task.'); break; }
+
+        $qdRow = tm_fetch_one(tm_exec(
+            "SELECT task_name, status FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2",
+            [$id, $uid]
+        ));
+        $qdName   = $qdRow['TASK_NAME'] ?? $qdRow['task_name'] ?? "task #{$id}";
+        $qdOldSt  = $qdRow['STATUS']    ?? $qdRow['status']    ?? 'pending';
+
         tm_exec(
             "UPDATE TM_Tasks SET status='done' WHERE task_id=:p1 AND user_id=:p2",
             [$id, $uid]
         );
+        tm_audit($uid, 'status_change', 'task', $id, $qdName,
+                 "status:{$qdOldSt}", "status:done");
         tm_flash('success', 'Task marked as done!');
         // Redirect back to whichever tasks view the user came from
         $ref = $_SERVER['HTTP_REFERER'] ?? '';
