@@ -32,6 +32,28 @@ if ($tasksJson === false) { $tasksJson = '[]'; } // fallback if encoding fails
 
 // ── Notifications ─────────────────────────────────────────────────────────────
 require_once 'TM_PHP/TM_NavNotif.php';
+
+// ── Blocker counts: how many unresolved blockers each task has ────────────────
+// Keyed by task_id → count of blocking tasks not yet done.
+// Used by JS to show the "Blocked by X" indicator on calendar dots.
+$blockerCountRows = tm_fetch_all(tm_exec(
+    "SELECT tl.task_id, COUNT(*) AS blocker_count
+     FROM TM_TaskLinks tl
+     JOIN TM_Tasks blocker ON blocker.task_id = tl.depends_on_id
+     WHERE tl.link_type = 'blocks'
+       AND blocker.status NOT IN ('done', 'cancelled')
+       AND tl.task_id IN (
+           SELECT task_id FROM TM_Tasks WHERE user_id = :p1
+       )
+     GROUP BY tl.task_id",
+    [$uid]
+));
+$blockerMap = [];
+foreach ($blockerCountRows as $row) {
+    $tid = (int)($row['TASK_ID'] ?? $row['task_id']);
+    $blockerMap[$tid] = (int)($row['BLOCKER_COUNT'] ?? $row['blocker_count']);
+}
+$blockerMapJson = json_encode($blockerMap);
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -246,6 +268,23 @@ require_once 'TM_PHP/TM_NavNotif.php';
                     </select>
                 </div>
                 <div class="form-group">
+                    <label class="form-label">
+                        Dependencies
+                        <span class="dep-label-hint">Blocked by these tasks (must be done first)</span>
+                    </label>
+                    <div class="dep-search-wrap">
+                        <i class="fa-solid fa-magnifying-glass dep-search-icon"></i>
+                        <input type="text" id="depSearchInput" class="form-input dep-search-input"
+                               placeholder="Search tasks to add as blockers…" autocomplete="off"/>
+                    </div>
+                    <ul class="dep-dropdown" id="depDropdown"></ul>
+                    <div class="dep-selected" id="depSelected">
+                        <span class="dep-empty-hint" id="depEmptyHint">No blockers set.</span>
+                    </div>
+                    <input type="hidden" id="depBlockerIds" name="blocker_ids" value=""/>
+                </div>
+
+                <div class="form-group">
                     <label class="form-label">Notes</label>
                     <textarea name="notes" class="form-input" id="editTaskNotes" placeholder="Optional notes..."></textarea>
                 </div>
@@ -269,7 +308,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
         <div class="pc-modal-body" id="saveTaskModalText">Save changes to this task?</div>
         <div class="pc-modal-btns">
             <button class="pc-modal-cancel" onclick="closePcModal('saveTaskModal')">Cancel</button>
-            <button class="pc-modal-confirm-blue" onclick="document.getElementById('editTaskForm').submit()">
+            <button class="pc-modal-confirm-blue" onclick="tmDoSave()">
                 <i class="fa-solid fa-floppy-disk"></i> Save Changes
             </button>
         </div>
@@ -304,7 +343,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
 <div class="toast" id="toast"></div>
 
 <script>
-    // Oracle tasks passed from PHP → JS (replaces localStorage)
+    // Oracle tasks passed from PHP → JS
     const serverTasks = <?= $tasksJson ?>.map(t => ({
         Id:             t.task_id,
         Name:           t.task_name,
@@ -318,6 +357,9 @@ require_once 'TM_PHP/TM_NavNotif.php';
         Status:         t.status || 'pending'
     }));
 
+    // Map of task_id → unresolved blocker count (for calendar dot indicators)
+    const blockerMap = <?= $blockerMapJson ?>;
+
     function openDeleteTaskModal() {
         const name = document.getElementById('editTaskName').value || 'this task';
         const id   = document.getElementById('editTaskId').value;
@@ -326,12 +368,32 @@ require_once 'TM_PHP/TM_NavNotif.php';
         closeModal('editTaskModal');
         openPcModal('deleteTaskModal');
     }
+
+    // Save: first persist links via fetch, then submit the edit form
     function openSaveTaskModal() {
         const name = document.getElementById('editTaskName').value || 'this task';
         document.getElementById('saveTaskModalText').innerHTML =
             'Save changes to <strong>' + name + '</strong>?';
         openPcModal('saveTaskModal');
     }
+
+    // Called by the "Save Changes" button inside the save pc-modal
+    function tmDoSave() {
+        const taskId    = document.getElementById('editTaskId').value;
+        const blockerIds = document.getElementById('depBlockerIds').value;
+
+        const fd = new FormData();
+        fd.append('action',      'save_links');
+        fd.append('task_id',     taskId);
+        fd.append('blocker_ids', blockerIds);
+
+        fetch('TM_PHP/TM_LinkActions.php', { method: 'POST', body: fd })
+            .finally(() => {
+                // Always submit the main edit form regardless of link result
+                document.getElementById('editTaskForm').submit();
+            });
+    }
+
     function openPcModal(id)  { document.getElementById(id).classList.add('active'); }
     function closePcModal(id) { document.getElementById(id).classList.remove('active'); }
 </script>

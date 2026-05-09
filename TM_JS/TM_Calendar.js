@@ -88,8 +88,12 @@ const CalendarApp = (() => {
         dayTasks.slice(0, 3).forEach(t => {
             const dot = document.createElement('div');
             dot.className = 'task-dot';
+            const blockerCount = (typeof blockerMap !== 'undefined' && blockerMap[t.Id]) || 0;
+            const blockerBadge = blockerCount > 0
+                ? `<span class="task-blocked-badge" title="${blockerCount} blocking task${blockerCount > 1 ? 's' : ''} pending">⛔ ${blockerCount}</span>`
+                : '';
             dot.innerHTML = `<div class="task-dot-indicator" style="background:${t.Color}"></div>
-                             <span class="task-dot-name">${t.Name}</span>`;
+                             <span class="task-dot-name">${t.Name}</span>${blockerBadge}`;
             dot.addEventListener('mouseenter', e => showTooltip(e, t));
             dot.addEventListener('mouseleave', hideTooltip);
             dot.addEventListener('click', () => openEdit(t));
@@ -295,6 +299,9 @@ const CalendarApp = (() => {
         // Build swatches
         buildSwatches('editColorRow', 'editColorInput', t.Color);
 
+        // ── Load existing dependency links for this task ──────────────────────
+        depLoadExisting(t.Id);
+
         openModal('editTaskModal');
     }
 
@@ -345,3 +352,142 @@ const CalendarApp = (() => {
 })();
 
 document.addEventListener('DOMContentLoaded', CalendarApp.init);
+// ── Dependency UI ─────────────────────────────────────────────────────────────
+// Manages the blocker search, chip display, and hidden-input sync
+// inside the edit modal. Relies on `serverTasks` already being in scope.
+(function () {
+    'use strict';
+
+    // Currently selected blocker objects: [{id, name}]
+    let _selected = [];
+    // Task ID currently being edited (set by depLoadExisting)
+    let _editingId = null;
+
+    // ── Load existing links from server when edit modal opens ─────────────────
+    window.depLoadExisting = function (taskId) {
+        _editingId = taskId;
+        _selected  = [];
+        depRender();
+
+        // Fetch the current blockers for this task
+        fetch('TM_PHP/TM_GetLinks.php?task_id=' + encodeURIComponent(taskId))
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) return;
+                _selected = data.blockers; // [{id, name}]
+                depRender();
+            })
+            .catch(() => {}); // silently ignore if endpoint not yet live
+    };
+
+    // ── Render the selected chips and sync hidden input ───────────────────────
+    function depRender() {
+        const container = document.getElementById('depSelected');
+        const hint      = document.getElementById('depEmptyHint');
+        const hidden    = document.getElementById('depBlockerIds');
+        if (!container || !hidden) return;
+
+        // Remove old chips (keep the hint span)
+        container.querySelectorAll('.dep-chip').forEach(c => c.remove());
+
+        if (_selected.length === 0) {
+            if (hint) hint.style.display = 'inline';
+            hidden.value = '';
+            return;
+        }
+
+        if (hint) hint.style.display = 'none';
+        hidden.value = _selected.map(s => s.id).join(',');
+
+        _selected.forEach(s => {
+            const chip = document.createElement('span');
+            chip.className = 'dep-chip';
+            chip.innerHTML =
+                '<span class="dep-chip-name">' + escDep(s.name) + '</span>' +
+                '<button type="button" class="dep-chip-remove" title="Remove">' +
+                    '<i class="fa-solid fa-xmark"></i>' +
+                '</button>';
+            chip.querySelector('.dep-chip-remove').addEventListener('click', () => {
+                _selected = _selected.filter(x => x.id !== s.id);
+                depRender();
+            });
+            container.appendChild(chip);
+        });
+    }
+
+    // ── Search input → dropdown ───────────────────────────────────────────────
+    let _searchTimer = null;
+    document.addEventListener('DOMContentLoaded', function () {
+        const input    = document.getElementById('depSearchInput');
+        const dropdown = document.getElementById('depDropdown');
+        if (!input || !dropdown) return;
+
+        input.addEventListener('input', function () {
+            clearTimeout(_searchTimer);
+            const q = input.value.trim().toLowerCase();
+            if (q.length < 1) { dropdown.innerHTML = ''; dropdown.style.display = 'none'; return; }
+
+            _searchTimer = setTimeout(() => {
+                // Filter serverTasks: exclude self, already-selected, done/cancelled
+                const results = (typeof serverTasks !== 'undefined' ? serverTasks : [])
+                    .filter(t =>
+                        t.Id   !== _editingId &&
+                        t.Name.toLowerCase().includes(q) &&
+                        !['done','cancelled'].includes(t.Status) &&
+                        !_selected.find(s => s.id === t.Id)
+                    )
+                    .slice(0, 6);
+
+                if (results.length === 0) {
+                    dropdown.innerHTML = '<li class="dep-dd-empty">No matching tasks found</li>';
+                } else {
+                    dropdown.innerHTML = results.map(t =>
+                        '<li class="dep-dd-item" data-id="' + t.Id + '">' +
+                            '<span class="dep-dd-dot" style="background:' + escDep(t.Color) + '"></span>' +
+                            '<span class="dep-dd-name">' + escDep(t.Name) + '</span>' +
+                            '<span class="dep-dd-due">' + fmtDate(t.DueDate) + '</span>' +
+                        '</li>'
+                    ).join('');
+                }
+                dropdown.style.display = 'block';
+
+                dropdown.querySelectorAll('.dep-dd-item').forEach(li => {
+                    li.addEventListener('click', () => {
+                        const id   = parseInt(li.dataset.id, 10);
+                        const task = serverTasks.find(t => t.Id === id);
+                        if (task && !_selected.find(s => s.id === id)) {
+                            _selected.push({ id: task.Id, name: task.Name });
+                            depRender();
+                        }
+                        input.value = '';
+                        dropdown.innerHTML = '';
+                        dropdown.style.display = 'none';
+                    });
+                });
+            }, 200);
+        });
+
+        // Close dropdown on outside click
+        document.addEventListener('click', function (e) {
+            if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.innerHTML = '';
+                dropdown.style.display = 'none';
+            }
+        });
+    });
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    function escDep(s) {
+        return String(s)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function fmtDate(s) {
+        if (!s) return '';
+        const p = s.split('-');
+        const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                        'Jul','Aug','Sep','Oct','Nov','Dec'];
+        return months[parseInt(p[1],10)-1] + ' ' + parseInt(p[2],10);
+    }
+
+})();
