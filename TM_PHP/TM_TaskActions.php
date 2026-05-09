@@ -189,6 +189,7 @@ if ($action === 'export') {
 }
 // ── End Feature 10 export ─────────────────────────────────────────────────────
 
+switch ($action) {
 
     case 'add':
         $name  = trim($_POST['name']           ?? '');
