@@ -1,5 +1,5 @@
 # Oracle / DB credentials — NEVER commit these
-TM_PHP/TM_DB.php
+# TM_PHP/TM_DB.php
 
 # OS
 .DS_Store
