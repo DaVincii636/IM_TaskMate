@@ -73,7 +73,6 @@
                 </div>
                 <div class="form-group dep-group">
                     <label class="form-label">Must Complete First</label>
-                    <p class="dep-hint">Add tasks that must be finished before this one can be marked done.</p>
                     <select id="addDepSelect" class="form-input dep-select">
                         <option value="">— Pick a task —</option>
                     </select>

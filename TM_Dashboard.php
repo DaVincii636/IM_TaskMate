@@ -546,14 +546,12 @@ const serverTasks = <?= $tasksJson ?>.map(function(t) {
         });
     });
 
-    // Set today's date when modal opens; reset dep UI
+    // Reset the add-task modal fields every time it opens
     document.querySelectorAll('[onclick*="addTaskModal"]').forEach(function (el) {
         el.addEventListener('click', function () {
-            var today = new Date().toISOString().split('T')[0];
-            var s = document.getElementById('addTaskStart');
-            var d = document.getElementById('addTaskDue');
-            if (s && !s.value) s.value = today;
-            if (d && !d.value) d.value = today;
+            document.getElementById('addTaskName').value  = '';
+            document.getElementById('addTaskStart').value = '';
+            document.getElementById('addTaskDue').value   = '';
             if (typeof window.addDepReset === 'function') window.addDepReset();
         });
     });
