@@ -315,6 +315,8 @@ const CalendarApp = (() => {
         depLoadExisting(t.Id);
 
         openModal('editTaskModal');
+        // Rebuild blocker dropdown now that editTaskDue has its value
+        if (typeof window.depRebuildEdit === 'function') window.depRebuildEdit();
     }
 
     // ---- Init ----
@@ -353,6 +355,9 @@ const CalendarApp = (() => {
         document.getElementById('btnAddTask').addEventListener('click', () => {
             if (typeof window.depResetAdd === 'function') window.depResetAdd();
             openModal('addTaskModal');
+            // Rebuild the blocker dropdown now that the modal is open and
+            // the due date field has its default value set.
+            if (typeof window.depRebuildAdd === 'function') window.depRebuildAdd();
         });
 
         // Gantt toggle
@@ -516,6 +521,7 @@ document.addEventListener('DOMContentLoaded', CalendarApp.init);
         () => (document.getElementById('editTaskDue') || {}).value || ''
     );
     window.depLoadExisting = function (taskId) { editDep.loadExisting(taskId); };
+    window.depRebuildEdit  = function () { editDep.rebuildSelect(); };
 
     // Re-filter whenever the edit modal's due date changes
     document.addEventListener('DOMContentLoaded', function () {
@@ -528,7 +534,8 @@ document.addEventListener('DOMContentLoaded', CalendarApp.init);
         'addDepSelect', 'addDepSelected', 'addDepBlockerIds',
         () => (document.getElementById('addTaskDue') || {}).value || ''
     );
-    window.depResetAdd = function () { addDep.reset(); };
+    window.depResetAdd    = function () { addDep.reset(); };
+    window.depRebuildAdd  = function () { addDep.rebuildSelect(); };
 
     // Re-filter whenever the add modal's due date changes
     document.addEventListener('DOMContentLoaded', function () {

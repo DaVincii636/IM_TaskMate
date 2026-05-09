@@ -603,9 +603,13 @@ const serverTasks = <?= $tasksJson ?>.map(function(t) {
         function buildDepSelect() {
             var sel = document.getElementById('addDepSelect');
             if (!sel) return;
+            // Only show tasks whose due date is on or before the selected due date.
+            // A blocker must be finishable before the new task's deadline.
+            var currentDue = (document.getElementById('addTaskDue') || {}).value || '';
             var eligible = getAvailTasks().filter(function(t) {
                 return !['done','cancelled'].includes((t.Status||'').toLowerCase()) &&
-                       !_selected.find(function(s) { return s.id === t.Id; });
+                       !_selected.find(function(s) { return s.id === t.Id; }) &&
+                       (currentDue === '' || !t.DueDate || t.DueDate <= currentDue);
             });
             sel.innerHTML = '<option value="">— Pick a task —</option>';
             eligible.forEach(function(t) {
@@ -615,6 +619,10 @@ const serverTasks = <?= $tasksJson ?>.map(function(t) {
                 sel.appendChild(opt);
             });
         }
+
+        // Re-filter when the due date changes
+        var addDueEl = document.getElementById('addTaskDue');
+        if (addDueEl) addDueEl.addEventListener('change', buildDepSelect);
 
         var selEl = document.getElementById('addDepSelect');
         if (selEl) {

@@ -51,9 +51,13 @@ $stmt = tm_exec(
                 ROUND((CAST(a.created_at AS DATE) - DATE '1970-01-01') * 86400
                       - TO_NUMBER(SUBSTR(TZ_OFFSET(SESSIONTIMEZONE), 1, 3)) * 3600) AS unix_ts,
                 ROWNUM AS rn
-         FROM TM_AuditLog a
-         $where
-         ORDER BY a.created_at $orderDir
+         FROM (
+             SELECT a.log_id, a.action, a.entity_type, a.entity_id,
+                    a.entity_name, a.old_value, a.new_value, a.created_at
+             FROM TM_AuditLog a
+             $where
+             ORDER BY a.created_at $orderDir
+         ) a
      )
      WHERE rn <= :p" . (count($pParams) - 1) . "
        AND rn >  :p" . count($pParams),
