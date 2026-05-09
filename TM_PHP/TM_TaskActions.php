@@ -7,6 +7,17 @@ tm_require_login();
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 $uid    = tm_uid();
 
+// ── COLLABORATION helper: get username without requiring TM_CollabActions.php ─
+if (!function_exists('tm_get_username_inline')) {
+    function tm_get_username_inline(int $userId): string {
+        $row = tm_fetch_one(tm_exec(
+            "SELECT username FROM TM_Users WHERE user_id = :p1", [$userId]
+        ));
+        return $row['username'] ?? "user#{$userId}";
+    }
+}
+
+
 $isApi = (($_GET['format'] ?? '') === 'json')
       || strpos($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json') !== false;
 
@@ -292,15 +303,17 @@ if ($action === 'export') {
 switch ($action) {
 
     case 'add':
-        $name  = trim($_POST['name']           ?? '');
-        $start = trim($_POST['startDate']      ?? '');
-        $due   = trim($_POST['dueDate']        ?? '');
-        $cat   = trim($_POST['category']       ?? 'errands');
-        $ccat  = trim($_POST['customCategory'] ?? '');
-        $pri   = trim($_POST['priority']       ?? 'mid');
-        $col   = trim($_POST['color']          ?? '#ef4444');
-        $notes = trim($_POST['notes']          ?? '');
-        $recur = trim($_POST['recurrence']     ?? '');
+        $name       = trim($_POST['name']           ?? '');
+        $start      = trim($_POST['startDate']      ?? '');
+        $due        = trim($_POST['dueDate']        ?? '');
+        $cat        = trim($_POST['category']       ?? 'errands');
+        $ccat       = trim($_POST['customCategory'] ?? '');
+        $pri        = trim($_POST['priority']       ?? 'mid');
+        $col        = trim($_POST['color']          ?? '#ef4444');
+        $notes      = trim($_POST['notes']          ?? '');
+        $recur      = trim($_POST['recurrence']     ?? '');
+        $assignedTo = (int)($_POST['assigned_to']   ?? 0);
+        $projectId  = (int)($_POST['project_id']    ?? 0);
         if (!in_array($recur, ['daily','weekly','monthly','yearly'])) $recur = '';
 
         if (!$name || !$start || !$due) {
@@ -320,6 +333,52 @@ switch ($action) {
             $cat, $ccat, $pri, $col, $notes, $recur
         );
         // ── End stored procedure call ─────────────────────────────────────────
+
+        // ── CHANGE 1 & 2: Update assigned_to and project_id after SP insert ──
+        if ($newId > 0 && ($assignedTo > 0 || $projectId > 0)) {
+            tm_exec(
+                "UPDATE TM_Tasks SET
+                    assigned_to = :p1,
+                    project_id  = :p2
+                 WHERE task_id = :p3",
+                [
+                    $assignedTo > 0 ? $assignedTo : null,
+                    $projectId  > 0 ? $projectId  : null,
+                    $newId,
+                ]
+            );
+            // Notify assigned user
+            if ($assignedTo > 0 && $assignedTo !== $uid) {
+                $assignerName = tm_get_username_inline($uid);
+                $notifMsg = "{$assignerName} assigned you a task: {$name}";
+                tm_exec(
+                    "INSERT INTO TM_Notifications
+                        (user_id, task_id, type, message, is_read, source_type, mentioned_by)
+                     VALUES (:p1, :p2, 'assignment', :p3, 0, 'assignment', :p4)",
+                    [$assignedTo, $newId, substr($notifMsg, 0, 500), $uid]
+                );
+            }
+        }
+
+        // ── CHANGE 4: Process @mentions in notes ──────────────────────────────
+        if ($newId > 0 && $notes !== '') {
+            preg_match_all('/@([\w]+)/', $notes, $mentionMatches);
+            foreach (array_unique($mentionMatches[1] ?? []) as $uname) {
+                $mRow = tm_fetch_one(tm_exec(
+                    "SELECT user_id FROM TM_Users WHERE LOWER(username) = LOWER(:p1)", [$uname]
+                ));
+                if (!$mRow || (int)$mRow['user_id'] === $uid) continue;
+                $authorName = tm_get_username_inline($uid);
+                $msg = "@{$authorName} mentioned you in task: {$name}";
+                tm_exec(
+                    "INSERT INTO TM_Notifications
+                        (user_id, task_id, type, message, is_read, source_type, mentioned_by)
+                     VALUES (:p1, :p2, 'mention', :p3, 0, 'task_note', :p4)",
+                    [(int)$mRow['user_id'], $newId, substr($msg, 0, 500), $uid]
+                );
+            }
+        }
+        // ── END Collaboration additions ───────────────────────────────────────
 
         // Save any blocker dependencies chosen in the add modal
         $blockerRaw = trim($_POST['blocker_ids'] ?? '');
@@ -362,6 +421,9 @@ switch ($action) {
         $notes  = trim($_POST['notes']          ?? '');
         $status = trim($_POST['status']         ?? 'pending');
         $recur  = trim($_POST['recurrence']     ?? '');
+        // CHANGE 1 & 2: Assignment and project
+        $assignedTo = array_key_exists('assigned_to', $_POST) ? (int)$_POST['assigned_to'] : -1;
+        $projectId  = array_key_exists('project_id',  $_POST) ? (int)$_POST['project_id']  : -1;
         if (!in_array($recur, ['daily','weekly','monthly','yearly'])) $recur = '';
         $allowed_statuses = ['pending', 'in_progress', 'review', 'done', 'cancelled'];
         if (!in_array($status, $allowed_statuses)) { $status = 'pending'; }
@@ -390,15 +452,42 @@ switch ($action) {
              due_date=TO_DATE(:p3,'YYYY-MM-DD'),
              category=:p4, custom_category=:p5,
              priority=:p6, color=:p7, notes=:p8,
-             status=:p9, recurrence=:p10
-             WHERE task_id=:p11 AND user_id=:p12",
-            [$name, $start, $due, $cat, $ccat, $pri, $col, $notes, $status, $recur ?: null, $id, $uid]
+             status=:p9, recurrence=:p10,
+             assigned_to=CASE WHEN :p11 = -1 THEN assigned_to ELSE :p12 END,
+             project_id =CASE WHEN :p13 = -1 THEN project_id  ELSE :p14 END
+             WHERE task_id=:p15 AND user_id=:p16",
+            [
+                $name, $start, $due, $cat, $ccat, $pri, $col, $notes, $status, $recur ?: null,
+                $assignedTo, $assignedTo > 0 ? $assignedTo : null, // p11/p12
+                $projectId,  $projectId  > 0 ? $projectId  : null, // p13/p14
+                $id, $uid,
+            ]
         );
 
         $auditAction = ($status !== $oldStatus) ? 'status_change' : 'edit';
         tm_audit_sp($uid, $auditAction, 'task', $id, $name,
                  "status:{$oldStatus}, pri:{$oldPri}",
                  "status:{$status}, pri:{$pri}");
+
+        // ── CHANGE 4: Process @mentions in notes on edit ──────────────────────
+        if ($notes !== '') {
+            preg_match_all('/@([\w]+)/', $notes, $mentionMatches);
+            foreach (array_unique($mentionMatches[1] ?? []) as $uname) {
+                $mRow = tm_fetch_one(tm_exec(
+                    "SELECT user_id FROM TM_Users WHERE LOWER(username) = LOWER(:p1)", [$uname]
+                ));
+                if (!$mRow || (int)$mRow['user_id'] === $uid) continue;
+                $authorName = tm_get_username_inline($uid);
+                $msg = "@{$authorName} mentioned you in task: {$name}";
+                tm_exec(
+                    "INSERT INTO TM_Notifications
+                        (user_id, task_id, type, message, is_read, source_type, mentioned_by)
+                     VALUES (:p1, :p2, 'mention', :p3, 0, 'task_note', :p4)",
+                    [(int)$mRow['user_id'], $id, substr($msg, 0, 500), $uid]
+                );
+            }
+        }
+        // ── END mention parsing ───────────────────────────────────────────────
 
         if ($isApi) tm_api_ok(['task_id' => $id, 'status' => $status]);
         tm_flash('success', 'Task updated!');

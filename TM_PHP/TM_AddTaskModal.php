@@ -14,6 +14,10 @@
  * The form action path must work from the root of the project.
  * Both Dashboard and Calendar live at the root, so the path is:
  *   action="TM_PHP/TM_TaskActions.php"
+ *
+ * COLLABORATION ADDITIONS (Changes 1 & 2):
+ *   - assigned_to: user dropdown populated via TM_CollabActions.php
+ *   - project_id:  project dropdown populated via TM_CollabActions.php
  */
 ?>
 <!-- ══════════════════════════════════════════════════════════
@@ -89,11 +93,36 @@
                         <option value="yearly">Yearly</option>
                     </select>
                 </div>
+
+                <!-- ── CHANGE 2: Project selector ─────────────── -->
+                <div class="form-group" id="addProjectGroup">
+                    <label class="form-label">
+                        <i class="fa-solid fa-folder" style="margin-right:4px;color:var(--gray-400)"></i>
+                        Project
+                    </label>
+                    <select name="project_id" class="form-input" id="addProjectSelect">
+                        <option value="">— Personal (no project) —</option>
+                    </select>
+                </div>
+
+                <!-- ── CHANGE 1: Assign to user ───────────────── -->
+                <div class="form-group" id="addAssignGroup">
+                    <label class="form-label">
+                        <i class="fa-solid fa-user-plus" style="margin-right:4px;color:var(--gray-400)"></i>
+                        Assign To
+                    </label>
+                    <select name="assigned_to" class="form-input" id="addAssignSelect">
+                        <option value="">— Unassigned —</option>
+                    </select>
+                </div>
+
                 <div class="form-group">
                     <label class="form-label">Notes</label>
-                    <textarea name="notes" class="form-input tm-auto-expand"
-                              placeholder="Optional notes..."
+                    <textarea name="notes" class="form-input tm-auto-expand" id="addTaskNotes"
+                              placeholder="Optional notes… use @username to notify teammates"
                               style="resize:none;overflow:hidden;"></textarea>
+                    <!-- @mention autocomplete suggestions -->
+                    <div id="addMentionSuggestions" class="tm-mention-suggestions" style="display:none;"></div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -104,3 +133,71 @@
         </form>
     </div>
 </div>
+
+<script>
+// ── Populate project and assign dropdowns when Add modal opens ────────────────
+(function () {
+    var _usersLoaded    = false;
+    var _projectsLoaded = false;
+
+    function loadUsers() {
+        if (_usersLoaded) return;
+        fetch('TM_PHP/TM_CollabActions.php?action=list_users')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.ok) return;
+                _usersLoaded = true;
+                var sel = document.getElementById('addAssignSelect');
+                if (!sel) return;
+                (data.data || []).forEach(function (u) {
+                    var opt = document.createElement('option');
+                    opt.value       = u.user_id;
+                    opt.textContent = u.full_name
+                        ? u.full_name + ' (@' + u.username + ')'
+                        : '@' + u.username;
+                    sel.appendChild(opt);
+                });
+            }).catch(function () {});
+    }
+
+    function loadProjects() {
+        if (_projectsLoaded) return;
+        fetch('TM_PHP/TM_CollabActions.php?action=list_projects')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.ok) return;
+                _projectsLoaded = true;
+                var sel = document.getElementById('addProjectSelect');
+                if (!sel) return;
+                (data.data || []).forEach(function (p) {
+                    var opt = document.createElement('option');
+                    opt.value       = p.project_id;
+                    opt.textContent = p.name;
+                    opt.style.color = p.color;
+                    sel.appendChild(opt);
+                });
+            }).catch(function () {});
+    }
+
+    // Load on first open of the Add modal
+    var overlay = document.getElementById('addTaskModal');
+    if (overlay) {
+        var observer = new MutationObserver(function (muts) {
+            muts.forEach(function (m) {
+                if (m.attributeName === 'class' &&
+                    overlay.classList.contains('active')) {
+                    loadUsers();
+                    loadProjects();
+                }
+            });
+        });
+        observer.observe(overlay, { attributes: true });
+    }
+
+    // ── @mention autocomplete for Add modal notes ─────────────────────────────
+    tmInitMentionAutocomplete(
+        document.getElementById('addTaskNotes'),
+        document.getElementById('addMentionSuggestions')
+    );
+})();
+</script>

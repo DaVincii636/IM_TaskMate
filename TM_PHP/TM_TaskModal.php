@@ -146,6 +146,29 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                         <option value="cancelled">Cancelled</option>
                     </select>
                 </div>
+
+                <!-- ── CHANGE 2: Project selector ─────────────── -->
+                <div class="form-group" id="tmEditProjectGroup">
+                    <label class="form-label">
+                        <i class="fa-solid fa-folder" style="margin-right:4px;color:var(--gray-400)"></i>
+                        Project
+                    </label>
+                    <select name="project_id" class="form-input" id="tmEditProjectSelect">
+                        <option value="">— Personal (no project) —</option>
+                    </select>
+                    <input type="hidden" name="project_id" id="tmEditProjectInput" value=""/>
+                </div>
+
+                <!-- ── CHANGE 1: Assign to user ───────────────── -->
+                <div class="form-group" id="tmEditAssignGroup">
+                    <label class="form-label">
+                        <i class="fa-solid fa-user-plus" style="margin-right:4px;color:var(--gray-400)"></i>
+                        Assign To
+                    </label>
+                    <select name="assigned_to" class="form-input" id="tmEditAssignSelect">
+                        <option value="">— Unassigned —</option>
+                    </select>
+                </div>
                 <div class="form-group dep-group" id="tmEditDepGroup">
                     <label class="form-label">Must Complete First</label>
                     <select id="tmEditDepSelect" class="form-input dep-select">
@@ -167,8 +190,43 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                 <div class="form-group">
                     <label class="form-label">Notes</label>
                     <textarea name="notes" class="form-input tm-auto-expand" id="tmEditTaskNotes"
-                              placeholder="Optional notes..." rows="3"
+                              placeholder="Optional notes… use @username to notify teammates" rows="3"
                               style="resize:none;overflow:hidden;"></textarea>
+                    <!-- @mention autocomplete suggestions -->
+                    <div id="editMentionSuggestions" class="tm-mention-suggestions" style="display:none;"></div>
+                </div>
+
+                <!-- ── CHANGE 3: Comments section ─────────────────────────── -->
+                <div class="form-group" id="tmEditCommentsSection" style="margin-top:1.25rem;">
+                    <label class="form-label" style="display:flex;align-items:center;gap:6px;">
+                        <i class="fa-solid fa-comments" style="color:var(--gray-400)"></i>
+                        Comments
+                        <span id="tmCommentCount" style="color:var(--gray-400);font-weight:400;font-size:11px;"></span>
+                    </label>
+                    <!-- comment list -->
+                    <div id="tmCommentList"
+                         style="max-height:200px;overflow-y:auto;margin-bottom:.6rem;display:flex;flex-direction:column;gap:.5rem;">
+                        <div id="tmCommentsLoading" style="text-align:center;padding:.75rem;color:var(--gray-400);font-size:12px;">
+                            <i class="fa-solid fa-spinner fa-spin"></i> Loading…
+                        </div>
+                    </div>
+                    <!-- new comment input -->
+                    <div style="display:flex;gap:8px;align-items:flex-end;">
+                        <div style="flex:1;position:relative;">
+                            <textarea id="tmNewCommentInput"
+                                      class="form-input tm-auto-expand"
+                                      placeholder="Add a comment… use @username to mention someone"
+                                      rows="2"
+                                      style="resize:none;overflow:hidden;font-size:13px;"></textarea>
+                            <div id="commentMentionSuggestions" class="tm-mention-suggestions" style="display:none;"></div>
+                        </div>
+                        <button type="button" class="btn-save"
+                                id="tmPostCommentBtn"
+                                style="padding:8px 14px;flex-shrink:0;"
+                                onclick="tmPostComment()">
+                            <i class="fa-solid fa-paper-plane"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -758,6 +816,377 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         buildDepSelect();
         renderDep();
     })();
+
+})();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     COLLABORATION STYLES (Changes 1–4)
+     ══════════════════════════════════════════════════════════ -->
+<style>
+/* ── Comments ─────────────────────────────────────────────── */
+.tm-comment-item {
+    background: var(--bg);
+    border-radius: 8px;
+    padding: .55rem .75rem;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.tm-comment-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+}
+.tm-comment-author {
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--black);
+}
+.tm-comment-time {
+    font-size: 11px;
+    color: var(--gray-400);
+}
+.tm-comment-text {
+    color: var(--gray-500);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.tm-comment-text .mention {
+    color: var(--primary, #3b82f6);
+    font-weight: 600;
+}
+.tm-comment-delete {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--gray-400);
+    padding: 0 4px;
+    margin-left: auto;
+    font-size: 11px;
+    opacity: 0;
+    transition: opacity .15s;
+}
+.tm-comment-item:hover .tm-comment-delete { opacity: 1; }
+.tm-comment-delete:hover { color: #ef4444; }
+
+/* ── @mention autocomplete ────────────────────────────────── */
+.tm-mention-suggestions {
+    position: absolute;
+    z-index: 9999;
+    background: var(--white, #fff);
+    border: 1px solid var(--gray-200, #e5e7eb);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.12);
+    min-width: 160px;
+    max-height: 160px;
+    overflow-y: auto;
+    font-size: 13px;
+}
+.tm-mention-item {
+    padding: 7px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.tm-mention-item:hover { background: var(--bg, #f9fafb); }
+.tm-mention-item .mname { font-weight: 600; }
+.tm-mention-item .mfull { color: var(--gray-400); font-size: 11px; }
+
+/* ── Assigned-to pill in view modal ───────────────────────── */
+.vm-assign-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-radius: 50px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 600;
+}
+</style>
+
+<!-- ══════════════════════════════════════════════════════════
+     COLLABORATION JAVASCRIPT (Changes 1–4)
+     ══════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+    'use strict';
+
+    // ── Cached users list (shared by all mention autocompletes) ──
+    var _allUsers    = null;
+    var _usersLoaded = false;
+
+    function fetchUsers(cb) {
+        if (_usersLoaded) { cb(_allUsers); return; }
+        fetch('TM_PHP/TM_CollabActions.php?action=list_users')
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                _allUsers    = d.ok ? (d.data || []) : [];
+                _usersLoaded = true;
+                cb(_allUsers);
+            }).catch(function () { cb([]); });
+    }
+
+    // ── Populate assign dropdown ──────────────────────────────────
+    function populateAssignSelect(selId, currentAssignedTo) {
+        var sel = document.getElementById(selId);
+        if (!sel) return;
+        fetchUsers(function (users) {
+            // Remove previously added options (keep first "Unassigned")
+            while (sel.options.length > 1) sel.remove(1);
+            users.forEach(function (u) {
+                var opt = document.createElement('option');
+                opt.value = u.user_id;
+                opt.textContent = u.full_name
+                    ? u.full_name + ' (@' + u.username + ')'
+                    : '@' + u.username;
+                if (parseInt(currentAssignedTo, 10) === u.user_id) opt.selected = true;
+                sel.appendChild(opt);
+            });
+        });
+    }
+
+    // ── Populate project dropdown ─────────────────────────────────
+    function populateProjectSelect(selId, currentProjectId) {
+        var sel = document.getElementById(selId);
+        if (!sel) return;
+        fetch('TM_PHP/TM_CollabActions.php?action=list_projects')
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                while (sel.options.length > 1) sel.remove(1);
+                (d.data || []).forEach(function (p) {
+                    var opt      = document.createElement('option');
+                    opt.value    = p.project_id;
+                    opt.textContent = p.name;
+                    if (parseInt(currentProjectId, 10) === p.project_id) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+            }).catch(function () {});
+    }
+
+    // ── Patch tmOpenEdit to load collab fields ────────────────────
+    var _origOpenEdit = window.tmOpenEdit;
+    window.tmOpenEdit = function (id) {
+        _origOpenEdit(id);
+
+        // Fetch latest task data (assigned_to + project_id) from server
+        fetch('TM_PHP/TM_CollabActions.php?action=get_task_collab&task_id=' + encodeURIComponent(id))
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.ok) return;
+                var assignedTo = d.assigned_to || 0;
+                var projectId  = d.project_id  || 0;
+                populateAssignSelect('tmEditAssignSelect', assignedTo);
+                populateProjectSelect('tmEditProjectSelect', projectId);
+            }).catch(function () {
+                // If endpoint not yet available, still populate dropdowns
+                populateAssignSelect('tmEditAssignSelect', 0);
+                populateProjectSelect('tmEditProjectSelect', 0);
+            });
+
+        // Load comments for this task
+        tmLoadComments(id);
+
+        // Init mention autocomplete on notes
+        tmInitMentionAutocomplete(
+            document.getElementById('tmEditTaskNotes'),
+            document.getElementById('editMentionSuggestions')
+        );
+        // Init mention autocomplete on comment input
+        tmInitMentionAutocomplete(
+            document.getElementById('tmNewCommentInput'),
+            document.getElementById('commentMentionSuggestions')
+        );
+    };
+
+    // ── CHANGE 3: Load & render comments ─────────────────────────
+    var _currentCommentTaskId = null;
+
+    window.tmLoadComments = function (taskId) {
+        _currentCommentTaskId = taskId;
+        var list  = document.getElementById('tmCommentList');
+        var count = document.getElementById('tmCommentCount');
+        if (!list) return;
+        list.innerHTML = '<div id="tmCommentsLoading" style="text-align:center;padding:.75rem;color:var(--gray-400);font-size:12px;"><i class="fa-solid fa-spinner fa-spin"></i> Loading…</div>';
+
+        fetch('TM_PHP/TM_CollabActions.php?action=get_comments&task_id=' + encodeURIComponent(taskId))
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                list.innerHTML = '';
+                if (!d.ok || !d.data || d.data.length === 0) {
+                    list.innerHTML = '<div style="text-align:center;color:var(--gray-400);font-size:12px;padding:.5rem;">No comments yet.</div>';
+                    if (count) count.textContent = '';
+                    return;
+                }
+                if (count) count.textContent = '(' + d.data.length + ')';
+                d.data.forEach(function (c) {
+                    list.appendChild(tmBuildCommentEl(c));
+                });
+                list.scrollTop = list.scrollHeight;
+            }).catch(function () {
+                list.innerHTML = '<div style="color:#ef4444;font-size:12px;padding:.5rem;">Failed to load comments.</div>';
+            });
+    };
+
+    function escHtml(s) {
+        return String(s)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function highlightMentions(text) {
+        return escHtml(text).replace(/@([\w]+)/g,
+            '<span class="mention">@$1</span>');
+    }
+
+    function tmBuildCommentEl(c) {
+        var el = document.createElement('div');
+        el.className = 'tm-comment-item';
+        el.dataset.commentId = c.comment_id;
+
+        var displayName = c.full_name && c.full_name.trim()
+            ? c.full_name + ' (@' + escHtml(c.username) + ')'
+            : '@' + escHtml(c.username);
+
+        el.innerHTML =
+            '<div class="tm-comment-meta">' +
+                '<span class="tm-comment-author">' + displayName + '</span>' +
+                '<span class="tm-comment-time">' + escHtml(c.created_fmt) + '</span>' +
+                '<button class="tm-comment-delete" title="Delete comment" ' +
+                        'onclick="tmDeleteComment(' + c.comment_id + ',this)">' +
+                    '<i class="fa-solid fa-trash-can"></i>' +
+                '</button>' +
+            '</div>' +
+            '<div class="tm-comment-text">' + highlightMentions(c.content) + '</div>';
+        return el;
+    }
+
+    window.tmPostComment = function () {
+        var inp    = document.getElementById('tmNewCommentInput');
+        var btn    = document.getElementById('tmPostCommentBtn');
+        var content = inp ? inp.value.trim() : '';
+        if (!content || !_currentCommentTaskId) return;
+
+        btn && (btn.disabled = true);
+        var fd = new FormData();
+        fd.append('action',  'add_comment');
+        fd.append('task_id', _currentCommentTaskId);
+        fd.append('content', content);
+
+        fetch('TM_PHP/TM_CollabActions.php', { method: 'POST', body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.ok) { alert(d.error || 'Failed to post comment'); return; }
+                inp.value = '';
+                inp.style.height = 'auto';
+                tmLoadComments(_currentCommentTaskId);
+            })
+            .catch(function () { alert('Network error posting comment.'); })
+            .finally(function () { btn && (btn.disabled = false); });
+    };
+
+    window.tmDeleteComment = function (commentId, btnEl) {
+        if (!confirm('Delete this comment?')) return;
+        var fd = new FormData();
+        fd.append('action',     'delete_comment');
+        fd.append('comment_id', commentId);
+        fetch('TM_PHP/TM_CollabActions.php', { method: 'POST', body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.ok) { alert(d.error || 'Failed to delete'); return; }
+                var item = btnEl ? btnEl.closest('.tm-comment-item') : null;
+                if (item) item.remove();
+                // Update count
+                var list  = document.getElementById('tmCommentList');
+                var count = document.getElementById('tmCommentCount');
+                if (list && count) {
+                    var remaining = list.querySelectorAll('.tm-comment-item').length;
+                    count.textContent = remaining > 0 ? '(' + remaining + ')' : '';
+                }
+            }).catch(function () {});
+    };
+
+    // ── CHANGE 4: @mention autocomplete ──────────────────────────
+    window.tmInitMentionAutocomplete = function (textarea, suggestBox) {
+        if (!textarea || !suggestBox) return;
+
+        textarea.addEventListener('input', function () {
+            var text     = textarea.value;
+            var cursor   = textarea.selectionStart;
+            var before   = text.slice(0, cursor);
+            var atMatch  = before.match(/@([\w]*)$/);
+
+            if (!atMatch) {
+                suggestBox.style.display = 'none';
+                return;
+            }
+
+            var query = atMatch[1].toLowerCase();
+            fetchUsers(function (users) {
+                var matches = users.filter(function (u) {
+                    return u.username.toLowerCase().startsWith(query) ||
+                           (u.full_name || '').toLowerCase().startsWith(query);
+                }).slice(0, 6);
+
+                if (matches.length === 0) {
+                    suggestBox.style.display = 'none';
+                    return;
+                }
+
+                suggestBox.innerHTML = '';
+                matches.forEach(function (u) {
+                    var item = document.createElement('div');
+                    item.className = 'tm-mention-item';
+                    item.innerHTML =
+                        '<span class="mname">@' + escHtml(u.username) + '</span>' +
+                        (u.full_name ? '<span class="mfull">' + escHtml(u.full_name) + '</span>' : '');
+                    item.addEventListener('mousedown', function (e) {
+                        e.preventDefault(); // prevent textarea blur
+                        // Replace the @partial with the full @username
+                        var newBefore = before.replace(/@([\w]*)$/, '@' + u.username + ' ');
+                        textarea.value = newBefore + text.slice(cursor);
+                        textarea.selectionStart = textarea.selectionEnd = newBefore.length;
+                        suggestBox.style.display = 'none';
+                        textarea.focus();
+                    });
+                    suggestBox.appendChild(item);
+                });
+                suggestBox.style.display = 'block';
+            });
+        });
+
+        textarea.addEventListener('blur', function () {
+            // Small delay so mousedown on suggestion fires first
+            setTimeout(function () { suggestBox.style.display = 'none'; }, 150);
+        });
+    };
+
+    // ── View modal: show assigned user ────────────────────────────
+    var _origOpenView = window.tmOpenView;
+    window.tmOpenView = function (id) {
+        _origOpenView(id);
+        // Fetch collab details and inject assigned-to pill into view modal
+        fetch('TM_PHP/TM_CollabActions.php?action=get_task_collab&task_id=' + encodeURIComponent(id))
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.ok || !d.assigned_username) return;
+                var body = document.getElementById('viewModalBody');
+                if (!body) return;
+                // Append assign pill if not already there
+                if (!body.querySelector('.vm-assign-pill')) {
+                    var pill = document.createElement('div');
+                    pill.style.cssText = 'margin-top:.75rem;';
+                    pill.innerHTML =
+                        '<span class="vm-label" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--gray-400);">Assigned To</span><br>' +
+                        '<span class="vm-assign-pill"><i class="fa-solid fa-user"></i>' +
+                        escHtml(d.assigned_username) + '</span>';
+                    body.appendChild(pill);
+                }
+            }).catch(function () {});
+    };
 
 })();
 </script>
