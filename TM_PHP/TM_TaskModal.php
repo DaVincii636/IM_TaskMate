@@ -125,9 +125,9 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                 <div class="form-group">
                     <label class="form-label">Priority</label>
                     <div class="priority-options" id="tmEditPriorityOptions">
-                        <button type="button" class="priority-btn high" data-priority="high">🔴 High</button>
-                        <button type="button" class="priority-btn mid"  data-priority="mid">🟡 Mid</button>
-                        <button type="button" class="priority-btn low"  data-priority="low">🟢 Low</button>
+                        <button type="button" class="priority-btn high" data-priority="high">High</button>
+                        <button type="button" class="priority-btn mid"  data-priority="mid">Mid</button>
+                        <button type="button" class="priority-btn low"  data-priority="low">Low</button>
                     </div>
                     <input type="hidden" name="priority" id="tmEditPriorityInput" value="mid"/>
                 </div>
@@ -139,12 +139,20 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                 <div class="form-group">
                     <label class="form-label">Status</label>
                     <select name="status" class="form-input" id="tmEditTaskStatus">
-                        <option value="pending">⏳ Pending</option>
-                        <option value="in_progress">🔄 In Progress</option>
-                        <option value="review">🔍 Review</option>
-                        <option value="done">✅ Done</option>
-                        <option value="cancelled">❌ Cancelled</option>
+                        <option value="pending">Pending</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="review">Review</option>
+                        <option value="done">Done</option>
+                        <option value="cancelled">Cancelled</option>
                     </select>
+                </div>
+                <div class="form-group dep-group">
+                    <label class="form-label">Must Complete First</label>
+                    <select id="tmEditDepSelect" class="form-input dep-select">
+                        <option value="">— Pick a task —</option>
+                    </select>
+                    <div class="dep-selected" id="tmEditDepSelected"></div>
+                    <input type="hidden" id="tmEditDepBlockerIds" name="blocker_ids" value=""/>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Recurrence</label>
@@ -475,6 +483,9 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         // Color swatches
         buildSwatches('tmEditColorRow', 'tmEditColorInput', t.color);
 
+        // Load dep links for this task
+        if (typeof window.tmEditDepLoad === 'function') window.tmEditDepLoad(id);
+
         openModal('editTaskModal');
     };
 
@@ -514,6 +525,28 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
             'Save changes to <strong>' + esc(name) + '</strong>?';
         document.getElementById('tmSaveTaskModal').classList.add('active');
     };
+
+    // ── Actually submit with link persistence ──────────────
+    // Replace the confirm button's direct submit with a fetch-then-submit
+    document.addEventListener('DOMContentLoaded', function() {
+        var confirmBtn = document.querySelector('#tmSaveTaskModal .pc-modal-confirm-blue');
+        if (confirmBtn) {
+            // Remove old inline onclick
+            confirmBtn.removeAttribute('onclick');
+            confirmBtn.addEventListener('click', function() {
+                var taskId = document.getElementById('editTaskId').value;
+                var blockerIds = (document.getElementById('tmEditDepBlockerIds') || {}).value || '';
+                var fd = new FormData();
+                fd.append('action', 'save_links');
+                fd.append('task_id', taskId);
+                fd.append('blocker_ids', blockerIds);
+                fetch('TM_PHP/TM_LinkActions.php', { method: 'POST', body: fd })
+                    .finally(function() {
+                        document.getElementById('editTaskForm').submit();
+                    });
+            });
+        }
+    });
 
     // ── Build color swatches ───────────────────────────────
     function buildSwatches(rowId, inputId, selected) {
@@ -599,6 +632,112 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
     document.querySelectorAll('textarea.tm-auto-expand').forEach(function (ta) {
         ta.addEventListener('input', function () { autoExpand(ta); });
     });
+
+    // ── Dep UI for TM_TaskModal Edit modal ────────────────
+    (function() {
+        function toNum(v) { return parseInt(v, 10) || 0; }
+        function escDep(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                            .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+        function fmtDate(s) {
+            if (!s) return '';
+            var p = s.split('-');
+            var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return months[parseInt(p[1],10)-1]+' '+parseInt(p[2],10);
+        }
+        function getAvailTasks() {
+            var raw = (typeof window.serverTasks !== 'undefined') ? window.serverTasks : RAW;
+            return raw.map(function(t) {
+                return { Id: toNum(t.task_id||t.Id||t.TASK_ID),
+                         Name: t.task_name||t.Name||t.TASK_NAME||'',
+                         Status: t.status||t.Status||t.STATUS||'pending',
+                         Color: t.color||t.Color||t.COLOR||'#888',
+                         DueDate: t.due_date||t.DueDate||t.DUE_DATE||'' };
+            });
+        }
+
+        var _selected  = [];
+        var _editingId = null;
+
+        function renderDep() {
+            var container = document.getElementById('tmEditDepSelected');
+            var hidden    = document.getElementById('tmEditDepBlockerIds');
+            if (!container || !hidden) return;
+            container.innerHTML = '';
+            hidden.value = _selected.map(function(s){return s.id;}).join(',');
+            _selected.forEach(function(s) {
+                var chip = document.createElement('div');
+                chip.className = 'dep-chip';
+                chip.innerHTML =
+                    '<span class="dep-chip-dot" style="background:'+escDep(s.color)+'"></span>'+
+                    '<span class="dep-chip-name">'+escDep(s.name)+'</span>'+
+                    (s.dueDate?'<span class="dep-chip-due">'+fmtDate(s.dueDate)+'</span>':'')+
+                    '<button type="button" class="dep-chip-remove" title="Remove"><i class="fa-solid fa-xmark"></i></button>';
+                chip.querySelector('.dep-chip-remove').addEventListener('click', function(){
+                    _selected = _selected.filter(function(x){return x.id!==s.id;});
+                    renderDep(); buildDepSelect();
+                });
+                container.appendChild(chip);
+            });
+            buildDepSelect();
+        }
+
+        function buildDepSelect() {
+            var sel = document.getElementById('tmEditDepSelect');
+            if (!sel) return;
+            var tasks = getAvailTasks();
+            var eligible = tasks.filter(function(t){
+                return t.Id !== _editingId &&
+                       !['done','cancelled'].includes((t.Status||'').toLowerCase()) &&
+                       !_selected.find(function(s){return s.id===t.Id;});
+            });
+            sel.innerHTML = '<option value="">— Pick a task —</option>';
+            eligible.forEach(function(t){
+                var opt = document.createElement('option');
+                opt.value = t.Id;
+                opt.textContent = t.Name+(t.DueDate?'  ·  '+fmtDate(t.DueDate):'');
+                sel.appendChild(opt);
+            });
+        }
+
+        var selEl = document.getElementById('tmEditDepSelect');
+        if (selEl) {
+            selEl.addEventListener('change', function(){
+                var id = toNum(this.value);
+                if (!id) return;
+                var task = getAvailTasks().find(function(t){return t.Id===id;});
+                if (task && !_selected.find(function(s){return s.id===id;})) {
+                    _selected.push({id:task.Id,name:task.Name,
+                                    color:task.Color||'#888',dueDate:task.DueDate||''});
+                    renderDep();
+                }
+                this.value='';
+            });
+        }
+
+        window.tmEditDepLoad = function(taskId) {
+            _editingId = toNum(taskId);
+            _selected  = [];
+            buildDepSelect();
+            renderDep();
+            fetch('TM_PHP/TM_GetLinks.php?task_id='+encodeURIComponent(taskId))
+                .then(function(r){return r.json();})
+                .then(function(data){
+                    if (!data.ok) return;
+                    var tasks = getAvailTasks();
+                    _selected = (data.blockers||[]).map(function(b){
+                        var numId = toNum(b.id);
+                        var match = tasks.find(function(t){return t.Id===numId;})||{};
+                        return {id:numId,name:b.name,color:match.Color||'#888',dueDate:match.DueDate||''};
+                    });
+                    renderDep();
+                }).catch(function(){});
+        };
+
+        buildDepSelect();
+        renderDep();
+    })();
 
 })();
 </script>

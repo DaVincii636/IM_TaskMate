@@ -21,35 +21,35 @@
         {
             selector: '[data-onboard="add-task"], .open-modal-btn, [id*="addTask"], [id*="add-task"], #openAddModal',
             fallback: '.task-table-card, .tasks-page',
-            title: '➕ Add a Task',
+            title: 'Add a Task',
             body:  'Click here to create your first task. Give it a name, dates, priority, and category.',
             position: 'bottom',
         },
         {
             selector: 'a[href*="TM_Calendar"], nav a[href*="Calendar"]',
             fallback: 'nav, .navbar',
-            title: '📅 Calendar View',
+            title: 'Calendar View',
             body:  'Switch to the Calendar to see your tasks laid out by date — great for planning ahead.',
             position: 'bottom',
         },
         {
             selector: '#notifBell, .notif-bell, [id*="notif-bell"], [data-onboard="notif-bell"]',
             fallback: 'nav, .navbar',
-            title: '🔔 Notifications',
+            title: 'Notifications',
             body:  'The bell icon alerts you to overdue tasks and upcoming deadlines.',
             position: 'bottom',
         },
         {
             selector: 'a[href*="TM_Activity"], nav a[href*="Activity"]',
             fallback: 'nav, .navbar',
-            title: '📋 Activity Feed',
+            title: 'Activity Feed',
             body:  'Track every change made to your tasks — edits, completions, and more.',
             position: 'bottom',
         },
         {
             selector: 'a[href*="TM_Analytics"], nav a[href*="Analytics"]',
             fallback: 'nav, .navbar',
-            title: '📊 Analytics',
+            title: 'Analytics',
             body:  'View completion rates, missed deadlines, and productivity trends over time.',
             position: 'bottom',
         },
@@ -160,7 +160,7 @@
                     ${index > 0
                         ? '<button class="tm-ob-btn tm-ob-back">Back</button>'
                         : ''}
-                    <button class="tm-ob-btn tm-ob-next">${isLast ? 'Got it! 🎉' : 'Next →'}</button>
+                    <button class="tm-ob-btn tm-ob-next">${isLast ? 'Got it!' : 'Next →'}</button>
                 </div>`;
 
             positionTooltip(rect);

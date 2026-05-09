@@ -191,9 +191,9 @@ $blockerMapJson = json_encode($blockerMap);
                 <div class="form-group">
                     <label class="form-label">Priority</label>
                     <div class="priority-options">
-                        <button type="button" class="priority-btn high" data-priority="high">🔴 High</button>
-                        <button type="button" class="priority-btn mid active" data-priority="mid">🟡 Mid</button>
-                        <button type="button" class="priority-btn low" data-priority="low">🟢 Low</button>
+                        <button type="button" class="priority-btn high" data-priority="high">High</button>
+                        <button type="button" class="priority-btn mid active" data-priority="mid">Mid</button>
+                        <button type="button" class="priority-btn low" data-priority="low">Low</button>
                     </div>
                     <input type="hidden" name="priority" id="addPriorityInput" value="mid"/>
                 </div>
@@ -276,9 +276,9 @@ $blockerMapJson = json_encode($blockerMap);
                 <div class="form-group">
                     <label class="form-label">Priority</label>
                     <div class="priority-options" id="editPriorityOptions">
-                        <button type="button" class="priority-btn high" data-priority="high">🔴 High</button>
-                        <button type="button" class="priority-btn mid" data-priority="mid">🟡 Mid</button>
-                        <button type="button" class="priority-btn low" data-priority="low">🟢 Low</button>
+                        <button type="button" class="priority-btn high" data-priority="high">High</button>
+                        <button type="button" class="priority-btn mid" data-priority="mid">Mid</button>
+                        <button type="button" class="priority-btn low" data-priority="low">Low</button>
                     </div>
                     <input type="hidden" name="priority" id="editPriorityInput" value="mid"/>
                 </div>
@@ -290,11 +290,11 @@ $blockerMapJson = json_encode($blockerMap);
                 <div class="form-group">
                     <label class="form-label">Status</label>
                     <select name="status" class="form-input" id="editTaskStatus">
-                        <option value="pending">&#x23F3; Pending</option>
-                        <option value="in_progress">&#x1F504; In Progress</option>
-                        <option value="review">&#x1F50D; Review</option>
-                        <option value="done">&#x2705; Done</option>
-                        <option value="cancelled">&#x274C; Cancelled</option>
+                        <option value="pending">Pending</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="review">Review</option>
+                        <option value="done">Done</option>
+                        <option value="cancelled">Cancelled</option>
                     </select>
                 </div>
                 <div class="form-group dep-group">

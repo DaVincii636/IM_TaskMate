@@ -15,8 +15,12 @@ const CalendarApp = (() => {
 
     let tasks = Array.isArray(serverTasks) ? serverTasks : [];
     let today = new Date();
-    let viewYear = today.getFullYear();
-    let viewMonth = today.getMonth();
+    // Restore last viewed month/year from sessionStorage so calendar stays
+    // on the user's current view after adding or editing a task.
+    let _savedYear  = parseInt(sessionStorage.getItem('tm_cal_year')  || '', 10);
+    let _savedMonth = parseInt(sessionStorage.getItem('tm_cal_month') || '', 10);
+    let viewYear  = (!isNaN(_savedYear)  && _savedYear  >= 1900 && _savedYear  <= 2100) ? _savedYear  : today.getFullYear();
+    let viewMonth = (!isNaN(_savedMonth) && _savedMonth >= 0    && _savedMonth <= 11)   ? _savedMonth : today.getMonth();
     let isGantt = false;
 
     // ---- Helpers ----
@@ -46,6 +50,9 @@ const CalendarApp = (() => {
     function render() {
         document.getElementById('monthYearLabel').textContent = `${MONTHS[viewMonth]} ${viewYear}`;
         document.getElementById('yearInput').value = viewYear;
+        // Persist so page reload (after add/edit) returns to the same view
+        sessionStorage.setItem('tm_cal_year',  viewYear);
+        sessionStorage.setItem('tm_cal_month', viewMonth);
         isGantt ? renderGantt() : renderCalendar();
     }
 
@@ -89,8 +96,9 @@ const CalendarApp = (() => {
             const dot = document.createElement('div');
             dot.className = 'task-dot';
             const blockerCount = (typeof blockerMap !== 'undefined' && blockerMap[t.Id]) || 0;
+            // Show a plain text badge without emoji for blocked tasks
             const blockerBadge = blockerCount > 0
-                ? `<span class="task-blocked-badge" title="${blockerCount} blocking task${blockerCount > 1 ? 's' : ''} pending">⛔ ${blockerCount}</span>`
+                ? `<span class="task-blocked-badge" title="${blockerCount} blocking task${blockerCount > 1 ? 's' : ''} pending">${blockerCount} blocked</span>`
                 : '';
             dot.innerHTML = `<div class="task-dot-indicator" style="background:${t.Color}"></div>
                              <span class="task-dot-name">${t.Name}</span>${blockerBadge}`;
@@ -336,7 +344,10 @@ const CalendarApp = (() => {
             viewMonth++; if (viewMonth > 11) { viewMonth = 0; viewYear++; } render();
         });
         document.getElementById('btnToday').addEventListener('click', () => {
-            viewYear = today.getFullYear(); viewMonth = today.getMonth(); render();
+            viewYear = today.getFullYear(); viewMonth = today.getMonth();
+            sessionStorage.removeItem('tm_cal_year');
+            sessionStorage.removeItem('tm_cal_month');
+            render();
         });
         document.getElementById('yearInput').addEventListener('change', function () {
             const y = parseInt(this.value);

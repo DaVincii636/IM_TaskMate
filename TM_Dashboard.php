@@ -471,12 +471,12 @@ function statusLabel(string $s): string {
             <div class="modal-title">New Task</div>
             <button class="modal-close" onclick="closeModal('addTaskModal')">&#x2715;</button>
         </div>
-        <form method="post" action="TM_PHP/TM_TaskActions.php">
+        <form method="post" action="TM_PHP/TM_TaskActions.php" id="dashAddTaskForm">
             <input type="hidden" name="action" value="add"/>
             <div class="modal-body">
                 <div class="form-group">
                     <label class="form-label">Task Name</label>
-                    <input type="text" name="name" class="form-input" placeholder="e.g. Buy groceries" required/>
+                    <input type="text" name="name" class="form-input" id="dash_taskName" placeholder="e.g. Buy groceries" required/>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
@@ -490,7 +490,7 @@ function statusLabel(string $s): string {
                 </div>
                 <div class="form-group">
                     <label class="form-label">Category</label>
-                    <div class="category-options">
+                    <div class="category-options" id="dash_catOptions">
                         <button type="button" class="cat-btn active" data-cat="errands">Errands</button>
                         <button type="button" class="cat-btn" data-cat="school">School</button>
                         <button type="button" class="cat-btn" data-cat="medicine">Medicine</button>
@@ -503,10 +503,10 @@ function statusLabel(string $s): string {
                 </div>
                 <div class="form-group">
                     <label class="form-label">Priority</label>
-                    <div class="priority-options">
-                        <button type="button" class="priority-btn high" data-priority="high">🔴 High</button>
-                        <button type="button" class="priority-btn mid active" data-priority="mid">🟡 Mid</button>
-                        <button type="button" class="priority-btn low" data-priority="low">🟢 Low</button>
+                    <div class="priority-options" id="dash_priorityOptions">
+                        <button type="button" class="priority-btn high" data-priority="high">High</button>
+                        <button type="button" class="priority-btn mid active" data-priority="mid">Mid</button>
+                        <button type="button" class="priority-btn low" data-priority="low">Low</button>
                     </div>
                     <input type="hidden" name="priority" id="dash_priorityInput" value="mid"/>
                 </div>
@@ -515,10 +515,13 @@ function statusLabel(string $s): string {
                     <div class="color-picker-row" id="dash_colorRow"></div>
                     <input type="hidden" name="color" id="dash_colorInput" value="#ef4444"/>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Notes</label>
-                    <textarea name="notes" class="form-input tm-auto-expand" placeholder="Optional notes..."
-                              style="resize:none;overflow:hidden;"></textarea>
+                <div class="form-group dep-group">
+                    <label class="form-label">Must Complete First</label>
+                    <select id="dash_depSelect" class="form-input dep-select">
+                        <option value="">— Pick a task —</option>
+                    </select>
+                    <div class="dep-selected" id="dash_depSelected"></div>
+                    <input type="hidden" id="dash_depBlockerIds" name="blocker_ids" value=""/>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Recurrence</label>
@@ -529,6 +532,11 @@ function statusLabel(string $s): string {
                         <option value="monthly">Monthly</option>
                         <option value="yearly">Yearly</option>
                     </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    <textarea name="notes" class="form-input tm-auto-expand" placeholder="Optional notes..."
+                              style="resize:none;overflow:hidden;"></textarea>
                 </div>
             </div>
             <div class="modal-footer">
@@ -568,9 +576,9 @@ function statusLabel(string $s): string {
     });
 
     // Category buttons
-    document.querySelectorAll('#addTaskModal .cat-btn').forEach(function (btn) {
+    document.querySelectorAll('#dash_catOptions .cat-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            document.querySelectorAll('#addTaskModal .cat-btn').forEach(function (b) { b.classList.remove('active'); });
+            document.querySelectorAll('#dash_catOptions .cat-btn').forEach(function (b) { b.classList.remove('active'); });
             btn.classList.add('active');
             document.getElementById('dash_categoryInput').value = btn.dataset.cat;
             document.getElementById('dash_othersWrap').style.display = btn.dataset.cat === 'others' ? 'block' : 'none';
@@ -578,22 +586,115 @@ function statusLabel(string $s): string {
     });
 
     // Priority buttons
-    document.querySelectorAll('#addTaskModal .priority-btn').forEach(function (btn) {
+    document.querySelectorAll('#dash_priorityOptions .priority-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            document.querySelectorAll('#addTaskModal .priority-btn').forEach(function (b) { b.classList.remove('active'); });
+            document.querySelectorAll('#dash_priorityOptions .priority-btn').forEach(function (b) { b.classList.remove('active'); });
             btn.classList.add('active');
             document.getElementById('dash_priorityInput').value = btn.dataset.priority;
         });
     });
 
-    // Default today's date on open
-    document.querySelector('[onclick="openModal(\'addTaskModal\')"]').addEventListener('click', function () {
-        const today = new Date().toISOString().split('T')[0];
-        const s = document.getElementById('dash_startDate');
-        const d = document.getElementById('dash_dueDate');
-        if (!s.value) s.value = today;
-        if (!d.value) d.value = today;
+    // Default today's date on open — bind to all buttons that open addTaskModal
+    document.querySelectorAll('[onclick*="addTaskModal"]').forEach(function (el) {
+        el.addEventListener('click', function () {
+            const today = new Date().toISOString().split('T')[0];
+            const s = document.getElementById('dash_startDate');
+            const d = document.getElementById('dash_dueDate');
+            if (!s.value) s.value = today;
+            if (!d.value) d.value = today;
+            // Reset dep UI on open
+            if (typeof window.dashDepReset === 'function') window.dashDepReset();
+        });
     });
+
+    // ── Dependency UI for Dashboard Add Task modal ─────────────────────────────
+    (function () {
+        function toNum(v) { return parseInt(v, 10) || 0; }
+        function escDep(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                            .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+        function fmtDate(s) {
+            if (!s) return '';
+            var p = s.split('-');
+            var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return months[parseInt(p[1],10)-1] + ' ' + parseInt(p[2],10);
+        }
+
+        // Fetch tasks from the page's serverTasks if available (Calendar page),
+        // otherwise fall back to an empty list (Dashboard will rely on page reload).
+        function getAvailTasks() {
+            var raw = (typeof window.dashTasks !== 'undefined') ? window.dashTasks : [];
+            return raw.map(function(t) {
+                return { Id: toNum(t.task_id || t.Id), Name: t.task_name || t.Name,
+                         Status: t.status || t.Status || 'pending',
+                         Color: t.color || t.Color || '#888',
+                         DueDate: t.due_date || t.DueDate || '' };
+            });
+        }
+
+        var _selected = [];
+
+        function renderDep() {
+            var container = document.getElementById('dash_depSelected');
+            var hidden    = document.getElementById('dash_depBlockerIds');
+            if (!container || !hidden) return;
+            container.innerHTML = '';
+            hidden.value = _selected.map(function(s) { return s.id; }).join(',');
+            _selected.forEach(function(s) {
+                var chip = document.createElement('div');
+                chip.className = 'dep-chip';
+                chip.innerHTML =
+                    '<span class="dep-chip-dot" style="background:' + escDep(s.color) + '"></span>' +
+                    '<span class="dep-chip-name">' + escDep(s.name) + '</span>' +
+                    (s.dueDate ? '<span class="dep-chip-due">' + fmtDate(s.dueDate) + '</span>' : '') +
+                    '<button type="button" class="dep-chip-remove" title="Remove"><i class="fa-solid fa-xmark"></i></button>';
+                chip.querySelector('.dep-chip-remove').addEventListener('click', function() {
+                    _selected = _selected.filter(function(x) { return x.id !== s.id; });
+                    renderDep();
+                    buildDepSelect();
+                });
+                container.appendChild(chip);
+            });
+            buildDepSelect();
+        }
+
+        function buildDepSelect() {
+            var sel = document.getElementById('dash_depSelect');
+            if (!sel) return;
+            var tasks = getAvailTasks();
+            var eligible = tasks.filter(function(t) {
+                return !['done','cancelled'].includes((t.Status||'').toLowerCase()) &&
+                       !_selected.find(function(s) { return s.id === t.Id; });
+            });
+            sel.innerHTML = '<option value="">— Pick a task —</option>';
+            eligible.forEach(function(t) {
+                var opt = document.createElement('option');
+                opt.value = t.Id;
+                opt.textContent = t.Name + (t.DueDate ? '  ·  ' + fmtDate(t.DueDate) : '');
+                sel.appendChild(opt);
+            });
+        }
+
+        var selEl = document.getElementById('dash_depSelect');
+        if (selEl) {
+            selEl.addEventListener('change', function() {
+                var id = toNum(this.value);
+                if (!id) return;
+                var task = getAvailTasks().find(function(t) { return t.Id === id; });
+                if (task && !_selected.find(function(s) { return s.id === id; })) {
+                    _selected.push({ id: task.Id, name: task.Name,
+                                     color: task.Color || '#888', dueDate: task.DueDate || '' });
+                    renderDep();
+                }
+                this.value = '';
+            });
+        }
+
+        window.dashDepReset = function() { _selected = []; renderDep(); };
+        buildDepSelect();
+        renderDep();
+    })();
 })();
 </script>
 
