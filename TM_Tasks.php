@@ -41,6 +41,21 @@ if ($dateTo !== '') {
     $extraParams[] = $dateTo;
 }
 
+// ── Sort params ────────────────────────────────────────────────────────────────
+$sortCol = $_GET['sort']    ?? 'due_date';
+$sortDir = strtolower($_GET['dir'] ?? 'asc') === 'desc' ? 'desc' : 'asc';
+
+$allowedSorts = ['task_name','category','due_date','priority','status'];
+if (!in_array($sortCol, $allowedSorts)) $sortCol = 'due_date';
+
+// Priority needs a custom sort order (high > mid > low)
+$sortExpr = match($sortCol) {
+    'priority' => "CASE priority WHEN 'high' THEN 1 WHEN 'mid' THEN 2 ELSE 3 END",
+    'status'   => "CASE status WHEN 'pending' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'review' THEN 3 WHEN 'done' THEN 4 ELSE 5 END",
+    default    => $sortCol,
+};
+$sortSql = "$sortExpr " . strtoupper($sortDir);
+
 // Build query based on active tab
 // Board view fetches all non-cancelled tasks grouped by status — skip the list query.
 // $stmt is initialised here so static analysis never sees it as possibly undefined.
@@ -168,20 +183,6 @@ function isOverdue(string $dueDate, string $status): bool {
     return $dueDate < date('Y-m-d') && !in_array($status, ['done','cancelled']);
 }
 
-// ── Sort params ────────────────────────────────────────────────────────────────
-$sortCol = $_GET['sort']    ?? 'due_date';
-$sortDir = strtolower($_GET['dir'] ?? 'asc') === 'desc' ? 'desc' : 'asc';
-
-$allowedSorts = ['task_name','category','due_date','priority','status'];
-if (!in_array($sortCol, $allowedSorts)) $sortCol = 'due_date';
-
-// Priority needs a custom sort order (high > mid > low)
-$sortExpr = match($sortCol) {
-    'priority' => "CASE priority WHEN 'high' THEN 1 WHEN 'mid' THEN 2 ELSE 3 END",
-    'status'   => "CASE status WHEN 'pending' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'review' THEN 3 WHEN 'done' THEN 4 ELSE 5 END",
-    default    => $sortCol,
-};
-$sortSql = "$sortExpr " . strtoupper($sortDir);
 // ── Notifications ─────────────────────────────────────────────────────────────
 require_once 'TM_PHP/TM_NavNotif.php';
 ?>

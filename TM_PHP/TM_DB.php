@@ -163,7 +163,13 @@ function tm_sp_create_task(
     $newTaskId = 0;
     oci_bind_by_name($stmt, ':p_new_task_id', $newTaskId, 10);
 
-    oci_execute($stmt, OCI_NO_AUTO_COMMIT); // procedure does its own COMMIT
+    // Must use OCI_COMMIT_ON_SUCCESS (the default), NOT OCI_NO_AUTO_COMMIT.
+    // Passing OCI_NO_AUTO_COMMIT puts the PHP session into manual-commit mode,
+    // which suppresses the COMMIT inside the PL/SQL procedure — the task INSERT
+    // goes through but the TM_AuditLog INSERT is never committed, so the
+    // Activity Feed shows nothing. OCI_COMMIT_ON_SUCCESS lets the procedure's
+    // internal COMMIT persist both writes atomically.
+    oci_execute($stmt, OCI_COMMIT_ON_SUCCESS);
     oci_free_statement($stmt);
 
     return (int)$newTaskId;

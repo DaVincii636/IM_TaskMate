@@ -43,7 +43,7 @@ $cntDone = _tm_count(tm_fetch_all(tm_exec(
 
 $cntOverdue = _tm_count(tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE user_id=:p1 AND due_date < SYSDATE AND status NOT IN ('done','cancelled')",
+     WHERE user_id=:p1 AND TRUNC(due_date) < TRUNC(SYSDATE) AND status NOT IN ('done','cancelled')",
     [$uid]
 )));
 

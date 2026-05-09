@@ -405,17 +405,22 @@ document.addEventListener('DOMContentLoaded', CalendarApp.init);
     }
 
     // ── Factory: creates one dep UI instance ─────────────────────────────────
-    function makeDepUI(selId, containerId, hiddenId) {
+    function makeDepUI(selId, containerId, hiddenId, getDueDate) {
         let _selected  = [];
         let _editingId = null;
 
         function buildSelect() {
             const sel = document.getElementById(selId);
             if (!sel) return;
+            // Read the current task's due date via the callback (if provided).
+            // Only show candidate tasks whose due date is on or before this date —
+            // a blocker must be completable before this task's deadline.
+            const currentDue = (typeof getDueDate === 'function') ? getDueDate() : '';
             const eligible = getTasks().filter(t =>
                 t.Id !== _editingId &&
                 !['done', 'cancelled'].includes((t.Status || '').toLowerCase()) &&
-                !_selected.find(s => s.id === t.Id)
+                !_selected.find(s => s.id === t.Id) &&
+                (currentDue === '' || t.DueDate === '' || t.DueDate <= currentDue)
             );
             sel.innerHTML = '<option value="">— Pick a task —</option>';
             eligible.forEach(t => {
@@ -498,16 +503,37 @@ document.addEventListener('DOMContentLoaded', CalendarApp.init);
                 _selected  = [];
                 buildSelect();
                 render();
+            },
+            rebuildSelect: function () {
+                buildSelect();
             }
         };
     }
 
     // ── Instantiate for edit modal ────────────────────────────────────────────
-    const editDep = makeDepUI('depSelect', 'depSelected', 'depBlockerIds');
+    const editDep = makeDepUI(
+        'depSelect', 'depSelected', 'depBlockerIds',
+        () => (document.getElementById('editTaskDue') || {}).value || ''
+    );
     window.depLoadExisting = function (taskId) { editDep.loadExisting(taskId); };
 
+    // Re-filter whenever the edit modal's due date changes
+    document.addEventListener('DOMContentLoaded', function () {
+        const editDueEl = document.getElementById('editTaskDue');
+        if (editDueEl) editDueEl.addEventListener('change', () => editDep.rebuildSelect());
+    });
+
     // ── Instantiate for add modal ─────────────────────────────────────────────
-    const addDep = makeDepUI('addDepSelect', 'addDepSelected', 'addDepBlockerIds');
+    const addDep = makeDepUI(
+        'addDepSelect', 'addDepSelected', 'addDepBlockerIds',
+        () => (document.getElementById('addTaskDue') || {}).value || ''
+    );
     window.depResetAdd = function () { addDep.reset(); };
+
+    // Re-filter whenever the add modal's due date changes
+    document.addEventListener('DOMContentLoaded', function () {
+        const addDueEl = document.getElementById('addTaskDue');
+        if (addDueEl) addDueEl.addEventListener('change', () => addDep.rebuildSelect());
+    });
 
 })();
