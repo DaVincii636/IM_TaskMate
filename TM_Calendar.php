@@ -269,18 +269,16 @@ $blockerMapJson = json_encode($blockerMap);
                 </div>
                 <div class="form-group">
                     <label class="form-label">
-                        Dependencies
-                        <span class="dep-label-hint">Blocked by these tasks (must be done first)</span>
+                        Must Complete First
                     </label>
-                    <div class="dep-search-wrap">
-                        <i class="fa-solid fa-magnifying-glass dep-search-icon"></i>
-                        <input type="text" id="depSearchInput" class="form-input dep-search-input"
-                               placeholder="Search tasks to add as blockers…" autocomplete="off"/>
+                    <div class="dep-info-banner">
+                        <i class="fa-solid fa-circle-info dep-info-icon"></i>
+                        <span>This task can only be marked done once all tasks below are completed first.</span>
                     </div>
-                    <ul class="dep-dropdown" id="depDropdown"></ul>
-                    <div class="dep-selected" id="depSelected">
-                        <span class="dep-empty-hint" id="depEmptyHint">No blockers set.</span>
-                    </div>
+                    <select id="depSelect" class="form-input dep-select">
+                        <option value="">— Select a task to add —</option>
+                    </select>
+                    <div class="dep-selected" id="depSelected"></div>
                     <input type="hidden" id="depBlockerIds" name="blocker_ids" value=""/>
                 </div>
 

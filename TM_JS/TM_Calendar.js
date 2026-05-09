@@ -353,126 +353,119 @@ const CalendarApp = (() => {
 
 document.addEventListener('DOMContentLoaded', CalendarApp.init);
 // ── Dependency UI ─────────────────────────────────────────────────────────────
-// Manages the blocker search, chip display, and hidden-input sync
-// inside the edit modal. Relies on `serverTasks` already being in scope.
+// Select-dropdown approach: pick a task from the <select>, it becomes a chip.
+// Removing a chip puts the task back into the <select>.
+// Relies on `serverTasks` already being in scope (injected by PHP).
+//
+// ROOT-CAUSE NOTE: Oracle OCI8 returns all column values as PHP strings, so
+// task_id arrives in JSON as a string ("42"), not a number (42). The JS .map()
+// therefore gives t.Id a string value. We normalise every id to a Number via
+// toNum() before any comparison so strict equality (===) always works.
 (function () {
     'use strict';
 
-    // Currently selected blocker objects: [{id, name}]
-    let _selected = [];
-    // Task ID currently being edited (set by depLoadExisting)
-    let _editingId = null;
+    // ALL ids are stored as Numbers to avoid string/number mismatches.
+    let _selected  = []; // [{id:Number, name, color, dueDate}]
+    let _editingId = null; // Number
 
-    // ── Load existing links from server when edit modal opens ─────────────────
-    window.depLoadExisting = function (taskId) {
-        _editingId = taskId;
-        _selected  = [];
-        depRender();
+    function toNum(v) { return parseInt(v, 10) || 0; }
 
-        // Fetch the current blockers for this task
-        fetch('TM_PHP/TM_GetLinks.php?task_id=' + encodeURIComponent(taskId))
-            .then(r => r.json())
-            .then(data => {
-                if (!data.ok) return;
-                _selected = data.blockers; // [{id, name}]
-                depRender();
-            })
-            .catch(() => {}); // silently ignore if endpoint not yet live
-    };
+    // Return a fresh copy of serverTasks with Id coerced to Number
+    function getTasks() {
+        return (typeof serverTasks !== 'undefined' ? serverTasks : [])
+            .map(t => ({ Id: toNum(t.Id), Name: t.Name, Status: t.Status,
+                         Color: t.Color, DueDate: t.DueDate }));
+    }
 
-    // ── Render the selected chips and sync hidden input ───────────────────────
+    // ── Populate <select> (excludes self, already-selected, done/cancelled) ──
+    function depBuildSelect() {
+        const sel = document.getElementById('depSelect');
+        if (!sel) return;
+
+        const eligible = getTasks().filter(t =>
+            t.Id !== _editingId &&
+            !['done', 'cancelled'].includes((t.Status || '').toLowerCase()) &&
+            !_selected.find(s => s.id === t.Id)
+        );
+
+        sel.innerHTML = '<option value="">— Select a task to add —</option>';
+        eligible.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.Id; // Number → gets stringified by the DOM, but we toNum() on read
+            opt.textContent = t.Name + (t.DueDate ? '  ·  due ' + fmtDate(t.DueDate) : '');
+            sel.appendChild(opt);
+        });
+    }
+
+    // ── Render chips and sync hidden input ────────────────────────────────────
     function depRender() {
         const container = document.getElementById('depSelected');
-        const hint      = document.getElementById('depEmptyHint');
         const hidden    = document.getElementById('depBlockerIds');
         if (!container || !hidden) return;
 
-        // Remove old chips (keep the hint span)
-        container.querySelectorAll('.dep-chip').forEach(c => c.remove());
-
-        if (_selected.length === 0) {
-            if (hint) hint.style.display = 'inline';
-            hidden.value = '';
-            return;
-        }
-
-        if (hint) hint.style.display = 'none';
+        container.innerHTML = '';
         hidden.value = _selected.map(s => s.id).join(',');
 
         _selected.forEach(s => {
-            const chip = document.createElement('span');
+            const chip = document.createElement('div');
             chip.className = 'dep-chip';
             chip.innerHTML =
+                '<span class="dep-chip-dot" style="background:' + escDep(s.color) + '"></span>' +
                 '<span class="dep-chip-name">' + escDep(s.name) + '</span>' +
-                '<button type="button" class="dep-chip-remove" title="Remove">' +
+                (s.dueDate ? '<span class="dep-chip-due">due ' + fmtDate(s.dueDate) + '</span>' : '') +
+                '<button type="button" class="dep-chip-remove" title="Remove blocker">' +
                     '<i class="fa-solid fa-xmark"></i>' +
                 '</button>';
             chip.querySelector('.dep-chip-remove').addEventListener('click', () => {
                 _selected = _selected.filter(x => x.id !== s.id);
                 depRender();
+                depBuildSelect();
             });
             container.appendChild(chip);
         });
+
+        depBuildSelect();
     }
 
-    // ── Search input → dropdown ───────────────────────────────────────────────
-    let _searchTimer = null;
-    document.addEventListener('DOMContentLoaded', function () {
-        const input    = document.getElementById('depSearchInput');
-        const dropdown = document.getElementById('depDropdown');
-        if (!input || !dropdown) return;
+    // ── Load existing links from server when edit modal opens ─────────────────
+    window.depLoadExisting = function (taskId) {
+        _editingId = toNum(taskId);
+        _selected  = [];
+        depBuildSelect(); // show available tasks immediately, before fetch
+        depRender();
 
-        input.addEventListener('input', function () {
-            clearTimeout(_searchTimer);
-            const q = input.value.trim().toLowerCase();
-            if (q.length < 1) { dropdown.innerHTML = ''; dropdown.style.display = 'none'; return; }
-
-            _searchTimer = setTimeout(() => {
-                // Filter serverTasks: exclude self, already-selected, done/cancelled
-                const results = (typeof serverTasks !== 'undefined' ? serverTasks : [])
-                    .filter(t =>
-                        t.Id   !== _editingId &&
-                        t.Name.toLowerCase().includes(q) &&
-                        !['done','cancelled'].includes(t.Status) &&
-                        !_selected.find(s => s.id === t.Id)
-                    )
-                    .slice(0, 6);
-
-                if (results.length === 0) {
-                    dropdown.innerHTML = '<li class="dep-dd-empty">No matching tasks found</li>';
-                } else {
-                    dropdown.innerHTML = results.map(t =>
-                        '<li class="dep-dd-item" data-id="' + t.Id + '">' +
-                            '<span class="dep-dd-dot" style="background:' + escDep(t.Color) + '"></span>' +
-                            '<span class="dep-dd-name">' + escDep(t.Name) + '</span>' +
-                            '<span class="dep-dd-due">' + fmtDate(t.DueDate) + '</span>' +
-                        '</li>'
-                    ).join('');
-                }
-                dropdown.style.display = 'block';
-
-                dropdown.querySelectorAll('.dep-dd-item').forEach(li => {
-                    li.addEventListener('click', () => {
-                        const id   = parseInt(li.dataset.id, 10);
-                        const task = serverTasks.find(t => t.Id === id);
-                        if (task && !_selected.find(s => s.id === id)) {
-                            _selected.push({ id: task.Id, name: task.Name });
-                            depRender();
-                        }
-                        input.value = '';
-                        dropdown.innerHTML = '';
-                        dropdown.style.display = 'none';
-                    });
+        fetch('TM_PHP/TM_GetLinks.php?task_id=' + encodeURIComponent(taskId))
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) return;
+                const tasks = getTasks();
+                _selected = (data.blockers || []).map(b => {
+                    const numId = toNum(b.id);
+                    const match = tasks.find(t => t.Id === numId) || {};
+                    return { id: numId, name: b.name,
+                             color: match.Color || '#888', dueDate: match.DueDate || '' };
                 });
-            }, 200);
-        });
+                depRender();
+            })
+            .catch(() => {});
+    };
 
-        // Close dropdown on outside click
-        document.addEventListener('click', function (e) {
-            if (!input.contains(e.target) && !dropdown.contains(e.target)) {
-                dropdown.innerHTML = '';
-                dropdown.style.display = 'none';
+    // ── Wire up the <select> change event ─────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', function () {
+        const sel = document.getElementById('depSelect');
+        if (!sel) return;
+
+        sel.addEventListener('change', function () {
+            const id = toNum(this.value); // DOM value is always a string — normalise
+            if (!id) return;
+
+            const task = getTasks().find(t => t.Id === id);
+            if (task && !_selected.find(s => s.id === id)) {
+                _selected.push({ id: task.Id, name: task.Name,
+                                 color: task.Color || '#888', dueDate: task.DueDate || '' });
+                depRender();
             }
+            this.value = '';
         });
     });
 
