@@ -145,6 +145,9 @@ function categoryDisplay(array $row): string {
 function isOverdue(string $dueDate, string $status): bool {
     return $dueDate < date('Y-m-d') && !in_array($status, ['done','cancelled']);
 }
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+require_once 'TM_PHP/TM_NavNotif.php';
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -335,6 +338,8 @@ table.task-table tbody tr.row-overdue td:first-child {
         <?php if (tm_role() === 'admin'): ?>
         <a href="TM_UserList.php" class="btn-logout">Admin Panel</a>
         <?php endif; ?>
+        <!-- Notification Bell -->
+        <?= $tm_notif_bell_html ?>
         <a href="#" class="btn-logout" id="logoutBtn">Log Out</a>
     </div>
 </nav>

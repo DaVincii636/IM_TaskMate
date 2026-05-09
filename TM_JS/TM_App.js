@@ -185,3 +185,153 @@ function confirmDeleteTask() {
 function submitDeleteTask() {
     document.getElementById('deleteTaskForm').submit();
 }
+
+// =============================================
+// Notification Bell
+// =============================================
+(function () {
+    const bell     = document.getElementById('notifBell');
+    const dropdown = document.getElementById('notifDropdown');
+    const badge    = document.getElementById('notifBadge');
+    if (!bell || !dropdown) return;
+
+    // Toggle dropdown open/closed
+    bell.addEventListener('click', function (e) {
+        e.stopPropagation();
+        dropdown.classList.toggle('open');
+    });
+
+    // Close when clicking outside
+    document.addEventListener('click', function (e) {
+        if (!bell.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.remove('open');
+        }
+    });
+
+    // Mark single notification as read on click
+    dropdown.querySelectorAll('.notif-item[data-id]').forEach(function (item) {
+        item.addEventListener('click', function () {
+            const id = this.dataset.id;
+            if (this.classList.contains('read')) return;
+            fetch('TM_PHP/TM_NotifActions.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'action=mark_read&id=' + encodeURIComponent(id)
+            })
+            .then(r => r.json())
+            .then(function (res) {
+                if (!res.ok) return;
+                item.classList.remove('unread');
+                item.classList.add('read');
+                const dot = item.querySelector('.notif-dot');
+                if (dot) { dot.className = 'notif-dot read'; }
+                const txt = item.querySelector('.notif-text');
+                if (txt) { txt.style.fontWeight = '400'; txt.style.color = 'var(--gray-400)'; }
+                decrementBadge();
+            });
+        });
+    });
+
+    // Mark all as read
+    const markAllBtn = document.getElementById('notifMarkAll');
+    if (markAllBtn) {
+        markAllBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            fetch('TM_PHP/TM_NotifActions.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'action=mark_all_read'
+            })
+            .then(r => r.json())
+            .then(function (res) {
+                if (!res.ok) return;
+                dropdown.querySelectorAll('.notif-item.unread').forEach(function (item) {
+                    item.classList.remove('unread');
+                    item.classList.add('read');
+                    const dot = item.querySelector('.notif-dot');
+                    if (dot) { dot.className = 'notif-dot read'; }
+                    const txt = item.querySelector('.notif-text');
+                    if (txt) { txt.style.fontWeight = '400'; txt.style.color = 'var(--gray-400)'; }
+                });
+                if (badge) { badge.textContent = '0'; badge.classList.add('hidden'); }
+            });
+        });
+    }
+
+    function decrementBadge() {
+        if (!badge) return;
+        const current = parseInt(badge.textContent, 10) || 0;
+        const next = Math.max(current - 1, 0);
+        badge.textContent = next;
+        if (next === 0) badge.classList.add('hidden');
+    }
+})();
+
+// =============================================
+// Notification Bell
+// =============================================
+(function () {
+    const btn      = document.getElementById('notifBellBtn');
+    const dropdown = document.getElementById('notifDropdown');
+    if (!btn || !dropdown) return;
+
+    // Toggle open/close
+    btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        dropdown.classList.toggle('open');
+    });
+
+    // Close when clicking outside
+    document.addEventListener('click', function (e) {
+        if (!btn.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.remove('open');
+        }
+    });
+
+    // Mark single notification as read on click
+    dropdown.querySelectorAll('.notif-item[data-id]').forEach(function (item) {
+        item.addEventListener('click', function () {
+            const id = this.dataset.id;
+            if (!this.classList.contains('unread')) return;
+            fetch('TM_PHP/TM_NotifActions.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'action=mark_read&id=' + encodeURIComponent(id)
+            }).then(function () {
+                item.classList.remove('unread');
+                item.style.removeProperty('background');
+                // Remove the left accent bar by removing unread class
+                // Update badge count
+                const badge = document.getElementById('notifBadge');
+                if (badge) {
+                    const current = parseInt(badge.textContent, 10) || 0;
+                    const next = current - 1;
+                    if (next <= 0) {
+                        badge.style.display = 'none';
+                    } else {
+                        badge.textContent = next > 99 ? '99+' : next;
+                    }
+                }
+            });
+        });
+    });
+
+    // Mark all as read
+    const markAllBtn = document.getElementById('notifMarkAll');
+    if (markAllBtn) {
+        markAllBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            fetch('TM_PHP/TM_NotifActions.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'action=mark_all_read'
+            }).then(function () {
+                dropdown.querySelectorAll('.notif-item.unread').forEach(function (item) {
+                    item.classList.remove('unread');
+                });
+                const badge = document.getElementById('notifBadge');
+                if (badge) badge.style.display = 'none';
+            });
+        });
+    }
+})();

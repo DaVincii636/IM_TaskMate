@@ -54,6 +54,9 @@ $stmtUpcoming = tm_exec(
 );
 $upcoming = tm_fetch_all($stmtUpcoming);
 
+// ── Notifications (shared partial: runs cron + builds bell HTML) ──────────────
+require_once 'TM_PHP/TM_NavNotif.php';
+
 function priorityClass(string $p): string {
     return match($p) { 'high'=>'pri-high','mid'=>'pri-mid','low'=>'pri-low', default=>'pri-mid' };
 }
@@ -256,6 +259,8 @@ function statusLabel(string $s): string {
         <?php if (tm_role() === 'admin'): ?>
         <a href="TM_UserList.php"  class="btn-logout">Admin Panel</a>
         <?php endif; ?>
+        <!-- Notification Bell -->
+        <?= $tm_notif_bell_html ?>
         <a href="#" class="btn-logout" id="logoutBtn">Log Out</a>
     </div>
 </nav>

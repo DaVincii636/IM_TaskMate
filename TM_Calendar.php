@@ -29,6 +29,9 @@ $tasks = array_map(function($row) {
 }, $tasks);
 $tasksJson = json_encode($tasks, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
 if ($tasksJson === false) { $tasksJson = '[]'; } // fallback if encoding fails
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+require_once 'TM_PHP/TM_NavNotif.php';
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -50,6 +53,8 @@ if ($tasksJson === false) { $tasksJson = '[]'; } // fallback if encoding fails
         <?php if (tm_role() === 'admin'): ?>
         <a href="TM_UserList.php" class="btn-logout">Admin Panel</a>
         <?php endif; ?>
+        <!-- Notification Bell -->
+        <?= $tm_notif_bell_html ?>
         <a href="#" class="btn-logout" id="logoutBtn">Log Out</a>
     </div>
 </nav>
