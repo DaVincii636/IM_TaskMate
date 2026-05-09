@@ -135,8 +135,32 @@ switch ($action) {
             "SELECT task_name, status FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2",
             [$id, $uid]
         ));
-        $qdName   = $qdRow['TASK_NAME'] ?? $qdRow['task_name'] ?? "task #{$id}";
-        $qdOldSt  = $qdRow['STATUS']    ?? $qdRow['status']    ?? 'pending';
+        $qdName  = $qdRow['TASK_NAME'] ?? $qdRow['task_name'] ?? "task #{$id}";
+        $qdOldSt = $qdRow['STATUS']    ?? $qdRow['status']    ?? 'pending';
+
+        // ── Blocker enforcement ───────────────────────────────────────────────
+        // Count blocking tasks that are not yet done or cancelled.
+        // If any exist, reject immediately — no update, no audit log entry.
+        $blockerRow = tm_fetch_one(tm_exec(
+            "SELECT COUNT(*) AS n
+             FROM TM_TaskLinks tl
+             JOIN TM_Tasks blocker ON blocker.task_id = tl.depends_on_id
+             WHERE tl.task_id   = :p1
+               AND tl.link_type = 'blocks'
+               AND blocker.status NOT IN ('done', 'cancelled')",
+            [$id]
+        ));
+        $blockerCount = (int)($blockerRow['N'] ?? $blockerRow['n'] ?? 0);
+
+        if ($blockerCount > 0) {
+            tm_flash('error',
+                "Cannot mark done: {$blockerCount} blocking task"
+                . ($blockerCount > 1 ? 's are' : ' is')
+                . " still pending."
+            );
+            break; // ← exits switch; no UPDATE, no audit entry
+        }
+        // ── End blocker enforcement ───────────────────────────────────────────
 
         tm_exec(
             "UPDATE TM_Tasks SET status='done' WHERE task_id=:p1 AND user_id=:p2",
