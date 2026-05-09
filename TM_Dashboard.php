@@ -245,6 +245,33 @@ function statusLabel(string $s): string {
 .pc-modal-cancel:hover{background:var(--border);}
 .pc-modal-confirm-red{padding:9px 22px;border-radius:50px;font-size:13px;font-weight:700;background:linear-gradient(135deg,#e74c3c,#c0392b);color:#fff;border:none;cursor:pointer;font-family:'Poppins',sans-serif;transition:all .2s;display:inline-flex;align-items:center;gap:6px;}
 .pc-modal-confirm-red:hover{opacity:.9;transform:translateY(-1px);}
+/* ── Add Task Modal extras ──────────────────── */
+.category-options { display: flex; gap: 8px; flex-wrap: wrap; }
+.cat-btn {
+    padding: 7px 14px; border-radius: 100px; font-size: 12px; font-weight: 600;
+    border: 1.5px solid var(--border); background: var(--white); color: var(--gray-500);
+    transition: all 0.2s; cursor: pointer; font-family: 'Poppins', sans-serif;
+}
+.cat-btn.active { border-color: var(--black); background: var(--black); color: var(--white); }
+.priority-options { display: flex; gap: 8px; }
+.priority-btn {
+    flex: 1; padding: 8px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600;
+    border: 1.5px solid var(--border); background: var(--white); color: var(--gray-500);
+    text-align: center; transition: all 0.2s; cursor: pointer; font-family: 'Poppins', sans-serif;
+}
+.priority-btn.high.active { border-color: #ef4444; background: #ef4444; color: white; }
+.priority-btn.mid.active  { border-color: #f97316; background: #f97316; color: white; }
+.priority-btn.low.active  { border-color: #22c55e; background: #22c55e; color: white; }
+.color-picker-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.color-swatch {
+    width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+    border: 2.5px solid transparent; transition: all 0.2s; flex-shrink: 0;
+}
+.color-swatch:hover { transform: scale(1.15); }
+.color-swatch.selected {
+    border-color: var(--black); transform: scale(1.15);
+    box-shadow: 0 0 0 2px var(--white), 0 0 0 4px var(--black);
+}
     </style>
 </head>
 <body>
@@ -320,9 +347,9 @@ function statusLabel(string $s): string {
 
     <!-- Quick actions -->
     <div class="quick-actions">
-        <a href="TM_Calendar.php" class="qa-btn qa-primary">
+        <button type="button" class="qa-btn qa-primary" onclick="openModal('addTaskModal')">
             <i class="fa-solid fa-plus"></i> Add Task
-        </a>
+        </button>
         <a href="TM_Tasks.php?view=all" class="qa-btn">
             <i class="fa-solid fa-table-list"></i> All Tasks
         </a>
@@ -400,5 +427,127 @@ function statusLabel(string $s): string {
 })();
 </script>
 <script src="TM_JS/TM_App.js"></script>
+
+<!-- ── Add Task Modal ─────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="addTaskModal">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div class="modal-title">New Task</div>
+            <button class="modal-close" onclick="closeModal('addTaskModal')">&#x2715;</button>
+        </div>
+        <form method="post" action="TM_PHP/TM_TaskActions.php">
+            <input type="hidden" name="action" value="add"/>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Task Name</label>
+                    <input type="text" name="name" class="form-input" placeholder="e.g. Buy groceries" required/>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Start Date</label>
+                        <input type="date" name="startDate" id="dash_startDate" class="form-input" required/>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Due Date</label>
+                        <input type="date" name="dueDate" id="dash_dueDate" class="form-input" required/>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Category</label>
+                    <div class="category-options">
+                        <button type="button" class="cat-btn active" data-cat="errands">Errands</button>
+                        <button type="button" class="cat-btn" data-cat="school">School</button>
+                        <button type="button" class="cat-btn" data-cat="medicine">Medicine</button>
+                        <button type="button" class="cat-btn" data-cat="others">Others</button>
+                    </div>
+                    <input type="hidden" name="category" id="dash_categoryInput" value="errands"/>
+                    <div id="dash_othersWrap" style="display:none;margin-top:8px">
+                        <input type="text" name="customCategory" class="form-input" placeholder="Specify category..."/>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Priority</label>
+                    <div class="priority-options">
+                        <button type="button" class="priority-btn high" data-priority="high">🔴 High</button>
+                        <button type="button" class="priority-btn mid active" data-priority="mid">🟡 Mid</button>
+                        <button type="button" class="priority-btn low" data-priority="low">🟢 Low</button>
+                    </div>
+                    <input type="hidden" name="priority" id="dash_priorityInput" value="mid"/>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Task Color</label>
+                    <div class="color-picker-row" id="dash_colorRow"></div>
+                    <input type="hidden" name="color" id="dash_colorInput" value="#ef4444"/>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    <textarea name="notes" class="form-input" placeholder="Optional notes..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel" onclick="closeModal('addTaskModal')">Cancel</button>
+                <button type="submit" class="btn-save">Save Task</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function () {
+    const COLORS = [
+        { name: 'Red',    hex: '#ef4444' },
+        { name: 'Orange', hex: '#f97316' },
+        { name: 'Yellow', hex: '#eab308' },
+        { name: 'Green',  hex: '#22c55e' },
+        { name: 'Blue',   hex: '#3b82f6' },
+        { name: 'Indigo', hex: '#6366f1' },
+        { name: 'Violet', hex: '#a855f7' },
+    ];
+
+    // Build color swatches
+    const colorRow   = document.getElementById('dash_colorRow');
+    const colorInput = document.getElementById('dash_colorInput');
+    COLORS.forEach(function (c) {
+        const sw = document.createElement('div');
+        sw.className = 'color-swatch' + (c.hex === '#ef4444' ? ' selected' : '');
+        sw.style.background = c.hex;
+        sw.title = c.name;
+        sw.addEventListener('click', function () {
+            colorRow.querySelectorAll('.color-swatch').forEach(function (s) { s.classList.remove('selected'); });
+            sw.classList.add('selected');
+            colorInput.value = c.hex;
+        });
+        colorRow.appendChild(sw);
+    });
+
+    // Category buttons
+    document.querySelectorAll('#addTaskModal .cat-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('#addTaskModal .cat-btn').forEach(function (b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            document.getElementById('dash_categoryInput').value = btn.dataset.cat;
+            document.getElementById('dash_othersWrap').style.display = btn.dataset.cat === 'others' ? 'block' : 'none';
+        });
+    });
+
+    // Priority buttons
+    document.querySelectorAll('#addTaskModal .priority-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('#addTaskModal .priority-btn').forEach(function (b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            document.getElementById('dash_priorityInput').value = btn.dataset.priority;
+        });
+    });
+
+    // Default today's date on open
+    document.querySelector('[onclick="openModal(\'addTaskModal\')"]').addEventListener('click', function () {
+        const today = new Date().toISOString().split('T')[0];
+        const s = document.getElementById('dash_startDate');
+        const d = document.getElementById('dash_dueDate');
+        if (!s.value) s.value = today;
+        if (!d.value) d.value = today;
+    });
+})();
+</script>
 </body>
 </html>

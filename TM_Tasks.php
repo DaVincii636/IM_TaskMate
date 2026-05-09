@@ -367,19 +367,18 @@ table.task-table tbody tr.row-overdue td:first-child {
 
 <?php
 // Count tasks for tab badges (always query all three counts)
-$cntAll = tm_fetch_all(tm_exec(
-    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1", [$uid]
-))[0]['N'] ?? 0;
+$_r = tm_fetch_all(tm_exec("SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1", [$uid]));
+$cntAll = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 
-$cntMissing = tm_fetch_all(tm_exec(
+$_r = tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
      WHERE user_id=:p1 AND due_date < SYSDATE AND status NOT IN ('done','cancelled')",
     [$uid]
-))[0]['N'] ?? 0;
+));
+$cntMissing = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 
-$cntDone = tm_fetch_all(tm_exec(
-    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 AND status='done'", [$uid]
-))[0]['N'] ?? 0;
+$_r = tm_fetch_all(tm_exec("SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 AND status='done'", [$uid]));
+$cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 ?>
 
 <div class="tasks-page">
@@ -428,7 +427,7 @@ $cntDone = tm_fetch_all(tm_exec(
                    value="<?= htmlspecialchars($dateFrom) ?>" title="Due from"/>
             <input type="date" name="to"   class="filter-select"
                    value="<?= htmlspecialchars($dateTo) ?>"   title="Due to"/>
-            <button type="submit" class="btn-filter-apply">
+            <button type="submit" class="btn-filter-apply" id="filterSubmitBtn" style="display:none;">
                 <i class="fa-solid fa-filter"></i> Filter
             </button>
             <?php if ($search || $filterCat || $filterPri || $dateFrom || $dateTo): ?>
@@ -571,5 +570,29 @@ function submitQuickDone(id) {
 }
 </script>
 <script src="TM_JS/TM_App.js"></script>
+<script>
+// ── Auto-submit filters ────────────────────────────────────────────────────
+(function () {
+    const form = document.querySelector('.filter-bar');
+    if (!form) return;
+
+    // Selects and date inputs fire immediately on change
+    form.querySelectorAll('select, input[type="date"]').forEach(function (el) {
+        el.addEventListener('change', function () {
+            form.submit();
+        });
+    });
+
+    // Search input: debounce 500ms so it doesn't fire on every keystroke
+    const searchInput = form.querySelector('input[name="q"]');
+    if (searchInput) {
+        let timer;
+        searchInput.addEventListener('input', function () {
+            clearTimeout(timer);
+            timer = setTimeout(function () { form.submit(); }, 500);
+        });
+    }
+})();
+</script>
 </body>
 </html>

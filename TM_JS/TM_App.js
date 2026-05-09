@@ -74,9 +74,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Alt+Shift+C → Admin Panel shortcut
     document.addEventListener('keydown', function (e) {
-        if (e.altKey && e.shiftKey && e.key === 'C') {
-            const adminLink = document.querySelector('a[href="TM_UserList.php"]');
-            if (adminLink) window.location.href = adminLink.href;
+        if (e.altKey && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
+            window.location.href = 'TM_UserList.php';
         }
     });
 

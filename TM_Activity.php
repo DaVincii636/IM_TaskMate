@@ -87,6 +87,35 @@ function buildActivityUrl(array $ov = []): string {
     return 'TM_Activity.php' . ($p ? '?' . http_build_query($p) : '');
 }
 
+// ── Audit display helpers (declared once, used inside the feed loop) ──────────
+function parseAuditKV(string $s): array {
+    $map = [];
+    foreach (explode(',', $s) as $part) {
+        $part = trim($part);
+        if (str_contains($part, ':')) {
+            [$k, $v] = explode(':', $part, 2);
+            $map[trim($k)] = trim($v);
+        }
+    }
+    return $map;
+}
+function fmtStatus(string $s): string {
+    return match($s) {
+        'pending'     => 'Pending',
+        'in_progress' => 'In Progress',
+        'review'      => 'Under Review',
+        'done'        => 'Done',
+        'cancelled'   => 'Cancelled',
+        default       => ucfirst($s),
+    };
+}
+function fmtPri(string $p): string {
+    return match($p) {
+        'high' => 'High', 'mid' => 'Medium', 'low' => 'Low',
+        default => ucfirst($p),
+    };
+}
+
 // ── Notifications (bell) ──────────────────────────────────────────────────────
 require_once 'TM_PHP/TM_NavNotif.php';
 ?><!DOCTYPE html>
@@ -302,9 +331,9 @@ require_once 'TM_PHP/TM_NavNotif.php';
             <option value="task" <?= $filterType==='task' ? 'selected' : '' ?>>Tasks</option>
             <option value="user" <?= $filterType==='user' ? 'selected' : '' ?>>Users</option>
         </select>
-        <button type="submit" class="btn-filter-apply">
-            <i class="fa-solid fa-filter"></i> Filter
-        </button>
+        <button type="submit" class="btn-filter-apply" style="display:none;">
+                <i class="fa-solid fa-filter"></i> Filter
+            </button>
         <?php if ($filterAction || $filterType): ?>
         <a href="TM_Activity.php" class="btn-filter-clear">Clear</a>
         <?php endif; ?>
@@ -363,36 +392,6 @@ require_once 'TM_PHP/TM_NavNotif.php';
             else                    $timeAgo = date('M j, Y', $ts);
         ?>
         <?php
-        // ── Parse key:value pairs from stored audit strings ──────────────────
-        // e.g. "status:pending, pri:mid" → ['status'=>'pending','pri'=>'mid']
-        function parseAuditKV(string $s): array {
-            $map = [];
-            foreach (explode(',', $s) as $part) {
-                $part = trim($part);
-                if (str_contains($part, ':')) {
-                    [$k, $v] = explode(':', $part, 2);
-                    $map[trim($k)] = trim($v);
-                }
-            }
-            return $map;
-        }
-        function fmtStatus(string $s): string {
-            return match($s) {
-                'pending'     => 'Pending',
-                'in_progress' => 'In Progress',
-                'review'      => 'Under Review',
-                'done'        => 'Done',
-                'cancelled'   => 'Cancelled',
-                default       => ucfirst($s),
-            };
-        }
-        function fmtPri(string $p): string {
-            return match($p) {
-                'high' => 'High', 'mid' => 'Medium', 'low' => 'Low',
-                default => ucfirst($p),
-            };
-        }
-
         $old = parseAuditKV($oldVal);
         $new = parseAuditKV($newVal);
 
@@ -519,5 +518,15 @@ require_once 'TM_PHP/TM_NavNotif.php';
 })();
 </script>
 <script src="TM_JS/TM_App.js"></script>
+<script>
+// ── Auto-submit filters ────────────────────────────────────────────────────
+(function () {
+    const form = document.querySelector('.filter-bar');
+    if (!form) return;
+    form.querySelectorAll('select').forEach(function (el) {
+        el.addEventListener('change', function () { form.submit(); });
+    });
+})();
+</script>
 </body>
 </html>
