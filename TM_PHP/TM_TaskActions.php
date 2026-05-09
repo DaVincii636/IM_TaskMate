@@ -2,6 +2,20 @@
 require_once 'TM_Session.php';
 require_once 'TM_DB.php';
 
+function tm_log_task_change(int $taskId, int $changedBy, string $type = 'update'): void {
+    if ($taskId <= 0) return;
+    try {
+        tm_exec(
+            "INSERT INTO TM_TaskChangeLog (task_id, changed_by, change_type)
+             VALUES (:p1, :p2, :p3)",
+            [$taskId, $changedBy, $type]
+        );
+    } catch (Throwable $e) {
+        // Non-fatal — never break the main action if changelog write fails
+        error_log("TM_TaskChangeLog write failed: " . $e->getMessage());
+    }
+}
+
 tm_require_login();
 
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
@@ -407,6 +421,9 @@ switch ($action) {
         tm_audit($uid, 'create', 'task', $newId, $name,
                  '', "cat:{$cat}, pri:{$pri}, due:{$due}");
         tm_flash('success', 'Task added!');
+        if ($newId > 0) {
+            tm_log_task_change($newId, $uid, 'create');
+        }
         break;
 
     case 'edit':
@@ -491,6 +508,7 @@ switch ($action) {
 
         if ($isApi) tm_api_ok(['task_id' => $id, 'status' => $status]);
         tm_flash('success', 'Task updated!');
+        tm_log_task_change($id, $uid, 'update');
         break;
 
     case 'delete':
@@ -515,6 +533,7 @@ switch ($action) {
             [$id, $uid]
         );
         tm_audit($uid, 'delete', 'task', $id, $delName, $delName, '');
+        tm_log_task_change($id, $uid, 'delete');
 
         if ($isApi) tm_api_ok(['task_id' => $id, 'deleted' => true]);
         tm_flash('success', 'Task deleted.');
@@ -659,6 +678,7 @@ switch ($action) {
             "UPDATE TM_Tasks SET status=:p1 WHERE task_id=:p2 AND user_id=:p3",
             [$prevStatus, $id, $uid]
         );
+        tm_log_task_change($id, $uid, 'update');
         tm_audit($uid, 'status_change', 'task', $id, $taskName,
                  'status:done', "status:{$prevStatus}");
 
