@@ -258,11 +258,22 @@ require_once 'TM_PHP/TM_NavNotif.php';
     <div class="navbar-logo">Task<span>Mate</span></div>
     <div class="navbar-right">
         <span class="navbar-user">Hello, <strong><?= htmlspecialchars($firstName) ?></strong></span>
+        <a href="TM_Profile.php" class="btn-logout" title="My Profile" style="display:inline-flex;align-items:center;gap:5px;"><i class="fa-solid fa-user-circle"></i></a>
         <a href="TM_Dashboard.php" class="btn-logout">Home</a>
         <a href="TM_Calendar.php"  class="btn-logout">Calendar</a>
         <a href="TM_Tasks.php"     class="btn-logout">Tasks</a>
         <a href="TM_Activity.php"  class="btn-logout" style="font-weight:700;">Activity</a>
         <a href="TM_Analytics.php" class="btn-logout">Analytics</a>
+                <!-- Global Search (Feature 5) -->
+        <form class="navbar-search" action="TM_Tasks.php" method="get">
+            <input type="hidden" name="view" value="all"/>
+            <input type="text" name="q" class="navbar-search-input"
+                   placeholder="Search tasks..." autocomplete="off"
+                   value="<?= isset($_GET['q']) ? htmlspecialchars($_GET['q']) : '' ?>"/>
+            <button type="submit" class="navbar-search-btn" title="Search">
+                <i class="fa-solid fa-magnifying-glass"></i>
+            </button>
+        </form>
         <?= $tm_notif_bell_html ?>
         <a href="#" class="btn-logout" id="logoutBtn">Log Out</a>
     </div>

@@ -490,12 +490,22 @@ table.task-table tbody tr.row-overdue td:first-child {
     <div class="navbar-logo">Task<span>Mate</span></div>
     <div class="navbar-right">
         <span class="navbar-user">Hello, <strong><?= htmlspecialchars(tm_uname()) ?></strong></span>
+        <a href="TM_Profile.php" class="btn-logout" title="My Profile" style="display:inline-flex;align-items:center;gap:5px;"><i class="fa-solid fa-user-circle"></i></a>
         <a href="TM_Dashboard.php" class="btn-logout">Home</a>
         <a href="TM_Calendar.php" class="btn-logout">Calendar</a>
         <a href="TM_Tasks.php"    class="btn-logout">Tasks</a>
         <a href="TM_Activity.php" class="btn-logout">Activity</a>
         <a href="TM_Analytics.php" class="btn-logout">Analytics</a>
-        <!-- Notification Bell -->
+                <!-- Global Search (Feature 5) -->
+        <form class="navbar-search" action="TM_Tasks.php" method="get">
+            <input type="hidden" name="view" value="all"/>
+            <input type="text" name="q" class="navbar-search-input"
+                   placeholder="Search tasks..." autocomplete="off"
+                   value="<?= isset($_GET['q']) ? htmlspecialchars($_GET['q']) : '' ?>"/>
+            <button type="submit" class="navbar-search-btn" title="Search">
+                <i class="fa-solid fa-magnifying-glass"></i>
+            </button>
+        </form>
         <?= $tm_notif_bell_html ?>
         <a href="#" class="btn-logout" id="logoutBtn">Log Out</a>
     </div>
@@ -843,10 +853,101 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
     modal.addEventListener('click', function(e){ if(e.target===modal) modal.classList.remove('active'); });
 })();
 
-// Quick-done modal submit
+// Quick-done modal submit (Feature 7: AJAX + Undo toast)
 function qdSubmit() {
+    var id   = document.getElementById('qdModalTaskId').value;
+    var name = document.getElementById('qdModalName').textContent || 'this task';
     document.getElementById('qdConfirmModal').classList.remove('active');
-    document.getElementById('qdSubmitForm').submit();
+
+    var fd = new FormData();
+    fd.append('action', 'quick_done');
+    fd.append('id', id);
+
+    fetch('TM_PHP/TM_TaskActions.php?format=json', { method: 'POST', body: fd })
+        .then(function(r){ return r.json(); })
+        .then(function(data) {
+            if (!data.ok) {
+                showToast(data.error || 'Could not mark done.', 'error');
+                return;
+            }
+            // Hide the row immediately
+            var row = document.querySelector('[data-task-id="' + id + '"]');
+            if (row) row.style.display = 'none';
+
+            // Determine message
+            var msg = data.data && data.data.recurrence
+                ? 'Done! Next ' + data.data.recurrence + ' recurrence created.'
+                : 'Task marked as done!';
+
+            showUndoToast(msg, id, name);
+        })
+        .catch(function() {
+            showToast('Network error — please try again.', 'error');
+        });
+}
+
+// Feature 7: Show success toast with timed Undo button
+function showUndoToast(msg, taskId, taskName) {
+    var existing = document.getElementById('toast');
+    if (existing) existing.remove();
+
+    var toast = document.createElement('div');
+    toast.id = 'toast';
+    toast.className = 'toast toast-success';
+    toast.innerHTML =
+        '<span class="toast-icon">✓</span>' +
+        '<div class="toast-content">' +
+            '<div class="toast-title">Success</div>' +
+            '<div class="toast-msg">' + msg + '</div>' +
+        '</div>' +
+        '<button class="toast-undo" id="toastUndoBtn" title="Undo">Undo</button>' +
+        '<button class="toast-close" onclick="this.parentElement.remove()">✕</button>';
+    document.body.appendChild(toast);
+
+    requestAnimationFrame(function(){
+        requestAnimationFrame(function(){ toast.classList.add('show'); });
+    });
+
+    var undoBtn = document.getElementById('toastUndoBtn');
+    var dismissed = false;
+
+    // Undo click: AJAX call to undo_done
+    undoBtn.addEventListener('click', function() {
+        if (dismissed) return;
+        dismissed = true;
+        var fd2 = new FormData();
+        fd2.append('action', 'undo_done');
+        fd2.append('id', taskId);
+        fetch('TM_PHP/TM_TaskActions.php?format=json', { method: 'POST', body: fd2 })
+            .then(function(r){ return r.json(); })
+            .then(function(d) {
+                toast.remove();
+                if (d.ok) {
+                    // Restore the row
+                    var row = document.querySelector('[data-task-id="' + taskId + '"]');
+                    if (row) row.style.display = '';
+                    showToast('Undone! "' + taskName + '" restored.', 'success');
+                } else {
+                    showToast(d.error || 'Undo failed.', 'error');
+                    location.reload();
+                }
+            })
+            .catch(function(){ location.reload(); });
+    });
+
+    // Auto-dismiss after 8 seconds (longer than normal to allow undo)
+    var timer = setTimeout(function() {
+        if (!dismissed) {
+            dismissed = true;
+            toast.classList.remove('show');
+            setTimeout(function(){ if(toast.parentNode) toast.remove(); }, 400);
+        }
+    }, 8000);
+
+    // Cancel timer if manually closed
+    toast.querySelector('.toast-close').addEventListener('click', function(){
+        dismissed = true; clearTimeout(timer);
+    });
 }
 
 function submitQuickDone(id) {
@@ -854,7 +955,6 @@ function submitQuickDone(id) {
     var nameEl = row ? row.querySelector('.task-name-cell') : null;
     var name = '';
     if (nameEl) {
-        // Get text content but skip child elements (overdue badge, color dot)
         nameEl.childNodes.forEach(function(n) {
             if (n.nodeType === 3) name += n.textContent;
         });

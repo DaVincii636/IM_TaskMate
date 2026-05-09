@@ -222,3 +222,13 @@ UNION ALL
 SELECT 'TM_AuditLog',      COUNT(*) FROM TM_AuditLog
 UNION ALL
 SELECT 'TM_TaskLinks',     COUNT(*) FROM TM_TaskLinks;
+-- =============================================
+-- RECURRING TASKS (Feature 6)
+-- Run these ALTER statements on existing DB.
+-- recurrence: NULL | 'daily' | 'weekly' | 'monthly'
+-- =============================================
+ALTER TABLE TM_Tasks ADD recurrence VARCHAR2(20) DEFAULT NULL;
+ALTER TABLE TM_Tasks ADD CONSTRAINT chk_tm_recurrence
+    CHECK (recurrence IS NULL OR recurrence IN ('daily','weekly','monthly'));
+
+COMMIT;

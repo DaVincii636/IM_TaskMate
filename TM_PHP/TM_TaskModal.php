@@ -147,6 +147,15 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                     </select>
                 </div>
                 <div class="form-group">
+                    <label class="form-label">Recurrence <span style="font-size:11px;font-weight:400;color:var(--gray-400)">(Feature 6)</span></label>
+                    <select name="recurrence" class="form-input" id="tmEditRecurrence">
+                        <option value="">— None (one-time) —</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label class="form-label">Notes</label>
                     <textarea name="notes" class="form-input" id="tmEditTaskNotes"
                               placeholder="Optional notes..." rows="3"></textarea>
@@ -291,6 +300,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         var id = r['task_id'] || r['TASK_ID'];
         TASKS[id] = {
             id:       id,
+            recurrence: r['recurrence'] || r['RECURRENCE'] || '',
             name:     r['task_name']        || r['TASK_NAME']        || '',
             start:    r['start_date']       || r['START_DATE']       || '',
             due:      r['due_date']         || r['DUE_DATE']         || '',

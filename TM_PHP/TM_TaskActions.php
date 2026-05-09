@@ -51,6 +51,8 @@ switch ($action) {
         $pri   = trim($_POST['priority']       ?? 'mid');
         $col   = trim($_POST['color']          ?? '#ef4444');
         $notes = trim($_POST['notes']          ?? '');
+        $recur = trim($_POST['recurrence']     ?? '');
+        if (!in_array($recur, ['daily','weekly','monthly'])) $recur = '';
 
         if (!$name || !$start || !$due) {
             if ($isApi) tm_api_err('Name and dates are required.');
@@ -61,9 +63,9 @@ switch ($action) {
             tm_flash('error', 'Start date cannot be after due date.'); break;
         }
         tm_exec(
-            "INSERT INTO TM_Tasks (user_id, task_name, start_date, due_date, category, custom_category, priority, color, notes)
-             VALUES (:p1, :p2, TO_DATE(:p3,'YYYY-MM-DD'), TO_DATE(:p4,'YYYY-MM-DD'), :p5, :p6, :p7, :p8, :p9)",
-            [$uid, $name, $start, $due, $cat, $ccat, $pri, $col, $notes]
+            "INSERT INTO TM_Tasks (user_id, task_name, start_date, due_date, category, custom_category, priority, color, notes, recurrence)
+             VALUES (:p1, :p2, TO_DATE(:p3,'YYYY-MM-DD'), TO_DATE(:p4,'YYYY-MM-DD'), :p5, :p6, :p7, :p8, :p9, :p10)",
+            [$uid, $name, $start, $due, $cat, $ccat, $pri, $col, $notes, $recur ?: null]
         );
         $newIdRow = tm_fetch_one(tm_exec(
             "SELECT TM_Tasks_seq.CURRVAL AS new_id FROM DUAL"
@@ -106,6 +108,8 @@ switch ($action) {
         $col    = trim($_POST['color']          ?? '#ef4444');
         $notes  = trim($_POST['notes']          ?? '');
         $status = trim($_POST['status']         ?? 'pending');
+        $recur  = trim($_POST['recurrence']     ?? '');
+        if (!in_array($recur, ['daily','weekly','monthly'])) $recur = '';
         $allowed_statuses = ['pending', 'in_progress', 'review', 'done', 'cancelled'];
         if (!in_array($status, $allowed_statuses)) { $status = 'pending'; }
 
@@ -133,9 +137,9 @@ switch ($action) {
              due_date=TO_DATE(:p3,'YYYY-MM-DD'),
              category=:p4, custom_category=:p5,
              priority=:p6, color=:p7, notes=:p8,
-             status=:p9
-             WHERE task_id=:p10 AND user_id=:p11",
-            [$name, $start, $due, $cat, $ccat, $pri, $col, $notes, $status, $id, $uid]
+             status=:p9, recurrence=:p10
+             WHERE task_id=:p11 AND user_id=:p12",
+            [$name, $start, $due, $cat, $ccat, $pri, $col, $notes, $status, $recur ?: null, $id, $uid]
         );
 
         $auditAction = ($status !== $oldStatus) ? 'status_change' : 'edit';
@@ -182,7 +186,11 @@ switch ($action) {
         }
 
         $qdRow = tm_fetch_one(tm_exec(
-            "SELECT task_name, status FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2",
+            "SELECT task_name, status, recurrence,
+                     TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
+                     TO_CHAR(due_date,'YYYY-MM-DD')   AS due_date,
+                     category, custom_category, priority, color
+              FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2",
             [$id, $uid]
         ));
         if (!$qdRow) {
@@ -217,8 +225,101 @@ switch ($action) {
         tm_audit($uid, 'status_change', 'task', $id, $qdName,
                  "status:{$qdOldSt}", "status:done");
 
-        if ($isApi) tm_api_ok(['task_id' => $id, 'status' => 'done']);
-        tm_flash('success', 'Task marked as done!');
+        // ── Recurring: create next occurrence ────────────────────────────────
+        $qdRecur    = $qdRow['recurrence'] ?? '';
+        $qdDueStr   = $qdRow['due_date']   ?? $qdRow['DUE_DATE']   ?? '';
+        $qdStartStr = $qdRow['start_date'] ?? $qdRow['START_DATE'] ?? '';
+        $nextFlash  = 'Task marked as done!';
+        if ($qdRecur && $qdDueStr) {
+            $dueTs   = strtotime($qdDueStr);
+            $startTs = strtotime($qdStartStr);
+            $gap     = max(0, $startTs - $dueTs); // start offset from due (usually 0 or negative)
+            $nextDue = match($qdRecur) {
+                'daily'   => date('Y-m-d', strtotime('+1 day',   $dueTs)),
+                'weekly'  => date('Y-m-d', strtotime('+1 week',  $dueTs)),
+                'monthly' => date('Y-m-d', strtotime('+1 month', $dueTs)),
+                default   => null,
+            };
+            if ($nextDue) {
+                $nextStart = date('Y-m-d', strtotime($nextDue) + $gap);
+                $qdCat   = $qdRow['category']        ?? $qdRow['CATEGORY']        ?? 'errands';
+                $qdCcat  = $qdRow['custom_category'] ?? $qdRow['CUSTOM_CATEGORY'] ?? '';
+                $qdPri   = $qdRow['priority']        ?? $qdRow['PRIORITY']        ?? 'mid';
+                $qdCol   = $qdRow['color']           ?? $qdRow['COLOR']           ?? '#ef4444';
+                tm_exec(
+                    "INSERT INTO TM_Tasks (user_id, task_name, start_date, due_date, category, custom_category, priority, color, recurrence)
+                     VALUES (:p1,:p2,TO_DATE(:p3,'YYYY-MM-DD'),TO_DATE(:p4,'YYYY-MM-DD'),:p5,:p6,:p7,:p8,:p9)",
+                    [$uid, $qdName, $nextStart, $nextDue, $qdCat, $qdCcat, $qdPri, $qdCol, $qdRecur]
+                );
+                $nextFlash = "Done! Next {$qdRecur} recurrence created for {$nextDue}.";
+            }
+        }
+        // ── End recurring ─────────────────────────────────────────────────────
+
+        if ($isApi) tm_api_ok(['task_id' => $id, 'status' => 'done', 'recurrence' => $qdRecur]);
+        tm_flash('success', $nextFlash);
+        $ref = $_SERVER['HTTP_REFERER'] ?? '';
+        if (strpos($ref, 'TM_Tasks.php') !== false) {
+            header('Location: ' . $ref); exit;
+        }
+        header('Location: ../TM_Tasks.php'); exit;
+
+
+    case 'undo_done':
+        // ── Undo: revert last status_change for a task ──────────────────────
+        // Reads the most recent TM_AuditLog entry where the task was marked done
+        // and reverts the status back to old_value.
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id <= 0) {
+            if ($isApi) tm_api_err('Invalid task.');
+            tm_flash('error', 'Invalid task.'); break;
+        }
+
+        $taskRow = tm_fetch_one(tm_exec(
+            "SELECT task_name, status FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2",
+            [$id, $uid]
+        ));
+        if (!$taskRow) {
+            if ($isApi) tm_api_err('Task not found.', 404);
+            tm_flash('error', 'Task not found.'); break;
+        }
+        if (($taskRow['status'] ?? '') !== 'done') {
+            if ($isApi) tm_api_err('Task is not marked done — nothing to undo.', 409);
+            tm_flash('error', 'Nothing to undo.'); break;
+        }
+
+        // Find the most recent log entry that set this task to done
+        $logRow = tm_fetch_one(tm_exec(
+            "SELECT log_id, old_value FROM TM_AuditLog
+              WHERE entity_type='task' AND entity_id=:p1
+                AND action='status_change'
+                AND new_value LIKE '%done%'
+              ORDER BY created_at DESC
+              FETCH FIRST 1 ROWS ONLY",
+            [$id]
+        ));
+
+        // Parse old_value like 'status:pending' → 'pending'
+        $prevStatus = 'pending'; // safe fallback
+        if ($logRow) {
+            $ov = $logRow['old_value'] ?? '';
+            if (preg_match('/status:([\w]+)/', $ov, $m)) {
+                $prevStatus = $m[1];
+            }
+        }
+        $allowed = ['pending','in_progress','review','done','cancelled'];
+        if (!in_array($prevStatus, $allowed)) $prevStatus = 'pending';
+
+        $taskName = $taskRow['task_name'] ?? "task #{$id}";
+        tm_exec(
+            "UPDATE TM_Tasks SET status=:p1 WHERE task_id=:p2 AND user_id=:p3",
+            [$prevStatus, $id, $uid]
+        );
+        tm_audit($uid, 'status_change', 'task', $id, $taskName,
+                 'status:done', "status:{$prevStatus}");
+
+        if ($isApi) tm_api_ok(['task_id' => $id, 'status' => $prevStatus]);
+        tm_flash('success', "Undone! '{$taskName}' is back to " . ucfirst(str_replace('_',' ',$prevStatus)) . '.');
         $ref = $_SERVER['HTTP_REFERER'] ?? '';
         if (strpos($ref, 'TM_Tasks.php') !== false) {
             header('Location: ' . $ref); exit;

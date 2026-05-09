@@ -70,12 +70,22 @@ $blockerMapJson = json_encode($blockerMap);
     <div class="navbar-logo">Task<span>Mate</span></div>
     <div class="navbar-right">
         <span class="navbar-user">Hello, <strong><?= htmlspecialchars(tm_uname()) ?></strong></span>
+        <a href="TM_Profile.php" class="btn-logout" title="My Profile" style="display:inline-flex;align-items:center;gap:5px;"><i class="fa-solid fa-user-circle"></i></a>
         <a href="TM_Dashboard.php" class="btn-logout">Home</a>
         <a href="TM_Calendar.php"  class="btn-logout" style="font-weight:700;">Calendar</a>
         <a href="TM_Tasks.php"    class="btn-logout">Tasks</a>
         <a href="TM_Activity.php" class="btn-logout">Activity</a>
         <a href="TM_Analytics.php" class="btn-logout">Analytics</a>
-        <!-- Notification Bell -->
+                <!-- Global Search (Feature 5) -->
+        <form class="navbar-search" action="TM_Tasks.php" method="get">
+            <input type="hidden" name="view" value="all"/>
+            <input type="text" name="q" class="navbar-search-input"
+                   placeholder="Search tasks..." autocomplete="off"
+                   value="<?= isset($_GET['q']) ? htmlspecialchars($_GET['q']) : '' ?>"/>
+            <button type="submit" class="navbar-search-btn" title="Search">
+                <i class="fa-solid fa-magnifying-glass"></i>
+            </button>
+        </form>
         <?= $tm_notif_bell_html ?>
         <a href="#" class="btn-logout" id="logoutBtn">Log Out</a>
     </div>
@@ -200,6 +210,15 @@ $blockerMapJson = json_encode($blockerMap);
                     </select>
                     <div class="dep-selected" id="addDepSelected"></div>
                     <input type="hidden" id="addDepBlockerIds" name="blocker_ids" value=""/>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Recurrence</label>
+                    <select name="recurrence" class="form-input">
+                        <option value="">— None (one-time) —</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Notes</label>

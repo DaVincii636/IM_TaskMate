@@ -152,6 +152,54 @@ switch ($action) {
         tm_flash('success', 'User deleted.');
         break;
 
+
+    case 'update_self':
+        // ── Self-service profile update (Feature 8) ───────────────────────────
+        // Any logged-in user can update their own name, phone, and password.
+        // No role check needed — tm_require_login() at top already enforces login.
+        $fn  = trim($_POST['firstName'] ?? '');
+        $ln  = trim($_POST['lastName']  ?? '');
+        $ph  = trim($_POST['phone']     ?? '');
+        $pw  = $_POST['newPassword']    ?? '';
+        $cur = $_POST['currentPassword'] ?? '';
+
+        if (!$fn || !$ln || !$ph) {
+            if ($isApi) tm_api_err('Name and phone are required.');
+            tm_flash('error', 'Name and phone are required.'); break;
+        }
+        if ($pw && strlen($pw) < 6) {
+            if ($isApi) tm_api_err('New password must be at least 6 characters.');
+            tm_flash('error', 'New password must be at least 6 characters.'); break;
+        }
+
+        // If user wants to change password, verify current password first
+        if ($pw) {
+            $hashRow = tm_fetch_one(tm_exec(
+                'SELECT password_hash FROM TM_Users WHERE user_id=:p1', [$uid]
+            ));
+            if (!$hashRow || !password_verify($cur, $hashRow['password_hash'])) {
+                if ($isApi) tm_api_err('Current password is incorrect.', 403);
+                tm_flash('error', 'Current password is incorrect.'); break;
+            }
+            tm_exec(
+                'UPDATE TM_Users SET first_name=:p1, last_name=:p2, phone=:p3, password_hash=:p4, updated_at=CURRENT_TIMESTAMP WHERE user_id=:p5',
+                [$fn, $ln, $ph, password_hash($pw, PASSWORD_BCRYPT), $uid]
+            );
+        } else {
+            tm_exec(
+                'UPDATE TM_Users SET first_name=:p1, last_name=:p2, phone=:p3, updated_at=CURRENT_TIMESTAMP WHERE user_id=:p4',
+                [$fn, $ln, $ph, $uid]
+            );
+        }
+
+        // Keep session name in sync
+        $_SESSION['tm_first_name'] = $fn;
+
+        tm_audit($uid, 'edit', 'user', $uid, "$fn $ln", '', 'self-update');
+        if ($isApi) tm_api_ok(['user_id' => $uid]);
+        tm_flash('success', 'Profile updated successfully!');
+        header('Location: ../TM_Profile.php'); exit;
+
     default:
         if ($isApi) tm_api_err("Unknown action: '{$action}'", 400);
         break;
