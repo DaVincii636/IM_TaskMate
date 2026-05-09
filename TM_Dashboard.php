@@ -284,6 +284,7 @@ function statusLabel(string $s): string {
         <a href="TM_Calendar.php"  class="btn-logout">Calendar</a>
         <a href="TM_Tasks.php"     class="btn-logout">Tasks</a>
         <a href="TM_Activity.php"  class="btn-logout">Activity</a>
+        <a href="TM_Analytics.php" class="btn-logout">Analytics</a>
         <!-- Notification Bell -->
         <?= $tm_notif_bell_html ?>
         <a href="#" class="btn-logout" id="logoutBtn">Log Out</a>
