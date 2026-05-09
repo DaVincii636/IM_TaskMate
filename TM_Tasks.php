@@ -460,6 +460,16 @@ table.task-table tbody tr.row-overdue td:first-child {
 /* Saving spinner overlay on card */
 .kanban-card.saving { opacity: .6; pointer-events: none; }
 
+/* ── Quick-done green confirm button ─────────────────────  */
+.pc-modal-confirm-green {
+    padding: 9px 22px; border-radius: 50px;
+    font-size: 13px; font-weight: 700; font-family: 'Poppins', sans-serif;
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: #fff; border: none; cursor: pointer;
+    transition: all .2s; display: inline-flex; align-items: center; gap: 6px;
+}
+.pc-modal-confirm-green:hover { opacity: .9; transform: translateY(-1px); }
+
 /* ── Logout modal (reuse from dashboard) ─────  */
 .pc-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;align-items:center;justify-content:center;}
 .pc-modal-overlay.active{display:flex;}
@@ -785,6 +795,34 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 
 <?php require_once 'TM_PHP/TM_TaskModal.php'; ?>
 
+<!-- ── Quick-Done Confirmation Modal ─────────────────────── -->
+<div id="qdConfirmModal" class="pc-modal-overlay">
+    <div class="pc-modal-box">
+        <div class="pc-modal-icon" style="background:rgba(34,197,94,.12);">
+            <i class="fa-solid fa-circle-check" style="color:#16a34a;font-size:1.4rem;"></i>
+        </div>
+        <div class="pc-modal-title">Mark as Done?</div>
+        <div class="pc-modal-body">
+            Mark <strong id="qdModalName"></strong> as completed?<br>
+            <span style="font-size:12px;color:var(--gray-400);">You can change the status again later from Edit.</span>
+        </div>
+        <div class="pc-modal-btns">
+            <button class="pc-modal-cancel"
+                    onclick="document.getElementById('qdConfirmModal').classList.remove('active')">
+                Cancel
+            </button>
+            <button class="pc-modal-confirm-green" onclick="qdSubmit()">
+                <i class="fa-solid fa-check"></i> Yes, Mark Done
+            </button>
+        </div>
+    </div>
+</div>
+<!-- hidden form that does the actual POST -->
+<form method="POST" action="TM_PHP/TM_TaskActions.php" id="qdSubmitForm" style="display:none">
+    <input type="hidden" name="action" value="quick_done"/>
+    <input type="hidden" name="id"     id="qdModalTaskId"/>
+</form>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -799,10 +837,26 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
     modal.addEventListener('click', function(e){ if(e.target===modal) modal.classList.remove('active'); });
 })();
 
-// Quick-done submit
+// Quick-done modal submit
+function qdSubmit() {
+    document.getElementById('qdConfirmModal').classList.remove('active');
+    document.getElementById('qdSubmitForm').submit();
+}
+
 function submitQuickDone(id) {
-    if (!confirm('Mark this task as done?')) return;
-    document.getElementById('qdf-' + id).submit();
+    var row  = document.querySelector('[data-task-id="' + id + '"]');
+    var nameEl = row ? row.querySelector('.task-name-cell') : null;
+    var name = '';
+    if (nameEl) {
+        // Get text content but skip child elements (overdue badge, color dot)
+        nameEl.childNodes.forEach(function(n) {
+            if (n.nodeType === 3) name += n.textContent;
+        });
+        name = name.trim();
+    }
+    document.getElementById('qdModalName').textContent = name || 'this task';
+    document.getElementById('qdModalTaskId').value = id;
+    document.getElementById('qdConfirmModal').classList.add('active');
 }
 </script>
 <script src="TM_JS/TM_App.js"></script>

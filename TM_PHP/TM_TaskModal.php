@@ -54,11 +54,11 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
      ══════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="taskViewModal">
     <div class="modal-card" style="max-width:520px;">
-        <div class="modal-header">
-            <div class="modal-title" id="viewModalTitle">Task Details</div>
+        <div class="modal-header" style="border-bottom:none;padding-bottom:.25rem;">
+            <div class="modal-title" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--gray-400);">Task Details</div>
             <button class="modal-close" onclick="closeModal('taskViewModal')">&#x2715;</button>
         </div>
-        <div class="modal-body" id="viewModalBody" style="padding-top:.25rem;">
+        <div class="modal-body" id="viewModalBody" style="padding-top:0;overflow:hidden;">
             <!-- filled by JS -->
         </div>
         <div class="modal-footer" style="justify-content:space-between;">
@@ -356,52 +356,54 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         if (!t) return;
         _currentTaskId = id;
 
-        document.getElementById('viewModalTitle').textContent = t.name;
-
         var isOverdue = t.due < new Date().toISOString().slice(0,10)
                         && t.status !== 'done' && t.status !== 'cancelled';
 
         document.getElementById('viewModalBody').innerHTML =
-            '<div class="vm-grid">'
-          + '  <div class="vm-field full">'
-          + '    <span class="vm-label">Task Name</span>'
-          + '    <span class="vm-value" style="font-size:15px;font-weight:700;">'
-          + '      <span class="vm-color-dot" style="background:' + esc(t.color) + '"></span>'
-          + esc(t.name) + '</span>'
-          + '  </div>'
-          + '  <div class="vm-field">'
-          + '    <span class="vm-label">Status</span>'
-          + '    <span class="vm-value">'
-          + '      <span class="status-pill ' + statusClass(t.status) + '">'
-          + statusLabel(t.status) + '</span>'
-          + '    </span>'
-          + '  </div>'
-          + '  <div class="vm-field">'
-          + '    <span class="vm-label">Priority</span>'
-          + '    <span class="vm-value">'
-          + '      <span class="pri-pill ' + priClass(t.pri) + '">' + priLabel(t.pri) + '</span>'
-          + '    </span>'
-          + '  </div>'
-          + '  <div class="vm-field">'
-          + '    <span class="vm-label">Category</span>'
-          + '    <span class="vm-value">' + catLabel(t.cat, t.ccat) + '</span>'
-          + '  </div>'
-          + '  <div class="vm-field">'
-          + '    <span class="vm-label">Start Date</span>'
-          + '    <span class="vm-value">' + friendlyDate(t.start) + '</span>'
-          + '  </div>'
-          + '  <div class="vm-field">'
-          + '    <span class="vm-label">Due Date</span>'
-          + '    <span class="vm-value' + (isOverdue ? '" style="color:#ef4444;font-weight:700;' : '') + '">'
-          + friendlyDate(t.due) + (isOverdue ? ' ⚠ Overdue' : '') + '</span>'
-          + '  </div>'
+            // ── Colour hero strip ──────────────────────────────
+            '<div style="height:4px;border-radius:4px;background:' + esc(t.color) + ';margin:-1px 0 1.25rem;"></div>'
+
+            // ── Task name row ──────────────────────────────────
+          + '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:1rem;">'
+          +   '<span style="width:13px;height:13px;border-radius:50%;flex-shrink:0;margin-top:3px;background:' + esc(t.color) + ';display:inline-block;box-shadow:0 0 0 3px ' + esc(t.color) + '33;"></span>'
+          +   '<span style="font-size:16px;font-weight:700;color:var(--black);line-height:1.35;">' + esc(t.name) + '</span>'
+          + '</div>'
+
+            // ── Status + Priority + Overdue badges ────────────
+          + '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:1.25rem;">'
+          +   '<span class="status-pill ' + statusClass(t.status) + '">' + statusLabel(t.status) + '</span>'
+          +   '<span class="pri-pill ' + priClass(t.pri) + '">' + priLabel(t.pri) + '</span>'
+          +   (isOverdue ? '<span style="background:#fee2e2;color:#b91c1c;font-size:11px;font-weight:700;padding:3px 10px;border-radius:50px;">⚠ Overdue</span>' : '')
+          + '</div>'
+
+            // ── Divider ────────────────────────────────────────
+          + '<div style="height:1px;background:var(--gray-100);margin-bottom:1.1rem;"></div>'
+
+            // ── Info grid ──────────────────────────────────────
+          + '<div class="vm-grid">'
+          +   '<div class="vm-field">'
+          +     '<span class="vm-label">Category</span>'
+          +     '<span class="vm-value">' + catLabel(t.cat, t.ccat) + '</span>'
+          +   '</div>'
+          +   '<div class="vm-field">'
+          +     '<span class="vm-label">Start Date</span>'
+          +     '<span class="vm-value">' + friendlyDate(t.start) + '</span>'
+          +   '</div>'
+          +   '<div class="vm-field">'
+          +     '<span class="vm-label">Due Date</span>'
+          +     '<span class="vm-value" style="' + (isOverdue ? 'color:#ef4444;font-weight:700;' : '') + '">'
+          +       friendlyDate(t.due)
+          +     '</span>'
+          +   '</div>'
+          + '</div>'
+
+            // ── Notes ──────────────────────────────────────────
           + (t.notes
-              ? '  <div class="vm-field full">'
-              + '    <span class="vm-label">Notes</span>'
-              + '    <div class="vm-notes">' + esc(t.notes) + '</div>'
-              + '  </div>'
-              : '')
-          + '</div>';
+              ? '<div class="vm-field" style="margin-top:.9rem;">'
+              +   '<span class="vm-label">Notes</span>'
+              +   '<div class="vm-notes" style="margin-top:5px;">' + esc(t.notes) + '</div>'
+              + '</div>'
+              : '');
 
         openModal('taskViewModal');
     };
