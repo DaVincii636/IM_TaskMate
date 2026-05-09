@@ -192,6 +192,15 @@ $blockerMapJson = json_encode($blockerMap);
                     <div class="color-picker-row" id="addColorRow"></div>
                     <input type="hidden" name="color" id="addColorInput" value="#ef4444"/>
                 </div>
+                <div class="form-group dep-group">
+                    <label class="form-label">Must Complete First</label>
+                    <p class="dep-hint">Add tasks that must be finished before this one can be marked done.</p>
+                    <select id="addDepSelect" class="form-input dep-select">
+                        <option value="">— Pick a task —</option>
+                    </select>
+                    <div class="dep-selected" id="addDepSelected"></div>
+                    <input type="hidden" id="addDepBlockerIds" name="blocker_ids" value=""/>
+                </div>
                 <div class="form-group">
                     <label class="form-label">Notes</label>
                     <textarea name="notes" class="form-input" placeholder="Optional notes..."></textarea>
@@ -267,16 +276,11 @@ $blockerMapJson = json_encode($blockerMap);
                         <option value="cancelled">&#x274C; Cancelled</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">
-                        Must Complete First
-                    </label>
-                    <div class="dep-info-banner">
-                        <i class="fa-solid fa-circle-info dep-info-icon"></i>
-                        <span>This task can only be marked done once all tasks below are completed first.</span>
-                    </div>
+                <div class="form-group dep-group">
+                    <label class="form-label">Must Complete First</label>
+                    <p class="dep-hint">Add tasks that must be finished before this one can be marked done.</p>
                     <select id="depSelect" class="form-input dep-select">
-                        <option value="">— Select a task to add —</option>
+                        <option value="">— Pick a task —</option>
                     </select>
                     <div class="dep-selected" id="depSelected"></div>
                     <input type="hidden" id="depBlockerIds" name="blocker_ids" value=""/>

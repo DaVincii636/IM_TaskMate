@@ -335,7 +335,10 @@ const CalendarApp = (() => {
         });
 
         // Add task button
-        document.getElementById('btnAddTask').addEventListener('click', () => openModal('addTaskModal'));
+        document.getElementById('btnAddTask').addEventListener('click', () => {
+            if (typeof window.depResetAdd === 'function') window.depResetAdd();
+            openModal('addTaskModal');
+        });
 
         // Gantt toggle
         document.getElementById('ganttToggle').addEventListener('change', function () {
@@ -353,9 +356,8 @@ const CalendarApp = (() => {
 
 document.addEventListener('DOMContentLoaded', CalendarApp.init);
 // ── Dependency UI ─────────────────────────────────────────────────────────────
-// Select-dropdown approach: pick a task from the <select>, it becomes a chip.
-// Removing a chip puts the task back into the <select>.
-// Relies on `serverTasks` already being in scope (injected by PHP).
+// makeDepUI(selId, containerId, hiddenId) creates an independent dep instance
+// for each modal (edit and add). Each instance has its own _selected list.
 //
 // ROOT-CAUSE NOTE: Oracle OCI8 returns all column values as PHP strings, so
 // task_id arrives in JSON as a string ("42"), not a number (42). The JS .map()
@@ -364,117 +366,14 @@ document.addEventListener('DOMContentLoaded', CalendarApp.init);
 (function () {
     'use strict';
 
-    // ALL ids are stored as Numbers to avoid string/number mismatches.
-    let _selected  = []; // [{id:Number, name, color, dueDate}]
-    let _editingId = null; // Number
-
     function toNum(v) { return parseInt(v, 10) || 0; }
 
-    // Return a fresh copy of serverTasks with Id coerced to Number
-    function getTasks() {
-        return (typeof serverTasks !== 'undefined' ? serverTasks : [])
-            .map(t => ({ Id: toNum(t.Id), Name: t.Name, Status: t.Status,
-                         Color: t.Color, DueDate: t.DueDate }));
-    }
-
-    // ── Populate <select> (excludes self, already-selected, done/cancelled) ──
-    function depBuildSelect() {
-        const sel = document.getElementById('depSelect');
-        if (!sel) return;
-
-        const eligible = getTasks().filter(t =>
-            t.Id !== _editingId &&
-            !['done', 'cancelled'].includes((t.Status || '').toLowerCase()) &&
-            !_selected.find(s => s.id === t.Id)
-        );
-
-        sel.innerHTML = '<option value="">— Select a task to add —</option>';
-        eligible.forEach(t => {
-            const opt = document.createElement('option');
-            opt.value = t.Id; // Number → gets stringified by the DOM, but we toNum() on read
-            opt.textContent = t.Name + (t.DueDate ? '  ·  due ' + fmtDate(t.DueDate) : '');
-            sel.appendChild(opt);
-        });
-    }
-
-    // ── Render chips and sync hidden input ────────────────────────────────────
-    function depRender() {
-        const container = document.getElementById('depSelected');
-        const hidden    = document.getElementById('depBlockerIds');
-        if (!container || !hidden) return;
-
-        container.innerHTML = '';
-        hidden.value = _selected.map(s => s.id).join(',');
-
-        _selected.forEach(s => {
-            const chip = document.createElement('div');
-            chip.className = 'dep-chip';
-            chip.innerHTML =
-                '<span class="dep-chip-dot" style="background:' + escDep(s.color) + '"></span>' +
-                '<span class="dep-chip-name">' + escDep(s.name) + '</span>' +
-                (s.dueDate ? '<span class="dep-chip-due">due ' + fmtDate(s.dueDate) + '</span>' : '') +
-                '<button type="button" class="dep-chip-remove" title="Remove blocker">' +
-                    '<i class="fa-solid fa-xmark"></i>' +
-                '</button>';
-            chip.querySelector('.dep-chip-remove').addEventListener('click', () => {
-                _selected = _selected.filter(x => x.id !== s.id);
-                depRender();
-                depBuildSelect();
-            });
-            container.appendChild(chip);
-        });
-
-        depBuildSelect();
-    }
-
-    // ── Load existing links from server when edit modal opens ─────────────────
-    window.depLoadExisting = function (taskId) {
-        _editingId = toNum(taskId);
-        _selected  = [];
-        depBuildSelect(); // show available tasks immediately, before fetch
-        depRender();
-
-        fetch('TM_PHP/TM_GetLinks.php?task_id=' + encodeURIComponent(taskId))
-            .then(r => r.json())
-            .then(data => {
-                if (!data.ok) return;
-                const tasks = getTasks();
-                _selected = (data.blockers || []).map(b => {
-                    const numId = toNum(b.id);
-                    const match = tasks.find(t => t.Id === numId) || {};
-                    return { id: numId, name: b.name,
-                             color: match.Color || '#888', dueDate: match.DueDate || '' };
-                });
-                depRender();
-            })
-            .catch(() => {});
-    };
-
-    // ── Wire up the <select> change event ─────────────────────────────────────
-    document.addEventListener('DOMContentLoaded', function () {
-        const sel = document.getElementById('depSelect');
-        if (!sel) return;
-
-        sel.addEventListener('change', function () {
-            const id = toNum(this.value); // DOM value is always a string — normalise
-            if (!id) return;
-
-            const task = getTasks().find(t => t.Id === id);
-            if (task && !_selected.find(s => s.id === id)) {
-                _selected.push({ id: task.Id, name: task.Name,
-                                 color: task.Color || '#888', dueDate: task.DueDate || '' });
-                depRender();
-            }
-            this.value = '';
-        });
-    });
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
     function escDep(s) {
         return String(s)
             .replace(/&/g,'&amp;').replace(/</g,'&lt;')
             .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
+
     function fmtDate(s) {
         if (!s) return '';
         const p = s.split('-');
@@ -482,5 +381,118 @@ document.addEventListener('DOMContentLoaded', CalendarApp.init);
                         'Jul','Aug','Sep','Oct','Nov','Dec'];
         return months[parseInt(p[1],10)-1] + ' ' + parseInt(p[2],10);
     }
+
+    // Return all serverTasks with Id coerced to Number
+    function getTasks() {
+        return (typeof serverTasks !== 'undefined' ? serverTasks : [])
+            .map(t => ({ Id: toNum(t.Id), Name: t.Name, Status: t.Status,
+                         Color: t.Color, DueDate: t.DueDate }));
+    }
+
+    // ── Factory: creates one dep UI instance ─────────────────────────────────
+    function makeDepUI(selId, containerId, hiddenId) {
+        let _selected  = [];
+        let _editingId = null;
+
+        function buildSelect() {
+            const sel = document.getElementById(selId);
+            if (!sel) return;
+            const eligible = getTasks().filter(t =>
+                t.Id !== _editingId &&
+                !['done', 'cancelled'].includes((t.Status || '').toLowerCase()) &&
+                !_selected.find(s => s.id === t.Id)
+            );
+            sel.innerHTML = '<option value="">— Pick a task —</option>';
+            eligible.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.Id;
+                opt.textContent = t.Name + (t.DueDate ? '  ·  ' + fmtDate(t.DueDate) : '');
+                sel.appendChild(opt);
+            });
+        }
+
+        function render() {
+            const container = document.getElementById(containerId);
+            const hidden    = document.getElementById(hiddenId);
+            if (!container || !hidden) return;
+
+            container.innerHTML = '';
+            hidden.value = _selected.map(s => s.id).join(',');
+
+            _selected.forEach(s => {
+                const chip = document.createElement('div');
+                chip.className = 'dep-chip';
+                chip.innerHTML =
+                    '<span class="dep-chip-dot" style="background:' + escDep(s.color) + '"></span>' +
+                    '<span class="dep-chip-name">' + escDep(s.name) + '</span>' +
+                    (s.dueDate ? '<span class="dep-chip-due">' + fmtDate(s.dueDate) + '</span>' : '') +
+                    '<button type="button" class="dep-chip-remove" title="Remove">' +
+                        '<i class="fa-solid fa-xmark"></i>' +
+                    '</button>';
+                chip.querySelector('.dep-chip-remove').addEventListener('click', () => {
+                    _selected = _selected.filter(x => x.id !== s.id);
+                    render();
+                    buildSelect();
+                });
+                container.appendChild(chip);
+            });
+
+            buildSelect();
+        }
+
+        // Wire the <select> change event
+        document.addEventListener('DOMContentLoaded', function () {
+            const sel = document.getElementById(selId);
+            if (!sel) return;
+            sel.addEventListener('change', function () {
+                const id = toNum(this.value);
+                if (!id) return;
+                const task = getTasks().find(t => t.Id === id);
+                if (task && !_selected.find(s => s.id === id)) {
+                    _selected.push({ id: task.Id, name: task.Name,
+                                     color: task.Color || '#888', dueDate: task.DueDate || '' });
+                    render();
+                }
+                this.value = '';
+            });
+        });
+
+        return {
+            loadExisting: function (taskId) {
+                _editingId = toNum(taskId);
+                _selected  = [];
+                buildSelect();
+                render();
+                fetch('TM_PHP/TM_GetLinks.php?task_id=' + encodeURIComponent(taskId))
+                    .then(r => r.json())
+                    .then(data => {
+                        if (!data.ok) return;
+                        const tasks = getTasks();
+                        _selected = (data.blockers || []).map(b => {
+                            const numId = toNum(b.id);
+                            const match = tasks.find(t => t.Id === numId) || {};
+                            return { id: numId, name: b.name,
+                                     color: match.Color || '#888', dueDate: match.DueDate || '' };
+                        });
+                        render();
+                    })
+                    .catch(() => {});
+            },
+            reset: function () {
+                _editingId = null;
+                _selected  = [];
+                buildSelect();
+                render();
+            }
+        };
+    }
+
+    // ── Instantiate for edit modal ────────────────────────────────────────────
+    const editDep = makeDepUI('depSelect', 'depSelected', 'depBlockerIds');
+    window.depLoadExisting = function (taskId) { editDep.loadExisting(taskId); };
+
+    // ── Instantiate for add modal ─────────────────────────────────────────────
+    const addDep = makeDepUI('addDepSelect', 'addDepSelected', 'addDepBlockerIds');
+    window.depResetAdd = function () { addDep.reset(); };
 
 })();

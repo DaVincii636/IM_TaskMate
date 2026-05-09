@@ -61,3 +61,48 @@ function tm_scalar($stmt) {
     $row = oci_fetch_row($stmt);
     return $row ? $row[0] : null;
 }
+
+/**
+ * JSON API helpers.
+ * Defined here so both TM_TaskActions.php and TM_UserActions.php
+ * can use them without redeclaring.
+ */
+function tm_api_ok(mixed $data = null): void {
+    header('Content-Type: application/json');
+    $payload = ['ok' => true];
+    if ($data !== null) $payload['data'] = $data;
+    echo json_encode($payload);
+    exit;
+}
+
+function tm_api_err(string $message, int $status = 400): void {
+    http_response_code($status);
+    header('Content-Type: application/json');
+    echo json_encode(['ok' => false, 'error' => $message]);
+    exit;
+}
+
+/**
+ * Insert one row into TM_AuditLog.
+ * Defined here (in TM_DB.php) so every action handler can use it
+ * without redeclaring it — which would cause a fatal error when two
+ * handlers are included in the same request.
+ * Errors are swallowed so a logging failure never blocks the real action.
+ */
+function tm_audit(int $userId, string $action, string $entityType,
+                  int $entityId, string $entityName,
+                  string $oldValue = '', string $newValue = ''): void {
+    try {
+        tm_exec(
+            "INSERT INTO TM_AuditLog
+                (user_id, action, entity_type, entity_id, entity_name, old_value, new_value)
+             VALUES (:p1, :p2, :p3, :p4, :p5, :p6, :p7)",
+            [$userId, $action, $entityType, $entityId,
+             substr($entityName, 0, 255),
+             substr($oldValue,   0, 500),
+             substr($newValue,   0, 500)]
+        );
+    } catch (Throwable $e) {
+        // Never let audit failure surface to the user
+    }
+}
