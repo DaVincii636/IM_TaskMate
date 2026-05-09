@@ -50,6 +50,13 @@ $flash = tm_get_flash();
                     oninput="this.value=this.value.replace(/[^0-9]/g,'')"/>
             </div>
             <div class="form-group">
+                <label class="form-label">ORGANIZATION CODE <span style="color:var(--gray-400);font-weight:400;">(optional)</span></label>
+                <input type="text" name="org_code" class="form-input" placeholder="Leave blank to use Default Organization" value="<?= htmlspecialchars($_POST['org_code'] ?? '') ?>"/>
+                 <p style="font-size:11px;color:var(--gray-400);margin:.35rem 0 0;">
+                   Enter your organization's exact name if you were given one.
+              </p>
+            </div>
+            <div class="form-group">
                 <label class="form-label">Password</label>
                 <div style="position:relative">
                     <input type="password" name="password" class="form-input" id="reg_password" placeholder="Min. 6 characters" required/>
