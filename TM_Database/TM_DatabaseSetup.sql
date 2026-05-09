@@ -109,6 +109,53 @@ CREATE INDEX idx_tm_notif_task ON TM_Notifications(task_id);
 
 COMMIT;
 
+-- =============================================
+-- AUDIT LOG TABLE
+-- Append this block to the bottom of TM_DatabaseSetup.sql
+-- Records every create / edit / delete / status_change event.
+-- entity_type: 'task' | 'user'
+-- action:      'create' | 'edit' | 'delete' | 'status_change'
+-- =============================================
+
+CREATE TABLE TM_AuditLog (
+    log_id      NUMBER(10)    NOT NULL,
+    user_id     NUMBER(10)    NOT NULL,
+    action      VARCHAR2(20)  NOT NULL,
+    entity_type VARCHAR2(20)  NOT NULL,
+    entity_id   NUMBER(10)    NOT NULL,
+    entity_name VARCHAR2(255),
+    old_value   VARCHAR2(500),
+    new_value   VARCHAR2(500),
+    created_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_tm_auditlog  PRIMARY KEY (log_id),
+    CONSTRAINT fk_audit_user   FOREIGN KEY (user_id)
+        REFERENCES TM_Users(user_id) ON DELETE CASCADE,
+    CONSTRAINT chk_audit_action
+        CHECK (action IN ('create','edit','delete','status_change')),
+    CONSTRAINT chk_audit_entity
+        CHECK (entity_type IN ('task','user'))
+);
+
+CREATE SEQUENCE TM_AuditLog_seq START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
+
+CREATE OR REPLACE TRIGGER trg_tm_auditlog_id
+    BEFORE INSERT ON TM_AuditLog FOR EACH ROW
+BEGIN
+    IF :NEW.log_id IS NULL THEN
+        SELECT TM_AuditLog_seq.NEXTVAL INTO :NEW.log_id FROM DUAL;
+    END IF;
+END;
+/
+
+CREATE INDEX idx_tm_audit_user       ON TM_AuditLog(user_id);
+CREATE INDEX idx_tm_audit_created_at ON TM_AuditLog(created_at DESC);
+CREATE INDEX idx_tm_audit_entity     ON TM_AuditLog(entity_type, entity_id);
+
+COMMIT;
+
+-- VERIFY
+SELECT 'TM_AuditLog', COUNT(*) FROM TM_AuditLog;
+
 -- VERIFY (extended)
 SELECT 'TM_Users'          AS tbl, COUNT(*) AS rows FROM TM_Users
 UNION ALL

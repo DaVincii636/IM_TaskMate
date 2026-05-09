@@ -50,6 +50,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
         <span class="navbar-user">Hello, <strong><?= htmlspecialchars(tm_uname()) ?></strong></span>
         <a href="TM_Dashboard.php" class="btn-logout">Home</a>
         <a href="TM_Tasks.php"    class="btn-logout">Tasks</a>
+        <a href="TM_Activity.php" class="btn-logout">Activity</a>
         <?php if (tm_role() === 'admin'): ?>
         <a href="TM_UserList.php" class="btn-logout">Admin Panel</a>
         <?php endif; ?>

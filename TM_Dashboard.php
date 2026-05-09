@@ -256,6 +256,7 @@ function statusLabel(string $s): string {
         <a href="TM_Dashboard.php" class="btn-logout">Home</a>
         <a href="TM_Calendar.php"  class="btn-logout">Calendar</a>
         <a href="TM_Tasks.php"     class="btn-logout">Tasks</a>
+        <a href="TM_Activity.php"  class="btn-logout">Activity</a>
         <?php if (tm_role() === 'admin'): ?>
         <a href="TM_UserList.php"  class="btn-logout">Admin Panel</a>
         <?php endif; ?>
