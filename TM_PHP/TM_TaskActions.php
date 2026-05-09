@@ -116,7 +116,7 @@ if ($action === 'export') {
         exit;
 
     } else {
-        // ── HTML report export ────────────────────────────────────────────────
+        // ── HTML report export (with analytics stats) ────────────────────────
         $total    = count($rows);
         $done     = count(array_filter($rows, fn($r) => ($r['status'] ?? '') === 'done'));
         $overdue  = count(array_filter($rows, fn($r) =>
@@ -125,47 +125,146 @@ if ($action === 'export') {
             ($r['due_date'] ?? '') < date('Y-m-d')
         ));
         $pending  = count(array_filter($rows, fn($r) => ($r['status'] ?? '') === 'pending'));
+        $inProg   = count(array_filter($rows, fn($r) => ($r['status'] ?? '') === 'in_progress'));
         $compRate = $total > 0 ? round($done / $total * 100) : 0;
+
+        // ── Analytics: avg completion days ───────────────────────────────────
+        $avgDaysRow = tm_fetch_one(tm_exec(
+            "SELECT ROUND(AVG(TRUNC(done_at) - TRUNC(t.start_date)), 1) AS avg_days,
+                    COUNT(*) AS sample_size
+             FROM TM_Tasks t
+             JOIN (
+                 SELECT entity_id, MIN(created_at) AS done_at
+                 FROM TM_AuditLog
+                 WHERE user_id = :p1 AND action = 'status_change'
+                   AND new_value LIKE '%status:done%'
+                 GROUP BY entity_id
+             ) done_log ON done_log.entity_id = t.task_id
+             WHERE t.user_id = :p2 AND t.status = 'done'",
+            [$uid, $uid]
+        ));
+        $avgDays    = $avgDaysRow['avg_days']    ?? $avgDaysRow['AVG_DAYS']    ?? null;
+        $sampleSize = (int)($avgDaysRow['sample_size'] ?? $avgDaysRow['SAMPLE_SIZE'] ?? 0);
+
+        // ── Analytics: most missed category ──────────────────────────────────
+        $missedStmt = tm_exec(
+            "SELECT cat_label, missed_count FROM (
+                 SELECT CASE WHEN category = 'others' AND custom_category IS NOT NULL
+                                  THEN custom_category ELSE INITCAP(category) END AS cat_label,
+                        COUNT(*) AS missed_count
+                 FROM TM_Tasks
+                 WHERE user_id  = :p1
+                   AND status   NOT IN ('done','cancelled')
+                   AND due_date < TRUNC(SYSDATE)
+                 GROUP BY category, custom_category
+                 ORDER BY missed_count DESC
+             ) WHERE ROWNUM <= 3",
+            [$uid]
+        );
+        $missedCats = tm_fetch_all($missedStmt);
+
+        // ── Analytics: current streak ─────────────────────────────────────────
+        $streakStmt = tm_exec(
+            "SELECT DISTINCT TRUNC(created_at) AS done_day
+             FROM TM_AuditLog
+             WHERE user_id = :p1 AND action = 'status_change'
+               AND new_value LIKE '%status:done%'
+             ORDER BY done_day DESC",
+            [$uid]
+        );
+        $doneDays  = tm_fetch_all($streakStmt);
+        $streak    = 0;
+        $checkDate = strtotime('today');
+        foreach ($doneDays as $dRow) {
+            $raw = $dRow['DONE_DAY'] ?? $dRow['done_day'] ?? '';
+            $day = strtotime(date('Y-m-d', strtotime($raw)));
+            if ($day === $checkDate || $day === strtotime('-1 day', $checkDate)) {
+                $streak++;
+                $checkDate = strtotime('-1 day', $checkDate);
+            } else {
+                break;
+            }
+        }
 
         header('Content-Type: text/html; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . $filename . '.html"');
         header('Cache-Control: no-cache, no-store');
+
         echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
 <title>TaskMate Report — ' . date('Y-m-d') . '</title>
 <style>
-  body{font-family:system-ui,sans-serif;margin:2rem;color:#111;}
+  *{box-sizing:border-box;}
+  body{font-family:system-ui,sans-serif;margin:2rem;color:#111;background:#fff;}
   h1{font-size:1.6rem;margin-bottom:.25rem;}
+  h2{font-size:1rem;font-weight:700;margin:2rem 0 .75rem;padding-bottom:.4rem;border-bottom:2px solid #f0f0f0;}
   .sub{color:#666;font-size:.9rem;margin-bottom:2rem;}
-  .stats{display:flex;gap:1.5rem;margin-bottom:2rem;flex-wrap:wrap;}
-  .stat{background:#f5f5f5;border-radius:8px;padding:1rem 1.5rem;min-width:120px;text-align:center;}
-  .stat-val{font-size:2rem;font-weight:700;}
-  .stat-lbl{font-size:.75rem;color:#555;margin-top:.2rem;}
-  table{width:100%;border-collapse:collapse;font-size:.85rem;}
-  th{background:#111;color:#fff;padding:8px 10px;text-align:left;}
-  td{padding:7px 10px;border-bottom:1px solid #e5e5e5;}
+  .stats{display:flex;gap:1rem;margin-bottom:.5rem;flex-wrap:wrap;}
+  .stat{background:#f5f5f5;border-radius:10px;padding:.9rem 1.25rem;min-width:110px;text-align:center;}
+  .stat-val{font-size:1.8rem;font-weight:800;line-height:1;}
+  .stat-lbl{font-size:.7rem;color:#555;margin-top:.25rem;text-transform:uppercase;letter-spacing:.04em;}
+  .insight-row{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;}
+  .insight{background:#f5f5f5;border-radius:10px;padding:.8rem 1.1rem;flex:1;min-width:160px;}
+  .insight-val{font-size:1.3rem;font-weight:700;}
+  .insight-lbl{font-size:.7rem;color:#666;margin-top:.15rem;text-transform:uppercase;letter-spacing:.04em;}
+  .missed-list{margin:.5rem 0 0;padding:0;list-style:none;}
+  .missed-list li{display:flex;justify-content:space-between;padding:5px 0;
+                  border-bottom:1px solid #eee;font-size:.85rem;}
+  .missed-list li:last-child{border:none;}
+  .missed-count{font-weight:700;color:#b91c1c;}
+  table{width:100%;border-collapse:collapse;font-size:.82rem;margin-top:.5rem;}
+  th{background:#111;color:#fff;padding:8px 10px;text-align:left;font-size:.78rem;}
+  td{padding:7px 10px;border-bottom:1px solid #e5e5e5;vertical-align:middle;}
   tr:hover td{background:#fafafa;}
-  .badge{display:inline-block;padding:2px 8px;border-radius:50px;font-size:.75rem;font-weight:600;}
+  .badge{display:inline-block;padding:2px 8px;border-radius:50px;font-size:.72rem;font-weight:600;}
   .b-done{background:#dcfce7;color:#166534;}
   .b-pending{background:#fef9c3;color:#854d0e;}
   .b-in_progress{background:#dbeafe;color:#1e40af;}
   .b-overdue{background:#fee2e2;color:#991b1b;}
   .b-cancelled{background:#f3f4f6;color:#6b7280;}
   .b-review{background:#ede9fe;color:#5b21b6;}
-  @media print{body{margin:1cm;}}
+  @media print{body{margin:1cm;}h2{break-before:avoid;}}
 </style></head><body>
-<h1>&#x1F4CB; TaskMate — Task Report</h1>
+<h1>&#x1F4CB; TaskMate — Analytics Report</h1>
 <p class="sub">Generated on ' . date('F j, Y \a\t H:i') . ' &nbsp;·&nbsp; ' . htmlspecialchars(tm_uname()) . '</p>
+
+<h2>Summary</h2>
 <div class="stats">
   <div class="stat"><div class="stat-val">' . $total . '</div><div class="stat-lbl">Total Tasks</div></div>
   <div class="stat"><div class="stat-val">' . $done . '</div><div class="stat-lbl">Completed</div></div>
   <div class="stat"><div class="stat-val">' . $overdue . '</div><div class="stat-lbl">Overdue</div></div>
   <div class="stat"><div class="stat-val">' . $pending . '</div><div class="stat-lbl">Pending</div></div>
+  <div class="stat"><div class="stat-val">' . $inProg . '</div><div class="stat-lbl">In Progress</div></div>
   <div class="stat"><div class="stat-val">' . $compRate . '%</div><div class="stat-lbl">Completion Rate</div></div>
 </div>
+
+<h2>Productivity Insights</h2>
+<div class="insight-row">
+  <div class="insight">
+    <div class="insight-val">' . ($avgDays !== null ? $avgDays . ' days' : '—') . '</div>
+    <div class="insight-lbl">Avg. days to complete a task' . ($sampleSize > 0 ? ' (from ' . $sampleSize . ' tasks)' : '') . '</div>
+  </div>
+  <div class="insight">
+    <div class="insight-val">' . $streak . ' day' . ($streak !== 1 ? 's' : '') . '</div>
+    <div class="insight-lbl">Current completion streak</div>
+  </div>
+</div>';
+
+        if (!empty($missedCats)) {
+            echo '<h2>Most Missed Deadlines by Category</h2>
+<ul class="missed-list">';
+            foreach ($missedCats as $mc) {
+                $lbl = htmlspecialchars($mc['cat_label'] ?? $mc['CAT_LABEL'] ?? '—');
+                $cnt = (int)($mc['missed_count'] ?? $mc['MISSED_COUNT'] ?? 0);
+                echo '<li><span>' . $lbl . '</span><span class="missed-count">' . $cnt . ' overdue</span></li>';
+            }
+            echo '</ul>';
+        }
+
+        echo '<h2>Task List</h2>
 <table>
 <thead><tr>
   <th>#</th><th>Task Name</th><th>Category</th><th>Priority</th>
-  <th>Due Date</th><th>Status</th>
+  <th>Start Date</th><th>Due Date</th><th>Status</th>
 </tr></thead><tbody>';
 
         foreach ($rows as $r) {
@@ -178,6 +277,7 @@ if ($action === 'export') {
   <td>' . htmlspecialchars($r['task_name'] ?? '') . '</td>
   <td>' . htmlspecialchars(ucfirst($r['category'] ?? '')) . '</td>
   <td>' . htmlspecialchars(ucfirst($r['priority'] ?? '')) . '</td>
+  <td>' . htmlspecialchars($r['start_date'] ?? '') . '</td>
   <td>' . htmlspecialchars($r['due_date'] ?? '') . '</td>
   <td><span class="badge ' . $bClass . '">' . htmlspecialchars($label) . '</span></td>
 </tr>';

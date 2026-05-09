@@ -279,10 +279,16 @@ function submitDeleteTask() {
                 });
             }
 
-            // Navigate to the task page if a task_id is present
+            // Navigate to the task page if a task_id is present.
+            // If tmOpenView is available (Dashboard, Tasks, etc.) open the modal inline.
+            // Otherwise navigate to TM_Tasks.php?open=<id> so Tasks.php auto-opens it.
             if (taskId && parseInt(taskId, 10) > 0) {
                 dropdown.classList.remove('open');
-                window.location.href = 'TM_Tasks.php?highlight=' + encodeURIComponent(taskId);
+                if (typeof window.tmOpenView === 'function') {
+                    window.tmOpenView(taskId);
+                } else {
+                    window.location.href = 'TM_Tasks.php?open=' + encodeURIComponent(taskId);
+                }
             }
         });
     });

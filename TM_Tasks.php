@@ -1192,21 +1192,35 @@ function submitQuickDone(id) {
 </script>
 
 <script>
-// ── Notification highlight: scroll to task when arriving via ?highlight=ID ────
+// ── Notification auto-open: open task modal when arriving via ?open=ID ─────
+// Also handles legacy ?highlight=ID (scroll + flash only, no modal)
 (function () {
-    var params    = new URLSearchParams(window.location.search);
-    var taskId    = params.get('highlight');
+    var params = new URLSearchParams(window.location.search);
+
+    // ?open=ID — mark-read already happened client-side; just open the modal
+    var openId = params.get('open');
+    if (openId && parseInt(openId, 10) > 0) {
+        // Wait for TM_TaskModal.php JS to initialise (it runs in DOMContentLoaded)
+        window.addEventListener('DOMContentLoaded', function () {
+            if (typeof window.tmOpenView === 'function') {
+                window.tmOpenView(openId);
+            }
+        });
+        // Clean the URL so refreshing doesn't re-open the modal
+        history.replaceState(null, '', window.location.pathname +
+            (params.get('view') ? '?view=' + params.get('view') : ''));
+        return;
+    }
+
+    // Legacy ?highlight=ID — scroll + flash
+    var taskId = params.get('highlight');
     if (!taskId) return;
     var el = document.querySelector('[data-task-id="' + taskId + '"]');
     if (!el) return;
-    // Scroll the element into view
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    // Add a brief flash highlight
     el.style.transition = 'box-shadow 0.3s ease';
     el.style.boxShadow  = '0 0 0 3px var(--black)';
-    setTimeout(function () {
-        el.style.boxShadow = '';
-    }, 2000);
+    setTimeout(function () { el.style.boxShadow = ''; }, 2000);
 })();
 </script>
 </body>

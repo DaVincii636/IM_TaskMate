@@ -346,6 +346,29 @@ require_once 'TM_PHP/TM_NavNotif.php';
             <?= number_format($totalRows) ?> event<?= $totalRows !== 1 ? 's' : '' ?>
         </span>
     </div>
+
+    <!-- Filter dropdowns -->
+    <form class="filter-bar" method="get" action="TM_Activity.php">
+        <select name="action" class="filter-select">
+            <option value="">All Actions</option>
+            <option value="create"        <?= $filterAction === 'create'        ? 'selected' : '' ?>>Created</option>
+            <option value="edit"          <?= $filterAction === 'edit'          ? 'selected' : '' ?>>Edited</option>
+            <option value="status_change" <?= $filterAction === 'status_change' ? 'selected' : '' ?>>Status Changes</option>
+            <option value="delete"        <?= $filterAction === 'delete'        ? 'selected' : '' ?>>Deleted</option>
+        </select>
+        <select name="type" class="filter-select">
+            <option value="">All Types</option>
+            <option value="task" <?= $filterType === 'task' ? 'selected' : '' ?>>Tasks</option>
+            <option value="user" <?= $filterType === 'user' ? 'selected' : '' ?>>Users</option>
+        </select>
+        <button type="submit" class="btn-filter-apply">
+            <i class="fa-solid fa-filter"></i> Filter
+        </button>
+        <?php if ($filterAction !== '' || $filterType !== ''): ?>
+        <a href="TM_Activity.php" class="btn-filter-clear">Clear</a>
+        <?php endif; ?>
+    </form>
+
     <!-- Feed -->
     <div class="feed-card">
         <?php if (empty($rows)): ?>
