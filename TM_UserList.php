@@ -191,30 +191,30 @@ require_once 'TM_PHP/TM_NavNotif.php';
             <div class="modal-title">Add New User</div>
             <button class="modal-close" onclick="closeAdminModal('addModal')">&#x2715;</button>
         </div>
-        <form method="post" action="TM_PHP/TM_UserActions.php">
+        <form method="post" action="TM_PHP/TM_UserActions.php" id="addUserForm">
             <input type="hidden" name="action" value="add"/>
             <div class="modal-body">
                 <div class="form-row">
                     <div class="form-group">
                         <label class="form-label">First Name</label>
-                        <input type="text" name="firstName" class="form-input" placeholder="Juan" required/>
+                        <input type="text" name="firstName" class="form-input" id="add_fname" placeholder="Juan" required/>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Last Name</label>
-                        <input type="text" name="lastName" class="form-input" placeholder="Dela Cruz" required/>
+                        <input type="text" name="lastName" class="form-input" id="add_lname" placeholder="Dela Cruz" required/>
                     </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Email</label>
-                    <input type="email" name="email" class="form-input" placeholder="juan@email.com" required/>
+                    <input type="email" name="email" class="form-input" id="add_email" placeholder="juan@email.com" required/>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Phone</label>
-                    <input type="tel" name="phone" class="form-input" placeholder="09XXXXXXXXX" required/>
+                    <input type="tel" name="phone" class="form-input" id="add_phone" placeholder="09XXXXXXXXX" required/>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Password</label>
-                    <input type="password" name="password" class="form-input" placeholder="Min. 6 characters" required/>
+                    <input type="password" name="password" class="form-input" id="add_password" placeholder="Min. 6 characters" required/>
                 </div>
                 <div class="form-group">
                 <label class="form-label">Role</label>
@@ -399,5 +399,31 @@ require_once 'TM_PHP/TM_NavNotif.php';
     });
 </script>
 <script src="TM_JS/TM_App.js"></script>
+<script>
+// ── Inline validation: Add User form (Improvement 4) ──────────────────────
+(function () {
+    var form = document.getElementById('addUserForm');
+    if (!form) return;
+    form.addEventListener('submit', function (e) {
+        var ok = validateFields([
+            { id: 'add_fname',    label: 'First name' },
+            { id: 'add_lname',    label: 'Last name' },
+            { id: 'add_email',    label: 'Email', validate: function (v) {
+                if (!v.trim()) return 'Email is required.';
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'Please enter a valid email address.';
+            }},
+            { id: 'add_phone',    label: 'Phone', validate: function (v) {
+                if (!v.trim()) return 'Phone number is required.';
+                if (!/^[\d\s\+\-]{7,15}$/.test(v.trim())) return 'Please enter a valid phone number.';
+            }},
+            { id: 'add_password', label: 'Password', validate: function (v) {
+                if (!v) return 'Password is required.';
+                if (v.length < 6) return 'Password must be at least 6 characters.';
+            }},
+        ]);
+        if (!ok) e.preventDefault();
+    });
+})();
+</script>
 </body>
 </html>

@@ -602,7 +602,13 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
     <div class="task-table-card">
         <?php if (empty($tasks)): ?>
         <div class="empty-state">
-            <?php if ($view === 'missing'): ?>
+            <?php
+            $hasFilters = $search !== '' || $filterCat !== '' || $filterPri !== '' || $dateFrom !== '' || $dateTo !== '';
+            if ($hasFilters): ?>
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <h3>No results found</h3>
+                <p>No tasks match your search or filters. <a href="TM_Tasks.php?view=<?= htmlspecialchars($view) ?>">Clear filters</a> to see all tasks.</p>
+            <?php elseif ($view === 'missing'): ?>
                 <i class="fa-solid fa-circle-check"></i>
                 <h3>No overdue tasks</h3>
                 <p>You're all caught up — nothing is past its due date.</p>

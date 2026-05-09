@@ -1129,3 +1129,26 @@ tbody td {
 
 .notif-empty i { font-size: 24px; margin-bottom: 8px; display: block; }
 .notif-empty p { font-size: 12px; font-weight: 500; margin: 0; }
+/* =============================================
+   Inline Field Validation (Improvement 4)
+   ============================================= */
+.field-error {
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+    background: #fff5f5 !important;
+}
+
+.field-error-msg {
+    display: block;
+    color: #ef4444;
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 4px;
+    line-height: 1.4;
+}
+
+/* Hide flash banners — JS converts them to toasts (Improvement 3) */
+.validation-summary,
+.success-banner {
+    display: none !important;
+}

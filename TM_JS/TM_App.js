@@ -36,21 +36,19 @@ function showToast(msg, type = 'default') {
 // ---- Convert inline alerts to toasts on page load ----
 document.addEventListener('DOMContentLoaded', function () {
 
-    // Check for error banner
-    const errorBanner = document.querySelector('.validation-summary');
-    if (errorBanner) {
-        const msg = errorBanner.textContent.trim();
-        if (msg) showToast(msg, 'error');
-        errorBanner.style.display = 'none'; // Hide inline banner
-    }
-
-    // Check for success banner
-    const successBanner = document.querySelector('.success-banner');
-    if (successBanner) {
-        const msg = successBanner.textContent.trim();
-        if (msg) showToast(msg, 'success');
-        successBanner.style.display = 'none';
-    }
+    // Check for flash banners (they may be hidden via inline style or CSS)
+    // We read textContent regardless of visibility and then hide the element.
+    [
+        { selector: '.validation-summary', type: 'error' },
+        { selector: '.success-banner',     type: 'success' },
+    ].forEach(function (cfg) {
+        document.querySelectorAll(cfg.selector).forEach(function (el) {
+            const msg = el.textContent.trim();
+            // Always hide the inline banner so it never flashes raw
+            el.style.cssText = 'display:none !important';
+            if (msg) showToast(msg, cfg.type);
+        });
+    });
 
     // ---- Modal ----
     document.querySelectorAll('[data-open-modal]').forEach(btn => {
@@ -125,14 +123,9 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // ---- Confirm delete ----
-    document.querySelectorAll('.btn-delete-confirm').forEach(btn => {
-        btn.addEventListener('click', function (e) {
-            if (!confirm('Are you sure you want to delete this user?')) {
-                e.preventDefault();
-            }
-        });
-    });
+    // ---- Confirm delete (legacy fallback — now handled by modals) ----
+    // Delete confirmations are managed by pc-modal confirm dialogs.
+    // The .btn-delete-confirm class is kept for backwards compatibility.
 
     // ---- Edit user: populate modal ----
     document.querySelectorAll('.btn-edit-user').forEach(btn => {
@@ -160,6 +153,50 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 });
+
+// ---- Inline field validation (Improvement 4) ----
+// Call this on form submission. fields = array of { id, label, validate? (fn) }
+// Returns true if all valid, false otherwise (and shows inline errors).
+function validateFields(fields) {
+    let valid = true;
+    fields.forEach(function (f) {
+        const el = document.getElementById(f.id);
+        if (!el) return;
+        clearFieldError(el);
+        let msg = '';
+        if (f.validate) {
+            msg = f.validate(el.value, el) || '';
+        } else if (!el.value.trim()) {
+            msg = (f.label || 'This field') + ' is required.';
+        }
+        if (msg) {
+            showFieldError(el, msg);
+            valid = false;
+        }
+    });
+    return valid;
+}
+
+function showFieldError(el, msg) {
+    el.classList.add('field-error');
+    const existing = el.parentElement.querySelector('.field-error-msg');
+    if (existing) existing.remove();
+    const err = document.createElement('span');
+    err.className = 'field-error-msg';
+    err.textContent = msg;
+    el.parentElement.appendChild(err);
+    // Clear error on user input
+    el.addEventListener('input', function clearErr() {
+        clearFieldError(el);
+        el.removeEventListener('input', clearErr);
+    }, { once: true });
+}
+
+function clearFieldError(el) {
+    el.classList.remove('field-error');
+    const existing = el.parentElement && el.parentElement.querySelector('.field-error-msg');
+    if (existing) existing.remove();
+}
 
 // ---- Modal helpers ----
 function openModal(id) {

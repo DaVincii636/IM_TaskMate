@@ -148,21 +148,21 @@ $blockerMapJson = json_encode($blockerMap);
             <div class="modal-title">New Task</div>
             <button class="modal-close" onclick="closeModal('addTaskModal')">&#x2715;</button>
         </div>
-        <form method="post" action="TM_PHP/TM_TaskActions.php">
+        <form method="post" action="TM_PHP/TM_TaskActions.php" id="addTaskForm">
             <input type="hidden" name="action" value="add"/>
             <div class="modal-body">
                 <div class="form-group">
                     <label class="form-label">Task Name</label>
-                    <input type="text" name="name" class="form-input" placeholder="e.g. Buy groceries" required/>
+                    <input type="text" name="name" class="form-input" id="addTaskName" placeholder="e.g. Buy groceries" required/>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label class="form-label">Start Date</label>
-                        <input type="date" name="startDate" class="form-input" required/>
+                        <input type="date" name="startDate" class="form-input" id="addTaskStart" required/>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Due Date</label>
-                        <input type="date" name="dueDate" class="form-input" required/>
+                        <input type="date" name="dueDate" class="form-input" id="addTaskDue" required/>
                     </div>
                 </div>
                 <div class="form-group">
@@ -401,6 +401,49 @@ $blockerMapJson = json_encode($blockerMap);
 </script>
 <script src="TM_JS/TM_App.js"></script>
 <script src="TM_JS/TM_Calendar.js"></script>
+<script>
+// ── Inline validation: Add Task form (Improvement 4) ──────────────────────
+(function () {
+    var form = document.getElementById('addTaskForm');
+    if (!form) return;
+    form.addEventListener('submit', function (e) {
+        var ok = validateFields([
+            { id: 'addTaskName',  label: 'Task name' },
+            { id: 'addTaskStart', label: 'Start date', validate: function (v) {
+                if (!v) return 'Start date is required.';
+            }},
+            { id: 'addTaskDue',   label: 'Due date', validate: function (v) {
+                if (!v) return 'Due date is required.';
+                var start = document.getElementById('addTaskStart');
+                if (start && start.value && v < start.value) return 'Due date cannot be before start date.';
+            }},
+        ]);
+        if (!ok) e.preventDefault();
+    });
+})();
+
+// ── Inline validation: Edit Task form (Improvement 4) ─────────────────────
+(function () {
+    // The edit form save goes through tmDoSave() → editTaskForm.submit()
+    // Intercept the Save Changes button click instead.
+    var origTmOpenSaveConfirm = window.tmOpenSaveConfirm;
+    window.tmOpenSaveConfirm = function () {
+        var ok = validateFields([
+            { id: 'editTaskName',  label: 'Task name' },
+            { id: 'editTaskStart', label: 'Start date', validate: function (v) {
+                if (!v) return 'Start date is required.';
+            }},
+            { id: 'editTaskDue',   label: 'Due date', validate: function (v) {
+                if (!v) return 'Due date is required.';
+                var start = document.getElementById('editTaskStart');
+                if (start && start.value && v < start.value) return 'Due date cannot be before start date.';
+            }},
+        ]);
+        if (!ok) return; // Don't open confirm modal if invalid
+        if (origTmOpenSaveConfirm) origTmOpenSaveConfirm();
+    };
+})();
+</script>
 
 <!-- LOGOUT PC-MODAL -->
 <div id="logoutModal" class="pc-modal-overlay">

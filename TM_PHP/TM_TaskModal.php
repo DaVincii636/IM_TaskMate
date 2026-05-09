@@ -473,6 +473,21 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
 
     // ── Save confirm ───────────────────────────────────────
     window.tmOpenSaveConfirm = function () {
+        // Inline validation (Improvement 4)
+        if (typeof validateFields === 'function') {
+            var ok = validateFields([
+                { id: 'editTaskName',  label: 'Task name' },
+                { id: 'editTaskStart', label: 'Start date', validate: function (v) {
+                    if (!v) return 'Start date is required.';
+                }},
+                { id: 'editTaskDue',   label: 'Due date', validate: function (v) {
+                    if (!v) return 'Due date is required.';
+                    var start = document.getElementById('editTaskStart');
+                    if (start && start.value && v < start.value) return 'Due date cannot be before start date.';
+                }},
+            ]);
+            if (!ok) return;
+        }
         var name = document.getElementById('editTaskName').value || 'this task';
         document.getElementById('tmSaveTaskModalText').innerHTML =
             'Save changes to <strong>' + esc(name) + '</strong>?';
