@@ -336,9 +336,6 @@ table.task-table tbody tr.row-overdue td:first-child {
         <a href="TM_Calendar.php" class="btn-logout">Calendar</a>
         <a href="TM_Tasks.php"    class="btn-logout">Tasks</a>
         <a href="TM_Activity.php" class="btn-logout">Activity</a>
-        <?php if (tm_role() === 'admin'): ?>
-        <a href="TM_UserList.php" class="btn-logout">Admin Panel</a>
-        <?php endif; ?>
         <!-- Notification Bell -->
         <?= $tm_notif_bell_html ?>
         <a href="#" class="btn-logout" id="logoutBtn">Log Out</a>

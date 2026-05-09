@@ -48,10 +48,12 @@ function tm_run_notif_cron(): void {
             continue; // More than 3 days away — no notification needed yet
         }
 
-        // Skip if an unread notification of this type already exists for this task
+        // Skip if any notification of this type already exists for this task today
+        // (read OR unread) — prevents re-creating after the user marks it read
         $exists = tm_fetch_one(tm_exec(
             "SELECT COUNT(*) AS n FROM TM_Notifications
-             WHERE user_id=:p1 AND task_id=:p2 AND type=:p3 AND is_read=0",
+             WHERE user_id=:p1 AND task_id=:p2 AND type=:p3
+               AND TRUNC(created_at) = TRUNC(SYSDATE)",
             [$userId, $taskId, $type]
         ));
         $count = (int)($exists['N'] ?? $exists['n'] ?? 0);

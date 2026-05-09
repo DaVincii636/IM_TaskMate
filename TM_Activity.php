@@ -167,10 +167,21 @@ require_once 'TM_PHP/TM_NavNotif.php';
 .feed-desc   { font-size: 13px; color: var(--gray-500); margin-top: 2px; line-height: 1.5; }
 .feed-desc strong { color: var(--black); font-weight: 600; }
 .feed-meta   { font-size: 11px; color: var(--gray-400); margin-top: 4px; }
-.val-change  {
-    display: inline-block; font-size: 11px; color: var(--gray-500);
-    background: var(--gray-100); border-radius: 4px; padding: 1px 6px; margin-top: 4px;
+.feed-changes  { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.feed-change-row {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 12px; color: var(--gray-500);
 }
+.chg-label {
+    font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+    color: var(--gray-400); background: var(--gray-100);
+    padding: 2px 7px; border-radius: 4px; flex-shrink: 0;
+}
+.chg-from {
+    color: var(--gray-500); text-decoration: line-through; font-size: 12px;
+}
+.chg-arrow { font-size: 9px; color: var(--gray-300); }
+.chg-to    { color: var(--black); font-weight: 600; font-size: 12px; }
 
 /* ── Badges ──────────────────────────────────── */
 .feed-badge {
@@ -222,9 +233,6 @@ require_once 'TM_PHP/TM_NavNotif.php';
         <a href="TM_Calendar.php"  class="btn-logout">Calendar</a>
         <a href="TM_Tasks.php"     class="btn-logout">Tasks</a>
         <a href="TM_Activity.php"  class="btn-logout" style="font-weight:700;">Activity</a>
-        <?php if (tm_role() === 'admin'): ?>
-        <a href="TM_UserList.php"  class="btn-logout">Admin Panel</a>
-        <?php endif; ?>
         <?= $tm_notif_bell_html ?>
         <a href="#" class="btn-logout" id="logoutBtn">Log Out</a>
     </div>
@@ -354,6 +362,84 @@ require_once 'TM_PHP/TM_NavNotif.php';
             elseif ($diff < 604800) $timeAgo = floor($diff / 86400) . 'd ago';
             else                    $timeAgo = date('M j, Y', $ts);
         ?>
+        <?php
+        // ── Parse key:value pairs from stored audit strings ──────────────────
+        // e.g. "status:pending, pri:mid" → ['status'=>'pending','pri'=>'mid']
+        function parseAuditKV(string $s): array {
+            $map = [];
+            foreach (explode(',', $s) as $part) {
+                $part = trim($part);
+                if (str_contains($part, ':')) {
+                    [$k, $v] = explode(':', $part, 2);
+                    $map[trim($k)] = trim($v);
+                }
+            }
+            return $map;
+        }
+        function fmtStatus(string $s): string {
+            return match($s) {
+                'pending'     => 'Pending',
+                'in_progress' => 'In Progress',
+                'review'      => 'Under Review',
+                'done'        => 'Done',
+                'cancelled'   => 'Cancelled',
+                default       => ucfirst($s),
+            };
+        }
+        function fmtPri(string $p): string {
+            return match($p) {
+                'high' => 'High', 'mid' => 'Medium', 'low' => 'Low',
+                default => ucfirst($p),
+            };
+        }
+
+        $old = parseAuditKV($oldVal);
+        $new = parseAuditKV($newVal);
+
+        // Build a clean description line based on action type
+        $descParts = [];
+        if ($action === 'status_change') {
+            $from = fmtStatus($old['status'] ?? '');
+            $to   = fmtStatus($new['status'] ?? '');
+            if ($from && $to && $from !== $to) {
+                $descParts[] = [
+                    'label' => 'Status',
+                    'from'  => $from,
+                    'to'    => $to,
+                ];
+            }
+            // Only show priority change if it actually changed
+            $fromPri = fmtPri($old['pri'] ?? '');
+            $toPri   = fmtPri($new['pri'] ?? '');
+            if ($fromPri && $toPri && $fromPri !== $toPri) {
+                $descParts[] = [
+                    'label' => 'Priority',
+                    'from'  => $fromPri,
+                    'to'    => $toPri,
+                ];
+            }
+        } elseif ($action === 'edit') {
+            $fromPri = fmtPri($old['pri'] ?? '');
+            $toPri   = fmtPri($new['pri'] ?? '');
+            if ($fromPri && $toPri && $fromPri !== $toPri) {
+                $descParts[] = ['label'=>'Priority','from'=>$fromPri,'to'=>$toPri];
+            }
+            $fromSt = fmtStatus($old['status'] ?? '');
+            $toSt   = fmtStatus($new['status'] ?? '');
+            if ($fromSt && $toSt && $fromSt !== $toSt) {
+                $descParts[] = ['label'=>'Status','from'=>$fromSt,'to'=>$toSt];
+            }
+        } elseif ($action === 'create' && $newVal) {
+            // "cat:work, pri:high, due:2025-06-01"
+            $cat = ucfirst($new['cat'] ?? '');
+            $pri = fmtPri($new['pri'] ?? '');
+            $due = $new['due'] ?? '';
+            if ($due) $due = date('M j, Y', strtotime($due));
+            if ($cat)  $descParts[] = ['label'=>'Category','value'=>$cat];
+            if ($pri)  $descParts[] = ['label'=>'Priority', 'value'=>$pri];
+            if ($due)  $descParts[] = ['label'=>'Due',      'value'=>$due];
+        }
+        ?>
         <li class="feed-item">
             <div class="feed-icon <?= $iconClass ?>"><?= $iconGlyph ?></div>
             <div class="feed-body">
@@ -363,10 +449,21 @@ require_once 'TM_PHP/TM_NavNotif.php';
                 </div>
                 <div class="feed-desc">
                     <strong><?= htmlspecialchars($entityName) ?></strong>
-                    <?php if ($oldVal && $newVal): ?>
-                        <br><span class="val-change"><?= htmlspecialchars($oldVal) ?> → <?= htmlspecialchars($newVal) ?></span>
-                    <?php elseif ($oldVal): ?>
-                        <br><span class="val-change">was: <?= htmlspecialchars($oldVal) ?></span>
+                    <?php if (!empty($descParts)): ?>
+                    <div class="feed-changes">
+                        <?php foreach ($descParts as $dp): ?>
+                        <div class="feed-change-row">
+                            <span class="chg-label"><?= $dp['label'] ?></span>
+                            <?php if (isset($dp['from'], $dp['to'])): ?>
+                                <span class="chg-from"><?= htmlspecialchars($dp['from']) ?></span>
+                                <i class="fa-solid fa-arrow-right chg-arrow"></i>
+                                <span class="chg-to"><?= htmlspecialchars($dp['to']) ?></span>
+                            <?php else: ?>
+                                <span class="chg-to"><?= htmlspecialchars($dp['value']) ?></span>
+                            <?php endif; ?>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
                     <?php endif; ?>
                 </div>
                 <div class="feed-meta">

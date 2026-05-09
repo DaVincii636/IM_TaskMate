@@ -72,6 +72,14 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+    // Alt+Shift+C → Admin Panel shortcut
+    document.addEventListener('keydown', function (e) {
+        if (e.altKey && e.shiftKey && e.key === 'C') {
+            const adminLink = document.querySelector('a[href="TM_UserList.php"]');
+            if (adminLink) window.location.href = adminLink.href;
+        }
+    });
+
     // ---- Typing animation on welcome page ----
     const typingEl = document.getElementById('typingText');
     if (typingEl && typeof fullName !== 'undefined' && fullName.trim() !== '') {
