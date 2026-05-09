@@ -55,7 +55,7 @@ if ($view === 'board') {
          FROM TM_Tasks
          WHERE user_id = :p1 AND status = 'done'
          $extraWhere
-         ORDER BY due_date DESC",
+         ORDER BY $sortSql",
         $extraParams
     );
 } elseif ($view === 'missing') {
@@ -68,7 +68,7 @@ if ($view === 'board') {
            AND due_date < SYSDATE
            AND status NOT IN ('done','cancelled')
          $extraWhere
-         ORDER BY due_date ASC",
+         ORDER BY $sortSql",
         $extraParams
     );
 } else {
@@ -80,7 +80,7 @@ if ($view === 'board') {
          FROM TM_Tasks
          WHERE user_id = :p1
          $extraWhere
-         ORDER BY due_date ASC",
+         ORDER BY $sortSql",
         $extraParams
     );
 }
@@ -130,7 +130,7 @@ function priorityClass(string $p): string {
     return match($p) { 'high'=>'pri-high','mid'=>'pri-mid','low'=>'pri-low', default=>'pri-mid' };
 }
 function buildUrl(array $overrides = []): string {
-    global $view, $search, $filterCat, $filterPri, $dateFrom, $dateTo;
+    global $view, $search, $filterCat, $filterPri, $dateFrom, $dateTo, $sortCol, $sortDir;
     $params = array_filter([
         'view' => $overrides['view'] ?? $view,
         'q'    => $overrides['q']    ?? $search,
@@ -138,6 +138,23 @@ function buildUrl(array $overrides = []): string {
         'pri'  => $overrides['pri']  ?? $filterPri,
         'from' => $overrides['from'] ?? $dateFrom,
         'to'   => $overrides['to']   ?? $dateTo,
+        'sort' => $overrides['sort'] ?? $sortCol,
+        'dir'  => $overrides['dir']  ?? $sortDir,
+    ], fn($v) => $v !== '' && $v !== 'due_date' || isset($overrides['sort']));
+    // Always include sort/dir if they are non-default
+    if (($overrides['sort'] ?? $sortCol) !== 'due_date' || ($overrides['dir'] ?? $sortDir) !== 'asc') {
+        $params['sort'] = $overrides['sort'] ?? $sortCol;
+        $params['dir']  = $overrides['dir']  ?? $sortDir;
+    }
+    $params = array_filter([
+        'view' => $overrides['view'] ?? $view,
+        'q'    => $overrides['q']    ?? $search,
+        'cat'  => $overrides['cat']  ?? $filterCat,
+        'pri'  => $overrides['pri']  ?? $filterPri,
+        'from' => $overrides['from'] ?? $dateFrom,
+        'to'   => $overrides['to']   ?? $dateTo,
+        'sort' => $overrides['sort'] ?? ($sortCol !== 'due_date' ? $sortCol : ''),
+        'dir'  => $overrides['dir']  ?? ($sortDir !== 'asc'     ? $sortDir : ''),
     ], fn($v) => $v !== '');
     return 'TM_Tasks.php?' . http_build_query($params);
 }
@@ -151,9 +168,23 @@ function isOverdue(string $dueDate, string $status): bool {
     return $dueDate < date('Y-m-d') && !in_array($status, ['done','cancelled']);
 }
 
+// ── Sort params ────────────────────────────────────────────────────────────────
+$sortCol = $_GET['sort']    ?? 'due_date';
+$sortDir = strtolower($_GET['dir'] ?? 'asc') === 'desc' ? 'desc' : 'asc';
+
+$allowedSorts = ['task_name','category','due_date','priority','status'];
+if (!in_array($sortCol, $allowedSorts)) $sortCol = 'due_date';
+
+// Priority needs a custom sort order (high > mid > low)
+$sortExpr = match($sortCol) {
+    'priority' => "CASE priority WHEN 'high' THEN 1 WHEN 'mid' THEN 2 ELSE 3 END",
+    'status'   => "CASE status WHEN 'pending' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'review' THEN 3 WHEN 'done' THEN 4 ELSE 5 END",
+    default    => $sortCol,
+};
+$sortSql = "$sortExpr " . strtoupper($sortDir);
 // ── Notifications ─────────────────────────────────────────────────────────────
 require_once 'TM_PHP/TM_NavNotif.php';
-?><!DOCTYPE html>
+?>
 <html lang="en">
 <head>
     <meta charset="UTF-8"/>
@@ -475,6 +506,18 @@ table.task-table tbody tr.row-overdue td:first-child {
 /* Saving spinner overlay on card */
 .kanban-card.saving { opacity: .6; pointer-events: none; }
 
+/* ── Sortable column headers ──────────────────  */
+.th-sort {
+    cursor: pointer; user-select: none;
+    white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 5px;
+    text-decoration: none; color: inherit;
+}
+.th-sort:hover { color: var(--black); }
+.th-sort .sort-icon { font-size: 10px; color: var(--gray-400); }
+.th-sort.active { color: var(--black); }
+.th-sort.active .sort-icon { color: var(--black); }
+
 /* ── Quick-done green confirm button ─────────────────────  */
 .pc-modal-confirm-green {
     padding: 9px 22px; border-radius: 50px;
@@ -663,11 +706,25 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
             <table class="task-table">
                 <thead>
                     <tr>
-                        <th>Task</th>
-                        <th>Category</th>
-                        <th>Due Date</th>
-                        <th>Priority</th>
-                        <th>Status</th>
+                        <?php
+                        // Helper: build a sortable <th> link
+                        // Clicking the same column toggles asc/desc; clicking a new column defaults to asc
+                        function thSort(string $col, string $label, string $currentCol, string $currentDir): string {
+                            $isActive = $currentCol === $col;
+                            $nextDir  = ($isActive && $currentDir === 'asc') ? 'desc' : 'asc';
+                            $icon     = $isActive
+                                ? ($currentDir === 'asc' ? '▲' : '▼')
+                                : '↕';
+                            $url = buildUrl(['sort' => $col, 'dir' => $nextDir]);
+                            $cls = $isActive ? 'th-sort active' : 'th-sort';
+                            return "<th><a href=\"{$url}\" class=\"{$cls}\">{$label} <span class=\"sort-icon\">{$icon}</span></a></th>";
+                        }
+                        echo thSort('task_name', 'Task',     $sortCol, $sortDir);
+                        echo thSort('category',  'Category', $sortCol, $sortDir);
+                        echo thSort('due_date',  'Due Date', $sortCol, $sortDir);
+                        echo thSort('priority',  'Priority', $sortCol, $sortDir);
+                        echo thSort('status',    'Status',   $sortCol, $sortDir);
+                        ?>
                         <?php if ($view !== 'done'): ?>
                         <th>Action</th>
                         <?php endif; ?>

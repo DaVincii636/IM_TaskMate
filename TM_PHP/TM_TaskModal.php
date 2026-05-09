@@ -146,7 +146,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                         <option value="cancelled">Cancelled</option>
                     </select>
                 </div>
-                <div class="form-group dep-group">
+                <div class="form-group dep-group" id="tmEditDepGroup">
                     <label class="form-label">Must Complete First</label>
                     <select id="tmEditDepSelect" class="form-input dep-select">
                         <option value="">— Pick a task —</option>
@@ -684,14 +684,22 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         }
 
         function buildDepSelect() {
-            var sel = document.getElementById('tmEditDepSelect');
+            var sel   = document.getElementById('tmEditDepSelect');
+            var group = document.getElementById('tmEditDepGroup');
             if (!sel) return;
+
+            // Only show tasks that are due BEFORE this task's due date
+            var currentDue = (document.getElementById('editTaskDue') || {}).value || '';
+
             var tasks = getAvailTasks();
             var eligible = tasks.filter(function(t){
                 return t.Id !== _editingId &&
                        !['done','cancelled'].includes((t.Status||'').toLowerCase()) &&
-                       !_selected.find(function(s){return s.id===t.Id;});
+                       !_selected.find(function(s){return s.id===t.Id;}) &&
+                       // Only include tasks due on or before this task's due date
+                       (currentDue === '' || t.DueDate === '' || t.DueDate <= currentDue);
             });
+
             sel.innerHTML = '<option value="">— Pick a task —</option>';
             eligible.forEach(function(t){
                 var opt = document.createElement('option');
@@ -699,6 +707,12 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                 opt.textContent = t.Name+(t.DueDate?'  ·  '+fmtDate(t.DueDate):'');
                 sel.appendChild(opt);
             });
+
+            // Hide the entire section when no eligible tasks AND no existing blockers
+            if (group) {
+                var hasContent = eligible.length > 0 || _selected.length > 0;
+                group.style.display = hasContent ? '' : 'none';
+            }
         }
 
         var selEl = document.getElementById('tmEditDepSelect');
@@ -714,6 +728,12 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                 }
                 this.value='';
             });
+        }
+
+        // Rebuild dep select whenever the due date changes (updates eligible task list)
+        var dueEl = document.getElementById('editTaskDue');
+        if (dueEl) {
+            dueEl.addEventListener('change', function() { buildDepSelect(); });
         }
 
         window.tmEditDepLoad = function(taskId) {

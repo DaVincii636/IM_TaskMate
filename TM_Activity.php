@@ -11,24 +11,20 @@ $firstName = tm_uname();
 $flash     = tm_get_flash();
 
 // ── Filters ───────────────────────────────────────────────────────────────────
-$filterAction = trim($_GET['action'] ?? '');
-$filterType   = trim($_GET['type']   ?? '');
+$filterAction = '';                              // action dropdown removed
+$filterType   = trim($_GET['type']  ?? '');
+$sortOrder    = trim($_GET['sort']  ?? 'desc');  // 'desc' = newest first, 'asc' = oldest first
 $page         = max(1, (int)($_GET['page'] ?? 1));
 $perPage      = 25;
 
-$allowed_actions = ['create', 'edit', 'delete', 'status_change'];
-$allowed_types   = ['task', 'user'];
-if (!in_array($filterAction, $allowed_actions)) $filterAction = '';
-if (!in_array($filterType,   $allowed_types))   $filterType   = '';
+$allowed_types = ['task', 'user'];
+$sortOrder     = in_array($sortOrder, ['asc', 'desc']) ? $sortOrder : 'desc';
+if (!in_array($filterType, $allowed_types)) $filterType = '';
 
 // ── Build WHERE clause ────────────────────────────────────────────────────────
 $where  = 'WHERE user_id = :p1';
 $params = [$uid];
 
-if ($filterAction !== '') {
-    $params[] = $filterAction;
-    $where   .= ' AND action = :p' . count($params);
-}
 if ($filterType !== '') {
     $params[] = $filterType;
     $where   .= ' AND entity_type = :p' . count($params);
@@ -42,21 +38,22 @@ $page       = min($page, $totalPages);
 $offset     = ($page - 1) * $perPage;
 
 // ── Fetch page rows (Oracle pagination) ───────────────────────────────────────
+$orderDir  = $sortOrder === 'asc' ? 'ASC' : 'DESC';
 $pParams   = $params;
 $pParams[] = $offset + $perPage; // upper bound
 $pParams[] = $offset;            // lower bound
-$uIdx      = count($pParams) - 1;
-$lIdx      = count($pParams);
 
 $stmt = tm_exec(
     "SELECT * FROM (
          SELECT a.log_id, a.action, a.entity_type, a.entity_id,
                 a.entity_name, a.old_value, a.new_value,
                 TO_CHAR(a.created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at,
+                ROUND((CAST(a.created_at AS DATE) - DATE '1970-01-01') * 86400
+                      - TO_NUMBER(SUBSTR(TZ_OFFSET(SESSIONTIMEZONE), 1, 3)) * 3600) AS unix_ts,
                 ROWNUM AS rn
          FROM TM_AuditLog a
          $where
-         ORDER BY a.created_at DESC
+         ORDER BY a.created_at $orderDir
      )
      WHERE rn <= :p" . (count($pParams) - 1) . "
        AND rn >  :p" . count($pParams),
@@ -78,14 +75,14 @@ foreach ($statsRows as $s) {
 
 // ── URL builder ───────────────────────────────────────────────────────────────
 function buildActivityUrl(array $ov = []): string {
-    global $filterAction, $filterType, $page;
-    $action = array_key_exists('action', $ov) ? $ov['action'] : $filterAction;
-    $type   = array_key_exists('type',   $ov) ? $ov['type']   : $filterType;
-    $pg     = (int)(array_key_exists('page', $ov) ? $ov['page'] : $page);
+    global $filterType, $sortOrder, $page;
+    $pg   = (int)(array_key_exists('page', $ov) ? $ov['page'] : $page);
+    $type = array_key_exists('type', $ov) ? $ov['type'] : $filterType;
+    $sort = array_key_exists('sort', $ov) ? $ov['sort'] : $sortOrder;
     $p = array_filter([
-        'action' => $action,
-        'type'   => $type,
-        'page'   => $pg,
+        'type' => $type,
+        'sort' => ($sort !== 'desc' ? $sort : ''), // omit default
+        'page' => $pg,
     ], fn($v) => $v !== '' && $v !== 0 && $v !== 1);
     return 'TM_Activity.php' . ($p ? '?' . http_build_query($p) : '');
 }
@@ -322,49 +319,46 @@ require_once 'TM_PHP/TM_NavNotif.php';
 
     <!-- Stats strip — click to filter -->
     <div class="stats-strip">
-        <a href="TM_Activity.php" class="stat-pill<?= ($filterAction === '' && $filterType === '') ? ' active' : '' ?>">
+        <div class="stat-pill">
             <i class="fa-solid fa-list" style="color:var(--gray-400)"></i>
             <span class="num"><?= array_sum($statMap) ?></span> All
-        </a>
-        <a href="<?= buildActivityUrl(['action' => 'create', 'type' => '']) ?>" class="stat-pill<?= $filterAction === 'create' ? ' active' : '' ?>">
+        </div>
+        <div class="stat-pill">
             <i class="fa-solid fa-plus" style="color:#15803d"></i>
             <span class="num"><?= $statMap['create'] ?? 0 ?></span> Created
-        </a>
-        <a href="<?= buildActivityUrl(['action' => 'edit', 'type' => '']) ?>" class="stat-pill<?= $filterAction === 'edit' ? ' active' : '' ?>">
+        </div>
+        <div class="stat-pill">
             <i class="fa-solid fa-pen" style="color:#1d4ed8"></i>
             <span class="num"><?= $statMap['edit'] ?? 0 ?></span> Edited
-        </a>
-        <a href="<?= buildActivityUrl(['action' => 'status_change', 'type' => '']) ?>" class="stat-pill<?= $filterAction === 'status_change' ? ' active' : '' ?>">
+        </div>
+        <div class="stat-pill">
             <i class="fa-solid fa-arrow-right-arrow-left" style="color:#92400e"></i>
             <span class="num"><?= $statMap['status_change'] ?? 0 ?></span> Status Changes
-        </a>
-        <a href="<?= buildActivityUrl(['action' => 'delete', 'type' => '']) ?>" class="stat-pill<?= $filterAction === 'delete' ? ' active' : '' ?>">
+        </div>
+        <div class="stat-pill">
             <i class="fa-solid fa-trash" style="color:#b91c1c"></i>
             <span class="num"><?= $statMap['delete'] ?? 0 ?></span> Deleted
-        </a>
+        </div>
         <span class="result-count" style="margin-left:auto;font-size:12px;color:var(--gray-500);align-self:center">
             <?= number_format($totalRows) ?> event<?= $totalRows !== 1 ? 's' : '' ?>
         </span>
     </div>
 
-    <!-- Filter dropdowns -->
+    <!-- Filter bar — type filter + sort only (action dropdown removed for clarity) -->
     <form class="filter-bar" method="get" action="TM_Activity.php">
-        <select name="action" class="filter-select">
-            <option value="">All Actions</option>
-            <option value="create"        <?= $filterAction === 'create'        ? 'selected' : '' ?>>Created</option>
-            <option value="edit"          <?= $filterAction === 'edit'          ? 'selected' : '' ?>>Edited</option>
-            <option value="status_change" <?= $filterAction === 'status_change' ? 'selected' : '' ?>>Status Changes</option>
-            <option value="delete"        <?= $filterAction === 'delete'        ? 'selected' : '' ?>>Deleted</option>
-        </select>
         <select name="type" class="filter-select">
             <option value="">All Types</option>
             <option value="task" <?= $filterType === 'task' ? 'selected' : '' ?>>Tasks</option>
             <option value="user" <?= $filterType === 'user' ? 'selected' : '' ?>>Users</option>
         </select>
+        <select name="sort" class="filter-select">
+            <option value="desc" <?= $sortOrder === 'desc' ? 'selected' : '' ?>>Newest First</option>
+            <option value="asc"  <?= $sortOrder === 'asc'  ? 'selected' : '' ?>>Oldest First</option>
+        </select>
         <button type="submit" class="btn-filter-apply">
-            <i class="fa-solid fa-filter"></i> Filter
+            <i class="fa-solid fa-filter"></i> Apply
         </button>
-        <?php if ($filterAction !== '' || $filterType !== ''): ?>
+        <?php if ($filterType !== '' || $sortOrder !== 'desc'): ?>
         <a href="TM_Activity.php" class="btn-filter-clear">Clear</a>
         <?php endif; ?>
     </form>
@@ -411,8 +405,10 @@ require_once 'TM_PHP/TM_NavNotif.php';
             $badgeClass = $entityType === 'task' ? 'badge-task' : 'badge-user';
             $badgeLabel = strtoupper($entityType);
 
-            // Relative timestamp
-            $ts   = strtotime($createdAt);
+            // Use the Oracle-computed Unix timestamp to avoid timezone skew
+            // between the Oracle session timezone and PHP server time().
+            $ts   = (int)($row['unix_ts'] ?? 0);
+            if (!$ts) $ts = strtotime($createdAt) ?: time();
             $diff = time() - $ts;
             if ($diff < 60)         $timeAgo = 'Just now';
             elseif ($diff < 3600)   $timeAgo = floor($diff / 60) . 'm ago';

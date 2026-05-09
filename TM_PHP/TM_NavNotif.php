@@ -75,7 +75,11 @@ ob_start(); ?>
             $_nicon    = $_tm_notif_icons[$_ntype] ?? $_tm_notif_icons['due_soon'];
             $_nunread  = $_nread === 0 ? ' unread' : '';
         ?>
-        <li class="notif-item<?= $_nunread ?>" data-id="<?= $_nid ?>" data-task-id="<?= (int)($_n['TASK_ID'] ?? $_n['task_id'] ?? 0) ?>">
+        <li class="notif-item<?= $_nunread ?>"
+            data-id="<?= $_nid ?>"
+            data-task-id="<?= (int)($_n['TASK_ID'] ?? $_n['task_id'] ?? 0) ?>"
+            onclick="tmHandleNotifClick(this)"
+            style="cursor:pointer;">
             <div class="notif-dot type-<?= htmlspecialchars($_ntype) ?>"><?= $_nicon ?></div>
             <div class="notif-body">
                 <div class="notif-msg"><?= htmlspecialchars($_nmsg) ?></div>
@@ -89,6 +93,46 @@ ob_start(); ?>
 </div>
 <?php
 $tm_notif_bell_html = ob_get_clean();
+
+// Append the notification click handler script once per page.
+// tmHandleNotifClick: marks the notification read, closes the dropdown,
+// then opens the task view modal ON THE CURRENT PAGE — no redirect.
+$tm_notif_bell_html .= <<<'NOTIFJS'
+<script>
+function tmHandleNotifClick(el) {
+    var notifId = el.dataset.id;
+    var taskId  = el.dataset.taskId;
+
+    // 1. Mark as read via AJAX (silent — UI updates immediately)
+    if (el.classList.contains('unread')) {
+        el.classList.remove('unread');
+        el.classList.add('read');
+        var badge = document.getElementById('notifBadge');
+        if (badge) {
+            var n = Math.max(0, parseInt(badge.textContent, 10) - 1);
+            badge.textContent = n;
+            if (n === 0) badge.style.display = 'none';
+        }
+        fetch('TM_PHP/TM_NotifActions.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'action=mark_read&id=' + encodeURIComponent(notifId)
+        }).catch(function(){});
+    }
+
+    // 2. Close the dropdown
+    var dropdown = document.getElementById('notifDropdown');
+    if (dropdown) dropdown.classList.remove('open');
+
+    // 3. Open the task view modal on the current page (no redirect)
+    if (taskId && taskId !== '0' && typeof window.tmOpenView === 'function') {
+        window.tmOpenView(taskId);
+    }
+}
+</script>
+NOTIFJS;
+
 // Clean up temp vars from global scope
 unset($_tm_uid, $_tm_notif_stmt, $_tm_notifs, $_tm_unread, $_tm_notif_icons, $_n,
       $_nid, $_ntype, $_nmsg, $_nread, $_ntime, $_nicon, $_nunread);
+      

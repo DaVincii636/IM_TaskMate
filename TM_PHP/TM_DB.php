@@ -219,13 +219,19 @@ function tm_audit_sp(int $userId, string $action, string $entityType,
                   END;";
 
         $stmt = oci_parse($conn, $plsql);
-        oci_bind_by_name($stmt, ':p_user_id',     $userId,                    10);
-        oci_bind_by_name($stmt, ':p_action',      $action,                    20);
-        oci_bind_by_name($stmt, ':p_entity_type', $entityType,                20);
-        oci_bind_by_name($stmt, ':p_entity_id',   $entityId,                  10);
-        oci_bind_by_name($stmt, ':p_entity_name', substr($entityName, 0, 255), 255);
-        oci_bind_by_name($stmt, ':p_old_value',   substr($oldValue,   0, 500), 500);
-        oci_bind_by_name($stmt, ':p_new_value',   substr($newValue,   0, 500), 500);
+        // oci_bind_by_name requires a variable reference, not an expression.
+        // Assign substr() results to named variables first, then bind those.
+        $bindName   = substr($entityName, 0, 255);
+        $bindOld    = substr($oldValue,   0, 500);
+        $bindNew    = substr($newValue,   0, 500);
+
+        oci_bind_by_name($stmt, ':p_user_id',     $userId,     10);
+        oci_bind_by_name($stmt, ':p_action',      $action,     20);
+        oci_bind_by_name($stmt, ':p_entity_type', $entityType, 20);
+        oci_bind_by_name($stmt, ':p_entity_id',   $entityId,   10);
+        oci_bind_by_name($stmt, ':p_entity_name', $bindName,  255);
+        oci_bind_by_name($stmt, ':p_old_value',   $bindOld,   500);
+        oci_bind_by_name($stmt, ':p_new_value',   $bindNew,   500);
 
         oci_execute($stmt, OCI_NO_AUTO_COMMIT); // procedure handles its own INSERT
         oci_commit($conn);
