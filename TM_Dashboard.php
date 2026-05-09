@@ -39,10 +39,13 @@ $cntOverdue = _tm_count(tm_fetch_all(tm_exec(
 
 // ── 5 upcoming tasks (not done/cancelled, closest due date first) ─────────────
 $stmtUpcoming = tm_exec(
-    "SELECT task_name, TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
-            priority, status, color
+    "SELECT task_id, task_name,
+            TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
+            TO_CHAR(due_date,'YYYY-MM-DD')   AS due_date,
+            category, custom_category, priority, color, status, notes
      FROM (
-         SELECT task_name, due_date, priority, status, color
+         SELECT task_id, task_name, start_date, due_date,
+                category, custom_category, priority, color, status, notes
          FROM TM_Tasks
          WHERE user_id=:p1
            AND status NOT IN ('done','cancelled')
@@ -53,6 +56,15 @@ $stmtUpcoming = tm_exec(
     [$uid]
 );
 $upcoming = tm_fetch_all($stmtUpcoming);
+// Resolve CLOB fields
+$upcoming = array_map(function($row) {
+    if (isset($row['notes'])) {
+        if ($row['notes'] instanceof OCILob)  $row['notes'] = $row['notes']->load();
+        elseif (is_resource($row['notes']))   $row['notes'] = stream_get_contents($row['notes']);
+        $row['notes'] = (string)($row['notes'] ?? '');
+    }
+    return $row;
+}, $upcoming);
 
 // ── Notifications (shared partial: runs cron + builds bell HTML) ──────────────
 require_once 'TM_PHP/TM_NavNotif.php';
@@ -210,7 +222,7 @@ function statusLabel(string $s): string {
 
 .up-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .up-table tbody td { padding: 12px 1.25rem; border-top: 1px solid var(--gray-100); vertical-align: middle; }
-.up-table tbody tr:hover { background: var(--bg); }
+.up-table tbody tr:hover { background: var(--bg); cursor: pointer; }
 
 .task-name-cell { font-weight: 600; color: var(--black); }
 .color-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }
@@ -382,12 +394,13 @@ function statusLabel(string $s): string {
             <tbody>
             <?php foreach ($upcoming as $t):
                 $dueDate  = $t['DUE_DATE']  ?? $t['due_date'];
+                $taskId   = $t['TASK_ID']   ?? $t['task_id'];
                 $taskName = $t['TASK_NAME'] ?? $t['task_name'];
                 $pri      = $t['PRIORITY']  ?? $t['priority'];
                 $status   = $t['STATUS']    ?? $t['status'];
                 $color    = $t['COLOR']     ?? $t['color'];
             ?>
-            <tr>
+            <tr data-task-id="<?= (int)$taskId ?>" title="Click to view details">
                 <td class="task-name-cell">
                     <span class="color-dot" style="background:<?= htmlspecialchars($color) ?>"></span>
                     <?= htmlspecialchars($taskName) ?>
@@ -413,6 +426,8 @@ function statusLabel(string $s): string {
     </div>
 
 </div><!-- /.dash-page -->
+
+<?php require_once 'TM_PHP/TM_TaskModal.php'; ?>
 
 <div class="toast" id="toast"></div>
 
