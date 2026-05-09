@@ -95,13 +95,8 @@ const CalendarApp = (() => {
         dayTasks.slice(0, 3).forEach(t => {
             const dot = document.createElement('div');
             dot.className = 'task-dot';
-            const blockerCount = (typeof blockerMap !== 'undefined' && blockerMap[t.Id]) || 0;
-            // Show a plain text badge without emoji for blocked tasks
-            const blockerBadge = blockerCount > 0
-                ? `<span class="task-blocked-badge" title="${blockerCount} blocking task${blockerCount > 1 ? 's' : ''} pending">${blockerCount} blocked</span>`
-                : '';
             dot.innerHTML = `<div class="task-dot-indicator" style="background:${t.Color}"></div>
-                             <span class="task-dot-name">${t.Name}</span>${blockerBadge}`;
+                             <span class="task-dot-name">${t.Name}</span>`;
             dot.addEventListener('mouseenter', e => showTooltip(e, t));
             dot.addEventListener('mouseleave', hideTooltip);
             dot.addEventListener('click', () => openEdit(t));

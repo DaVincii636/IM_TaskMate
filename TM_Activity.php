@@ -79,10 +79,13 @@ foreach ($statsRows as $s) {
 // ── URL builder ───────────────────────────────────────────────────────────────
 function buildActivityUrl(array $ov = []): string {
     global $filterAction, $filterType, $page;
+    $action = array_key_exists('action', $ov) ? $ov['action'] : $filterAction;
+    $type   = array_key_exists('type',   $ov) ? $ov['type']   : $filterType;
+    $pg     = (int)(array_key_exists('page', $ov) ? $ov['page'] : $page);
     $p = array_filter([
-        'action' => $ov['action'] ?? $filterAction,
-        'type'   => $ov['type']   ?? $filterType,
-        'page'   => (int)($ov['page'] ?? $page),
+        'action' => $action,
+        'type'   => $type,
+        'page'   => $pg,
     ], fn($v) => $v !== '' && $v !== 0 && $v !== 1);
     return 'TM_Activity.php' . ($p ? '?' . http_build_query($p) : '');
 }
@@ -141,7 +144,15 @@ require_once 'TM_PHP/TM_NavNotif.php';
     font-size: 12px; font-weight: 600;
     border: 1.5px solid var(--border); background: var(--white);
     color: var(--gray-500);
+    cursor: pointer; text-decoration: none;
+    transition: border-color .15s, background .15s, color .15s;
 }
+.stat-pill:hover { border-color: var(--black); color: var(--black); }
+.stat-pill.active {
+    background: var(--black); border-color: var(--black);
+    color: #fff;
+}
+.stat-pill.active .num { color: #fff; }
 .stat-pill i { font-size: 12px; }
 .stat-pill .num { font-weight: 700; color: var(--black); }
 
@@ -309,49 +320,32 @@ require_once 'TM_PHP/TM_NavNotif.php';
         <p>Everything you've done in TaskMate, in chronological order.</p>
     </div>
 
-    <!-- Stats strip -->
+    <!-- Stats strip — click to filter -->
     <div class="stats-strip">
-        <div class="stat-pill">
+        <a href="TM_Activity.php" class="stat-pill<?= ($filterAction === '' && $filterType === '') ? ' active' : '' ?>">
+            <i class="fa-solid fa-list" style="color:var(--gray-400)"></i>
+            <span class="num"><?= array_sum($statMap) ?></span> All
+        </a>
+        <a href="<?= buildActivityUrl(['action' => 'create', 'type' => '']) ?>" class="stat-pill<?= $filterAction === 'create' ? ' active' : '' ?>">
             <i class="fa-solid fa-plus" style="color:#15803d"></i>
             <span class="num"><?= $statMap['create'] ?? 0 ?></span> Created
-        </div>
-        <div class="stat-pill">
+        </a>
+        <a href="<?= buildActivityUrl(['action' => 'edit', 'type' => '']) ?>" class="stat-pill<?= $filterAction === 'edit' ? ' active' : '' ?>">
             <i class="fa-solid fa-pen" style="color:#1d4ed8"></i>
             <span class="num"><?= $statMap['edit'] ?? 0 ?></span> Edited
-        </div>
-        <div class="stat-pill">
+        </a>
+        <a href="<?= buildActivityUrl(['action' => 'status_change', 'type' => '']) ?>" class="stat-pill<?= $filterAction === 'status_change' ? ' active' : '' ?>">
             <i class="fa-solid fa-arrow-right-arrow-left" style="color:#92400e"></i>
-            <span class="num"><?= $statMap['status_change'] ?? 0 ?></span> Status changes
-        </div>
-        <div class="stat-pill">
+            <span class="num"><?= $statMap['status_change'] ?? 0 ?></span> Status Changes
+        </a>
+        <a href="<?= buildActivityUrl(['action' => 'delete', 'type' => '']) ?>" class="stat-pill<?= $filterAction === 'delete' ? ' active' : '' ?>">
             <i class="fa-solid fa-trash" style="color:#b91c1c"></i>
             <span class="num"><?= $statMap['delete'] ?? 0 ?></span> Deleted
-        </div>
+        </a>
+        <span class="result-count" style="margin-left:auto;font-size:12px;color:var(--gray-500);align-self:center">
+            <?= number_format($totalRows) ?> event<?= $totalRows !== 1 ? 's' : '' ?>
+        </span>
     </div>
-
-    <!-- Filter bar -->
-    <form method="get" action="TM_Activity.php" class="filter-bar">
-        <select name="action" class="filter-select">
-            <option value="">All actions</option>
-            <option value="create"        <?= $filterAction==='create'        ? 'selected' : '' ?>>Created</option>
-            <option value="edit"          <?= $filterAction==='edit'          ? 'selected' : '' ?>>Edited</option>
-            <option value="status_change" <?= $filterAction==='status_change' ? 'selected' : '' ?>>Status changed</option>
-            <option value="delete"        <?= $filterAction==='delete'        ? 'selected' : '' ?>>Deleted</option>
-        </select>
-        <select name="type" class="filter-select">
-            <option value="">All types</option>
-            <option value="task" <?= $filterType==='task' ? 'selected' : '' ?>>Tasks</option>
-            <option value="user" <?= $filterType==='user' ? 'selected' : '' ?>>Users</option>
-        </select>
-        <button type="submit" class="btn-filter-apply" style="display:none;">
-                <i class="fa-solid fa-filter"></i> Filter
-            </button>
-        <?php if ($filterAction || $filterType): ?>
-        <a href="TM_Activity.php" class="btn-filter-clear">Clear</a>
-        <?php endif; ?>
-        <span class="result-count"><?= number_format($totalRows) ?> event<?= $totalRows !== 1 ? 's' : '' ?></span>
-    </form>
-
     <!-- Feed -->
     <div class="feed-card">
         <?php if (empty($rows)): ?>

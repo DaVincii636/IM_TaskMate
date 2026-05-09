@@ -1190,5 +1190,24 @@ function submitQuickDone(id) {
 
 })();
 </script>
+
+<script>
+// ── Notification highlight: scroll to task when arriving via ?highlight=ID ────
+(function () {
+    var params    = new URLSearchParams(window.location.search);
+    var taskId    = params.get('highlight');
+    if (!taskId) return;
+    var el = document.querySelector('[data-task-id="' + taskId + '"]');
+    if (!el) return;
+    // Scroll the element into view
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Add a brief flash highlight
+    el.style.transition = 'box-shadow 0.3s ease';
+    el.style.boxShadow  = '0 0 0 3px var(--black)';
+    setTimeout(function () {
+        el.style.boxShadow = '';
+    }, 2000);
+})();
+</script>
 </body>
 </html>

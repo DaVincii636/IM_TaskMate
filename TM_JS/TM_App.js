@@ -251,31 +251,39 @@ function submitDeleteTask() {
         }
     });
 
-    // Mark single notification as read on click
+    // Mark single notification as read on click, and open the task if there is one
     dropdown.querySelectorAll('.notif-item[data-id]').forEach(function (item) {
         item.addEventListener('click', function () {
-            const id = this.dataset.id;
-            if (!this.classList.contains('unread')) return;
-            fetch('TM_PHP/TM_NotifActions.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'action=mark_read&id=' + encodeURIComponent(id)
-            }).then(function () {
-                item.classList.remove('unread');
-                item.style.removeProperty('background');
-                // Remove the left accent bar by removing unread class
-                // Update badge count
-                const badge = document.getElementById('notifBadge');
-                if (badge) {
-                    const current = parseInt(badge.textContent, 10) || 0;
-                    const next = current - 1;
-                    if (next <= 0) {
-                        badge.style.display = 'none';
-                    } else {
-                        badge.textContent = next > 99 ? '99+' : next;
+            const id     = this.dataset.id;
+            const taskId = this.dataset.taskId;
+
+            // Mark as read (fire-and-forget)
+            if (this.classList.contains('unread')) {
+                fetch('TM_PHP/TM_NotifActions.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'action=mark_read&id=' + encodeURIComponent(id)
+                }).then(function () {
+                    item.classList.remove('unread');
+                    item.style.removeProperty('background');
+                    const badge = document.getElementById('notifBadge');
+                    if (badge) {
+                        const current = parseInt(badge.textContent, 10) || 0;
+                        const next = current - 1;
+                        if (next <= 0) {
+                            badge.style.display = 'none';
+                        } else {
+                            badge.textContent = next > 99 ? '99+' : next;
+                        }
                     }
-                }
-            });
+                });
+            }
+
+            // Navigate to the task page if a task_id is present
+            if (taskId && parseInt(taskId, 10) > 0) {
+                dropdown.classList.remove('open');
+                window.location.href = 'TM_Tasks.php?highlight=' + encodeURIComponent(taskId);
+            }
         });
     });
 

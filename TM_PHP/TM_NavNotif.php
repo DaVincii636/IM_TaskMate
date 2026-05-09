@@ -75,7 +75,7 @@ ob_start(); ?>
             $_nicon    = $_tm_notif_icons[$_ntype] ?? $_tm_notif_icons['due_soon'];
             $_nunread  = $_nread === 0 ? ' unread' : '';
         ?>
-        <li class="notif-item<?= $_nunread ?>" data-id="<?= $_nid ?>">
+        <li class="notif-item<?= $_nunread ?>" data-id="<?= $_nid ?>" data-task-id="<?= (int)($_n['TASK_ID'] ?? $_n['task_id'] ?? 0) ?>">
             <div class="notif-dot type-<?= htmlspecialchars($_ntype) ?>"><?= $_nicon ?></div>
             <div class="notif-body">
                 <div class="notif-msg"><?= htmlspecialchars($_nmsg) ?></div>

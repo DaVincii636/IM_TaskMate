@@ -482,7 +482,12 @@ switch ($action) {
 
 $redirect = match($action) {
     'quick_done' => '../TM_Tasks.php',
-    default      => '../TM_Calendar.php',
+    default      => (function() {
+        $ref = $_SERVER['HTTP_REFERER'] ?? '';
+        if (strpos($ref, 'TM_Dashboard.php') !== false) return '../TM_Dashboard.php';
+        if (strpos($ref, 'TM_Tasks.php')     !== false) return '../TM_Tasks.php';
+        return '../TM_Calendar.php';
+    })(),
 };
 header('Location: ' . $redirect); exit;
 

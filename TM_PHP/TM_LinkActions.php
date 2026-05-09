@@ -42,7 +42,56 @@ if ($action === 'list') {
 
 switch ($action) {
 
-    case 'add':
+    case 'save_links':
+        // Persist dependency (blocker) links when a task is edited.
+        // Replaces existing links entirely with the new set.
+        $taskId     = (int)($_POST['task_id']     ?? 0);
+        $blockerRaw = trim($_POST['blocker_ids']  ?? '');
+
+        if ($taskId <= 0) {
+            if ($isApi) tm_api_err('Invalid task_id.');
+            break;
+        }
+        // Verify the task belongs to this user
+        $ownerRow = tm_fetch_one(tm_exec(
+            "SELECT task_id FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2",
+            [$taskId, $uid]
+        ));
+        if (!$ownerRow) {
+            if ($isApi) tm_api_err('Task not found.', 404);
+            break;
+        }
+
+        // Delete all existing blocker links for this task
+        tm_exec(
+            "DELETE FROM TM_TaskLinks WHERE task_id=:p1 AND link_type='blocks'",
+            [$taskId]
+        );
+
+        // Insert the new set (empty string = remove all, which we already did)
+        if ($blockerRaw !== '') {
+            foreach (explode(',', $blockerRaw) as $rawBid) {
+                $bid = (int)trim($rawBid);
+                if ($bid <= 0 || $bid === $taskId) continue;
+                // Verify the blocker task belongs to this user
+                $bo = tm_fetch_one(tm_exec(
+                    "SELECT task_id FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2",
+                    [$bid, $uid]
+                ));
+                if (!$bo) continue;
+                tm_exec(
+                    "INSERT INTO TM_TaskLinks (task_id, depends_on_id, link_type)
+                     VALUES (:p1, :p2, 'blocks')",
+                    [$taskId, $bid]
+                );
+            }
+        }
+
+        if ($isApi) tm_api_ok(['task_id' => $taskId, 'saved' => true]);
+        // save_links is always called via fetch(); no redirect needed
+        break;
+
+
         $name  = trim($_POST['name']           ?? '');
         $start = trim($_POST['startDate']      ?? '');
         $due   = trim($_POST['dueDate']        ?? '');

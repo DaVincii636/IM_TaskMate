@@ -76,6 +76,26 @@ $upcoming = array_map(function($row) {
     return $row;
 }, $upcoming);
 
+// ── All tasks (for Add Task dependency select) ────────────────────────────────
+$stmtAllTasks = tm_exec(
+    "SELECT task_id, task_name, TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
+            TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
+            category, custom_category, priority, color, notes, status, recurrence
+     FROM TM_Tasks WHERE user_id = :p1 ORDER BY due_date ASC",
+    [$uid]
+);
+$allTasks = tm_fetch_all($stmtAllTasks);
+$allTasks = array_map(function($row) {
+    if (isset($row['notes'])) {
+        if ($row['notes'] instanceof OCILob) $row['notes'] = $row['notes']->load();
+        elseif (is_resource($row['notes']))  $row['notes'] = stream_get_contents($row['notes']);
+        $row['notes'] = (string)($row['notes'] ?? '');
+    }
+    return $row;
+}, $allTasks);
+$tasksJson = json_encode($allTasks, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
+if ($tasksJson === false) { $tasksJson = '[]'; }
+
 // ── Notifications (shared partial: runs cron + builds bell HTML) ──────────────
 require_once 'TM_PHP/TM_NavNotif.php';
 
@@ -464,68 +484,68 @@ function statusLabel(string $s): string {
 </script>
 <script src="TM_JS/TM_App.js"></script>
 
-<!-- ── Add Task Modal ─────────────────────────────────────────────────── -->
+<!-- ── Add Task Modal (unified with Calendar version) ──────────────────────── -->
 <div class="modal-overlay" id="addTaskModal">
     <div class="modal-card">
         <div class="modal-header">
             <div class="modal-title">New Task</div>
             <button class="modal-close" onclick="closeModal('addTaskModal')">&#x2715;</button>
         </div>
-        <form method="post" action="TM_PHP/TM_TaskActions.php" id="dashAddTaskForm">
+        <form method="post" action="TM_PHP/TM_TaskActions.php" id="addTaskForm">
             <input type="hidden" name="action" value="add"/>
             <div class="modal-body">
                 <div class="form-group">
                     <label class="form-label">Task Name</label>
-                    <input type="text" name="name" class="form-input" id="dash_taskName" placeholder="e.g. Buy groceries" required/>
+                    <input type="text" name="name" class="form-input" id="addTaskName" placeholder="e.g. Buy groceries" required/>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label class="form-label">Start Date</label>
-                        <input type="date" name="startDate" id="dash_startDate" class="form-input" required/>
+                        <input type="date" name="startDate" class="form-input" id="addTaskStart" required/>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Due Date</label>
-                        <input type="date" name="dueDate" id="dash_dueDate" class="form-input" required/>
+                        <input type="date" name="dueDate" class="form-input" id="addTaskDue" required/>
                     </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Category</label>
-                    <div class="category-options" id="dash_catOptions">
+                    <div class="category-options" id="addCatOptions">
                         <button type="button" class="cat-btn active" data-cat="errands">Errands</button>
                         <button type="button" class="cat-btn" data-cat="school">School</button>
                         <button type="button" class="cat-btn" data-cat="medicine">Medicine</button>
                         <button type="button" class="cat-btn" data-cat="others">Others</button>
                     </div>
-                    <input type="hidden" name="category" id="dash_categoryInput" value="errands"/>
-                    <div id="dash_othersWrap" style="display:none;margin-top:8px">
+                    <input type="hidden" name="category" id="addCategoryInput" value="errands"/>
+                    <div id="addOthersWrap" style="display:none;margin-top:8px">
                         <input type="text" name="customCategory" class="form-input" placeholder="Specify category..."/>
                     </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Priority</label>
-                    <div class="priority-options" id="dash_priorityOptions">
+                    <div class="priority-options" id="addPriorityOptions">
                         <button type="button" class="priority-btn high" data-priority="high">High</button>
                         <button type="button" class="priority-btn mid active" data-priority="mid">Mid</button>
                         <button type="button" class="priority-btn low" data-priority="low">Low</button>
                     </div>
-                    <input type="hidden" name="priority" id="dash_priorityInput" value="mid"/>
+                    <input type="hidden" name="priority" id="addPriorityInput" value="mid"/>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Task Color</label>
-                    <div class="color-picker-row" id="dash_colorRow"></div>
-                    <input type="hidden" name="color" id="dash_colorInput" value="#ef4444"/>
+                    <div class="color-picker-row" id="addColorRow"></div>
+                    <input type="hidden" name="color" id="addColorInput" value="#ef4444"/>
                 </div>
                 <div class="form-group dep-group">
                     <label class="form-label">Must Complete First</label>
-                    <select id="dash_depSelect" class="form-input dep-select">
+                    <select id="addDepSelect" class="form-input dep-select">
                         <option value="">— Pick a task —</option>
                     </select>
-                    <div class="dep-selected" id="dash_depSelected"></div>
-                    <input type="hidden" id="dash_depBlockerIds" name="blocker_ids" value=""/>
+                    <div class="dep-selected" id="addDepSelected"></div>
+                    <input type="hidden" id="addDepBlockerIds" name="blocker_ids" value=""/>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Recurrence</label>
-                    <select name="recurrence" class="form-input" id="dash_recurrence">
+                    <select name="recurrence" class="form-input" id="addRecurrence">
                         <option value="">— None (one-time) —</option>
                         <option value="daily">Daily</option>
                         <option value="weekly">Weekly</option>
@@ -548,8 +568,21 @@ function statusLabel(string $s): string {
 </div>
 
 <script>
+// Pass all tasks to JS so the dependency select is populated
+const serverTasks = <?= $tasksJson ?>.map(function(t) {
+    return {
+        Id:        parseInt(t.task_id, 10),
+        Name:      t.task_name,
+        Status:    t.status || 'pending',
+        Color:     t.color  || '#ef4444',
+        DueDate:   t.due_date || ''
+    };
+});
+</script>
+
+<script>
 (function () {
-    const COLORS = [
+    var COLORS = [
         { name: 'Red',    hex: '#ef4444' },
         { name: 'Orange', hex: '#f97316' },
         { name: 'Yellow', hex: '#eab308' },
@@ -560,10 +593,10 @@ function statusLabel(string $s): string {
     ];
 
     // Build color swatches
-    const colorRow   = document.getElementById('dash_colorRow');
-    const colorInput = document.getElementById('dash_colorInput');
+    var colorRow   = document.getElementById('addColorRow');
+    var colorInput = document.getElementById('addColorInput');
     COLORS.forEach(function (c) {
-        const sw = document.createElement('div');
+        var sw = document.createElement('div');
         sw.className = 'color-swatch' + (c.hex === '#ef4444' ? ' selected' : '');
         sw.style.background = c.hex;
         sw.title = c.name;
@@ -576,41 +609,40 @@ function statusLabel(string $s): string {
     });
 
     // Category buttons
-    document.querySelectorAll('#dash_catOptions .cat-btn').forEach(function (btn) {
+    document.querySelectorAll('#addCatOptions .cat-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            document.querySelectorAll('#dash_catOptions .cat-btn').forEach(function (b) { b.classList.remove('active'); });
+            document.querySelectorAll('#addCatOptions .cat-btn').forEach(function (b) { b.classList.remove('active'); });
             btn.classList.add('active');
-            document.getElementById('dash_categoryInput').value = btn.dataset.cat;
-            document.getElementById('dash_othersWrap').style.display = btn.dataset.cat === 'others' ? 'block' : 'none';
+            document.getElementById('addCategoryInput').value = btn.dataset.cat;
+            document.getElementById('addOthersWrap').style.display = btn.dataset.cat === 'others' ? 'block' : 'none';
         });
     });
 
     // Priority buttons
-    document.querySelectorAll('#dash_priorityOptions .priority-btn').forEach(function (btn) {
+    document.querySelectorAll('#addPriorityOptions .priority-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            document.querySelectorAll('#dash_priorityOptions .priority-btn').forEach(function (b) { b.classList.remove('active'); });
+            document.querySelectorAll('#addPriorityOptions .priority-btn').forEach(function (b) { b.classList.remove('active'); });
             btn.classList.add('active');
-            document.getElementById('dash_priorityInput').value = btn.dataset.priority;
+            document.getElementById('addPriorityInput').value = btn.dataset.priority;
         });
     });
 
-    // Default today's date on open — bind to all buttons that open addTaskModal
+    // Set today's date when modal opens; reset dep UI
     document.querySelectorAll('[onclick*="addTaskModal"]').forEach(function (el) {
         el.addEventListener('click', function () {
-            const today = new Date().toISOString().split('T')[0];
-            const s = document.getElementById('dash_startDate');
-            const d = document.getElementById('dash_dueDate');
-            if (!s.value) s.value = today;
-            if (!d.value) d.value = today;
-            // Reset dep UI on open
-            if (typeof window.dashDepReset === 'function') window.dashDepReset();
+            var today = new Date().toISOString().split('T')[0];
+            var s = document.getElementById('addTaskStart');
+            var d = document.getElementById('addTaskDue');
+            if (s && !s.value) s.value = today;
+            if (d && !d.value) d.value = today;
+            if (typeof window.addDepReset === 'function') window.addDepReset();
         });
     });
 
-    // ── Dependency UI for Dashboard Add Task modal ─────────────────────────────
+    // ── Dependency UI ─────────────────────────────────────────────────────────
     (function () {
         function toNum(v) { return parseInt(v, 10) || 0; }
-        function escDep(s) {
+        function esc(s) {
             return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
                             .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
@@ -621,23 +653,15 @@ function statusLabel(string $s): string {
             return months[parseInt(p[1],10)-1] + ' ' + parseInt(p[2],10);
         }
 
-        // Fetch tasks from the page's serverTasks if available (Calendar page),
-        // otherwise fall back to an empty list (Dashboard will rely on page reload).
         function getAvailTasks() {
-            var raw = (typeof window.dashTasks !== 'undefined') ? window.dashTasks : [];
-            return raw.map(function(t) {
-                return { Id: toNum(t.task_id || t.Id), Name: t.task_name || t.Name,
-                         Status: t.status || t.Status || 'pending',
-                         Color: t.color || t.Color || '#888',
-                         DueDate: t.due_date || t.DueDate || '' };
-            });
+            return (typeof serverTasks !== 'undefined' ? serverTasks : []);
         }
 
         var _selected = [];
 
         function renderDep() {
-            var container = document.getElementById('dash_depSelected');
-            var hidden    = document.getElementById('dash_depBlockerIds');
+            var container = document.getElementById('addDepSelected');
+            var hidden    = document.getElementById('addDepBlockerIds');
             if (!container || !hidden) return;
             container.innerHTML = '';
             hidden.value = _selected.map(function(s) { return s.id; }).join(',');
@@ -645,8 +669,8 @@ function statusLabel(string $s): string {
                 var chip = document.createElement('div');
                 chip.className = 'dep-chip';
                 chip.innerHTML =
-                    '<span class="dep-chip-dot" style="background:' + escDep(s.color) + '"></span>' +
-                    '<span class="dep-chip-name">' + escDep(s.name) + '</span>' +
+                    '<span class="dep-chip-dot" style="background:' + esc(s.color) + '"></span>' +
+                    '<span class="dep-chip-name">' + esc(s.name) + '</span>' +
                     (s.dueDate ? '<span class="dep-chip-due">' + fmtDate(s.dueDate) + '</span>' : '') +
                     '<button type="button" class="dep-chip-remove" title="Remove"><i class="fa-solid fa-xmark"></i></button>';
                 chip.querySelector('.dep-chip-remove').addEventListener('click', function() {
@@ -660,10 +684,9 @@ function statusLabel(string $s): string {
         }
 
         function buildDepSelect() {
-            var sel = document.getElementById('dash_depSelect');
+            var sel = document.getElementById('addDepSelect');
             if (!sel) return;
-            var tasks = getAvailTasks();
-            var eligible = tasks.filter(function(t) {
+            var eligible = getAvailTasks().filter(function(t) {
                 return !['done','cancelled'].includes((t.Status||'').toLowerCase()) &&
                        !_selected.find(function(s) { return s.id === t.Id; });
             });
@@ -676,7 +699,7 @@ function statusLabel(string $s): string {
             });
         }
 
-        var selEl = document.getElementById('dash_depSelect');
+        var selEl = document.getElementById('addDepSelect');
         if (selEl) {
             selEl.addEventListener('change', function() {
                 var id = toNum(this.value);
@@ -691,29 +714,22 @@ function statusLabel(string $s): string {
             });
         }
 
-        window.dashDepReset = function() { _selected = []; renderDep(); };
+        window.addDepReset = function() { _selected = []; renderDep(); };
         buildDepSelect();
         renderDep();
     })();
-})();
-</script>
 
-<script>
-(function () {
-    // ── Auto-expand textareas ──────────────────────────────
-    function autoExpand(el) {
-        el.style.height = 'auto';
-        el.style.height = el.scrollHeight + 'px';
-    }
+    // ── Auto-expand textareas ──────────────────────────────────────────────────
+    function autoExpand(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
     document.querySelectorAll('textarea.tm-auto-expand').forEach(function (ta) {
         ta.addEventListener('input', function () { autoExpand(ta); });
     });
 
-    // ── Daily recurrence: sync start & due in Add modal ───
+    // ── Daily recurrence: keep start & due in sync ────────────────────────────
     (function () {
-        var recEl   = document.getElementById('dash_recurrence');
-        var startEl = document.getElementById('dash_startDate');
-        var dueEl   = document.getElementById('dash_dueDate');
+        var recEl   = document.getElementById('addRecurrence');
+        var startEl = document.getElementById('addTaskStart');
+        var dueEl   = document.getElementById('addTaskDue');
         if (!recEl || !startEl || !dueEl) return;
         recEl.addEventListener('change', function () {
             if (recEl.value === 'daily' && startEl.value) dueEl.value = startEl.value;
@@ -725,6 +741,24 @@ function statusLabel(string $s): string {
             if (recEl.value === 'daily') startEl.value = dueEl.value;
         });
     })();
+
+    // ── Form validation before submit ─────────────────────────────────────────
+    var addForm = document.getElementById('addTaskForm');
+    if (addForm) {
+        addForm.addEventListener('submit', function (e) {
+            var name  = document.getElementById('addTaskName');
+            var start = document.getElementById('addTaskStart');
+            var due   = document.getElementById('addTaskDue');
+            if (!name.value.trim()) { e.preventDefault(); name.focus(); return; }
+            if (!start.value)       { e.preventDefault(); start.focus(); return; }
+            if (!due.value)         { e.preventDefault(); due.focus(); return; }
+            if (start.value > due.value) {
+                e.preventDefault();
+                alert('Start date cannot be after due date.');
+                start.focus();
+            }
+        });
+    }
 })();
 </script>
 
