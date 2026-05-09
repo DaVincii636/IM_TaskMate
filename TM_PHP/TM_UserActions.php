@@ -152,6 +152,136 @@ switch ($action) {
         tm_flash('success', 'User deleted.');
         break;
 
+    // ── FEATURE 7: Approve a pending user ────────────────────────────────────
+    case 'approve':
+        if (!$is_admin) {
+            tm_flash('error', 'Insufficient permissions.'); break;
+        }
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id <= 0) { tm_flash('error', 'Invalid user.'); break; }
+
+        $row = tm_fetch_one(tm_exec(
+            "SELECT first_name, last_name, status FROM TM_Users WHERE user_id=:p1", [$id]
+        ));
+        if (!$row) { tm_flash('error', 'User not found.'); break; }
+
+        tm_exec("UPDATE TM_Users SET status='active' WHERE user_id=:p1", [$id]);
+        $name = trim($row['first_name'] . ' ' . $row['last_name']);
+        tm_audit($uid, 'edit', 'user', $id, $name, 'status:pending', 'status:active');
+        tm_flash('success', "User '$name' approved and activated.");
+        break;
+
+    // ── FEATURE 7: Suspend a user ─────────────────────────────────────────────
+    case 'suspend':
+        if (!$is_admin) {
+            tm_flash('error', 'Insufficient permissions.'); break;
+        }
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id <= 0) { tm_flash('error', 'Invalid user.'); break; }
+
+        $row = tm_fetch_one(tm_exec(
+            "SELECT first_name, last_name, status FROM TM_Users WHERE user_id=:p1", [$id]
+        ));
+        if (!$row) { tm_flash('error', 'User not found.'); break; }
+
+        $oldStatus = $row['status'] ?? 'active';
+        tm_exec("UPDATE TM_Users SET status='suspended' WHERE user_id=:p1", [$id]);
+        $name = trim($row['first_name'] . ' ' . $row['last_name']);
+        tm_audit($uid, 'edit', 'user', $id, $name, "status:{$oldStatus}", 'status:suspended');
+        tm_flash('success', "User '$name' suspended.");
+        break;
+
+    // ── FEATURE 9: Bulk CSV Import ────────────────────────────────────────────
+    // Expected CSV columns (header row required):
+    //   first_name, last_name, email, phone, password, role
+    // Role defaults to 'user' if omitted or invalid.
+    // All imported accounts are set to 'active' (admin-initiated, no approval needed).
+    case 'csv_import':
+        if (!$is_admin) {
+            tm_flash('error', 'Insufficient permissions.'); break;
+        }
+        if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
+            tm_flash('error', 'CSV file upload failed. Please try again.'); break;
+        }
+
+        $fh = fopen($_FILES['csv_file']['tmp_name'], 'r');
+        if (!$fh) { tm_flash('error', 'Could not open uploaded file.'); break; }
+
+        // Read header row and normalise column names
+        $header = fgetcsv($fh);
+        if (!$header) { fclose($fh); tm_flash('error', 'CSV file is empty.'); break; }
+        $header = array_map('trim', array_map('strtolower', $header));
+
+        $required = ['first_name', 'last_name', 'email', 'phone', 'password'];
+        $missing  = array_diff($required, $header);
+        if ($missing) {
+            fclose($fh);
+            tm_flash('error', 'CSV is missing required columns: ' . implode(', ', $missing));
+            break;
+        }
+
+        $colIdx = array_flip($header); // column name → index
+
+        $success = 0;
+        $skipped = [];
+        $rowNum  = 1; // 1 = header already consumed
+
+        while (($row = fgetcsv($fh)) !== false) {
+            $rowNum++;
+            // Map by column name to handle any column order
+            $fn   = trim($row[$colIdx['first_name']] ?? '');
+            $ln   = trim($row[$colIdx['last_name']]  ?? '');
+            $em   = trim($row[$colIdx['email']]      ?? '');
+            $ph   = trim($row[$colIdx['phone']]      ?? '');
+            $pw   = $row[$colIdx['password']]        ?? '';
+            $role = trim($row[$colIdx['role'] ?? -1] ?? 'user');
+
+            if (!in_array($role, ['user', 'moderator', 'admin'])) $role = 'user';
+
+            // Validate required fields
+            if (!$fn || !$ln || !$em || !$ph || !$pw) {
+                $skipped[] = "Row {$rowNum}: missing required field(s)";
+                continue;
+            }
+            if (!filter_var($em, FILTER_VALIDATE_EMAIL)) {
+                $skipped[] = "Row {$rowNum}: invalid email '{$em}'";
+                continue;
+            }
+            if (strlen($pw) < 6) {
+                $skipped[] = "Row {$rowNum}: password too short for '{$em}'";
+                continue;
+            }
+
+            // Check for duplicate email
+            $chk = tm_exec('SELECT COUNT(*) FROM TM_Users WHERE email=:p1', [$em]);
+            if ((int)tm_scalar($chk) > 0) {
+                $skipped[] = "Row {$rowNum}: email '{$em}' already exists";
+                continue;
+            }
+
+            $un   = strtolower(explode('@', $em)[0]) . '_' . rand(100, 999);
+            $hash = password_hash($pw, PASSWORD_BCRYPT);
+
+            tm_exec(
+                'INSERT INTO TM_Users (username, email, password_hash, first_name, last_name, phone, role, status)
+                 VALUES (:p1, :p2, :p3, :p4, :p5, :p6, :p7, :p8)',
+                [$un, $em, $hash, $fn, $ln, $ph, $role, 'active']
+            );
+            $success++;
+        }
+        fclose($fh);
+
+        // Store import summary in session for display on Admin Panel
+        $_SESSION['tm_csv_import_summary'] = [
+            'success' => $success,
+            'skipped' => $skipped,
+        ];
+
+        $msg = "{$success} user(s) imported successfully.";
+        if ($skipped) $msg .= ' ' . count($skipped) . ' row(s) skipped (see import summary).';
+        tm_flash('success', $msg);
+        break;
+
 
     case 'update_self':
         // ── Self-service profile update (Feature 8) ───────────────────────────

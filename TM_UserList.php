@@ -5,7 +5,7 @@ tm_require_role('moderator');
 
 $flash     = tm_get_flash();
 $userName  = tm_uname();
-$stmt = tm_exec('SELECT user_id, first_name, last_name, email, phone, role FROM TM_Users ORDER BY user_id DESC');
+$stmt = tm_exec('SELECT user_id, first_name, last_name, email, phone, role, status FROM TM_Users ORDER BY user_id DESC');
 $users     = tm_fetch_all($stmt);
 $userCount = count($users);
 $is_admin  = tm_is_admin();
@@ -117,10 +117,88 @@ require_once 'TM_PHP/TM_NavNotif.php';
         </div>
     </div>
 
+    <?php
+    // ── Feature 7: Approval queue ─────────────────────────────────────────────
+    $pendingStmt = tm_exec(
+        "SELECT user_id, first_name, last_name, email, phone FROM TM_Users WHERE status='pending' ORDER BY created_at ASC"
+    );
+    $pendingUsers = tm_fetch_all($pendingStmt);
+    if ($is_admin && !empty($pendingUsers)):
+    ?>
+    <div class="table-card" style="margin-bottom:24px;border:1.5px solid #fcd34d;">
+        <div style="padding:14px 20px;background:#fffbeb;border-bottom:1px solid #fde68a;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:1rem;">⏳</span>
+            <strong style="font-size:14px;color:#92400e;">Pending Approval (<?= count($pendingUsers) ?>)</strong>
+            <span style="font-size:12px;color:#b45309;">These users registered and are awaiting activation.</span>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                <?php foreach ($pendingUsers as $i => $pu): ?>
+                <tr>
+                    <td><?= $i + 1 ?></td>
+                    <td class="td-name"><?= htmlspecialchars($pu['first_name'] . ' ' . $pu['last_name']) ?></td>
+                    <td><?= htmlspecialchars($pu['email']) ?></td>
+                    <td><?= htmlspecialchars($pu['phone']) ?></td>
+                    <td>
+                        <div class="td-actions">
+                            <form method="post" action="TM_PHP/TM_UserActions.php" style="display:inline">
+                                <input type="hidden" name="action" value="approve"/>
+                                <input type="hidden" name="id" value="<?= $pu['user_id'] ?>"/>
+                                <button type="submit" style="padding:6px 14px;font-size:12px;font-weight:600;border-radius:6px;border:1px solid #6ee7b7;background:#ecfdf5;color:#065f46;cursor:pointer;font-family:'Poppins',sans-serif;">
+                                    ✓ Approve
+                                </button>
+                            </form>
+                            <form method="post" action="TM_PHP/TM_UserActions.php" style="display:inline">
+                                <input type="hidden" name="action" value="suspend"/>
+                                <input type="hidden" name="id" value="<?= $pu['user_id'] ?>"/>
+                                <button type="submit" class="btn-delete-user">✗ Reject</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <?php
+    // ── Feature 9: CSV Import summary (shown once after import) ──────────────
+    if (!empty($_SESSION['tm_csv_import_summary'])):
+        $summary = $_SESSION['tm_csv_import_summary'];
+        unset($_SESSION['tm_csv_import_summary']);
+    ?>
+    <div class="table-card" style="margin-bottom:24px;border:1.5px solid #a5b4fc;">
+        <div style="padding:14px 20px;background:#eef2ff;border-bottom:1px solid #c7d2fe;">
+            <strong style="font-size:14px;color:#3730a3;">📋 CSV Import Summary</strong>
+        </div>
+        <div style="padding:16px 20px;font-size:13px;">
+            <p style="color:#065f46;margin:0 0 8px"><strong><?= $summary['success'] ?></strong> user(s) imported successfully.</p>
+            <?php if (!empty($summary['skipped'])): ?>
+            <p style="color:#92400e;margin:0 0 6px"><strong><?= count($summary['skipped']) ?></strong> row(s) skipped:</p>
+            <ul style="margin:0;padding-left:20px;color:#78350f;">
+                <?php foreach ($summary['skipped'] as $s): ?>
+                <li><?= htmlspecialchars($s) ?></li>
+                <?php endforeach; ?>
+            </ul>
+            <?php endif; ?>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <div class="admin-bar">
         <span class="admin-badge">⚙ User List</span>
         <?php if ($is_admin): ?>
-        <button class="btn-add-user" onclick="openAdminModal('addModal')">Add User</button>
+        <div style="display:flex;gap:10px;align-items:center;">
+            <button class="btn-add-user" onclick="openAdminModal('addModal')">Add User</button>
+            <button class="btn-add-user" style="background:#f3f4f6;color:#111;border:1.5px solid #e5e7eb;"
+                    onclick="openAdminModal('csvImportModal')">⬆ Import CSV</button>
+        </div>
         <?php endif; ?>
     </div>
 
@@ -145,7 +223,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
             <?php else: ?>
                 <table id="usersTable">
                     <thead>
-                        <tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Actions</th></tr>
+                        <tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
                         <?php foreach ($users as $i => $u): ?>
@@ -165,6 +243,18 @@ require_once 'TM_PHP/TM_NavNotif.php';
                                 ?>
                             </td>
                             <td>
+                                <?php
+                                $st = $u['status'] ?? 'active';
+                                $stLabel = match($st) {
+                                    'active'    => '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">ACTIVE</span>',
+                                    'pending'   => '<span style="background:#fef9c3;color:#a16207;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">PENDING</span>',
+                                    'suspended' => '<span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">SUSPENDED</span>',
+                                    default     => '<span>' . htmlspecialchars($st) . '</span>',
+                                };
+                                echo $stLabel;
+                                ?>
+                            </td>
+                            <td>
                                 <?php if ($is_admin): ?>
                                 <div class="td-actions">
                                     <button class="btn-edit-user"
@@ -175,6 +265,19 @@ require_once 'TM_PHP/TM_NavNotif.php';
                                         data-phone="<?= htmlspecialchars($u['phone']) ?>"
                                         data-role="<?= htmlspecialchars($u['role'] ?? 'user') ?>"
                                         onclick="openEditModal(this)">Edit</button>
+                                    <?php if (($u['status'] ?? 'active') !== 'suspended' && $u['user_id'] !== $uid): ?>
+                                    <form method="post" action="TM_PHP/TM_UserActions.php" style="display:inline">
+                                        <input type="hidden" name="action" value="suspend"/>
+                                        <input type="hidden" name="id" value="<?= $u['user_id'] ?>"/>
+                                        <button type="submit" style="padding:6px 14px;font-size:12px;font-weight:600;border-radius:6px;border:1px solid #fcd34d;background:#fffbeb;color:#92400e;cursor:pointer;font-family:'Poppins',sans-serif;">Suspend</button>
+                                    </form>
+                                    <?php elseif (($u['status'] ?? '') === 'suspended'): ?>
+                                    <form method="post" action="TM_PHP/TM_UserActions.php" style="display:inline">
+                                        <input type="hidden" name="action" value="approve"/>
+                                        <input type="hidden" name="id" value="<?= $u['user_id'] ?>"/>
+                                        <button type="submit" style="padding:6px 14px;font-size:12px;font-weight:600;border-radius:6px;border:1px solid #6ee7b7;background:#ecfdf5;color:#065f46;cursor:pointer;font-family:'Poppins',sans-serif;">Re-activate</button>
+                                    </form>
+                                    <?php endif; ?>
                                     <button class="btn-delete-user"
                                         data-userid="<?= $u['user_id'] ?>"
                                         data-username="<?= htmlspecialchars($u['first_name'] . ' ' . $u['last_name']) ?>"
@@ -348,6 +451,42 @@ require_once 'TM_PHP/TM_NavNotif.php';
                 <i class="fa-solid fa-arrow-right-from-bracket"></i> Log Out
             </a>
         </div>
+    </div>
+</div>
+
+<!-- ── CSV IMPORT MODAL (Feature 9) ── -->
+<div class="modal-overlay" id="csvImportModal">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div class="modal-title">⬆ Bulk Import Users (CSV)</div>
+            <button class="modal-close" onclick="closeAdminModal('csvImportModal')">&#x2715;</button>
+        </div>
+        <form method="post" action="TM_PHP/TM_UserActions.php" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="csv_import"/>
+            <div class="modal-body">
+                <p style="font-size:13px;color:#6b7280;margin:0 0 16px">
+                    Upload a <strong>.csv</strong> file with the following columns (header row required):
+                </p>
+                <div style="background:#f3f4f6;border-radius:8px;padding:10px 14px;font-size:12px;font-family:monospace;margin-bottom:16px;color:#374151;">
+                    first_name, last_name, email, phone, password, role
+                </div>
+                <ul style="font-size:12px;color:#6b7280;margin:0 0 16px;padding-left:18px;line-height:1.8;">
+                    <li><strong>role</strong> is optional — defaults to <em>user</em> if omitted or invalid.</li>
+                    <li>Passwords must be at least 6 characters.</li>
+                    <li>Duplicate emails are skipped with a report.</li>
+                    <li>All imported accounts are set to <strong>active</strong> immediately.</li>
+                </ul>
+                <div class="form-group">
+                    <label class="form-label">Select CSV File</label>
+                    <input type="file" name="csv_file" accept=".csv,text/csv" class="form-input" required
+                           style="padding:8px 12px;cursor:pointer;"/>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel-modal" onclick="closeAdminModal('csvImportModal')">Cancel</button>
+                <button type="submit" class="btn-save-modal">Import Users</button>
+            </div>
+        </form>
     </div>
 </div>
 
