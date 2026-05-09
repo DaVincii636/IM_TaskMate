@@ -6,26 +6,32 @@ tm_require_login();
 $flash = tm_get_flash();
 $uid   = tm_uid();
 
-// Fetch fresh user record
+// Fetch fresh user record — use TO_CHAR so Oracle TIMESTAMP comes back as a
+// plain string that PHP's strtotime() can parse (raw OCIDate/LOB returns
+// cause strtotime to fall back to 1970-01-01).
 $userRow = tm_fetch_one(tm_exec(
-    'SELECT first_name, last_name, email, phone, role, created_at FROM TM_Users WHERE user_id=:p1',
+    "SELECT first_name, last_name, email, phone, role,
+            TO_CHAR(created_at,'YYYY-MM-DD') AS created_at
+     FROM TM_Users WHERE user_id=:p1",
     [$uid]
 ));
 if (!$userRow) {
     header('Location: TM_Dashboard.php'); exit;
 }
 
-$firstName = $userRow['first_name'] ?? '';
-$lastName  = $userRow['last_name']  ?? '';
-$email     = $userRow['email']      ?? '';
-$phone     = $userRow['phone']      ?? '';
-$role      = $userRow['role']       ?? 'user';
-$createdAt = $userRow['created_at'] ?? '';
+$firstName = $userRow['first_name'] ?? $userRow['FIRST_NAME'] ?? '';
+$lastName  = $userRow['last_name']  ?? $userRow['LAST_NAME']  ?? '';
+$email     = $userRow['email']      ?? $userRow['EMAIL']      ?? '';
+$phone     = $userRow['phone']      ?? $userRow['PHONE']      ?? '';
+$role      = $userRow['role']       ?? $userRow['ROLE']       ?? 'user';
+$createdAt = $userRow['created_at'] ?? $userRow['CREATED_AT'] ?? '';
 
 // Task summary for the profile sidebar
 function _p_count($sql, $uid) {
     $row = tm_fetch_one(tm_exec($sql, [$uid]));
-    return (int)reset($row);
+    if (!$row || !is_array($row)) return 0;
+    $val = reset($row);
+    return (int)($val ?? 0);
 }
 $cntTotal   = _p_count("SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1", $uid);
 $cntDone    = _p_count("SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 AND status='done'", $uid);
@@ -275,9 +281,14 @@ require_once 'TM_PHP/TM_NavNotif.php';
                 <div class="profile-stat-label">Active</div>
             </div>
         </div>
-        <?php if ($createdAt): ?>
+        <?php
+        // $createdAt is already a 'YYYY-MM-DD' string from TO_CHAR above.
+        // Only render if it's a non-empty string (guards against NULL or OCI resource).
+        $memberSinceTs = is_string($createdAt) && $createdAt !== '' ? strtotime($createdAt) : false;
+        ?>
+        <?php if ($memberSinceTs !== false && $memberSinceTs > 0): ?>
         <div class="profile-member-since">
-            Member since <?= htmlspecialchars(date('M Y', strtotime((string)$createdAt))) ?>
+            Member since <?= htmlspecialchars(date('M Y', $memberSinceTs)) ?>
         </div>
         <?php endif; ?>
     </aside>
@@ -313,7 +324,10 @@ require_once 'TM_PHP/TM_NavNotif.php';
                 <div class="profile-form-group">
                     <label for="prof_phone">Phone Number</label>
                     <input type="tel" id="prof_phone" name="phone"
-                           value="<?= htmlspecialchars($phone) ?>" required/>
+                           value="<?= htmlspecialchars($phone) ?>"
+                           required maxlength="11" pattern="[0-9]{11}"
+                           inputmode="numeric"
+                           oninput="this.value=this.value.replace(/[^0-9]/g,'')"/>
                 </div>
 
                 <!-- Change password -->

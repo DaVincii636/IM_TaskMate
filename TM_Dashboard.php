@@ -517,7 +517,18 @@ function statusLabel(string $s): string {
                 </div>
                 <div class="form-group">
                     <label class="form-label">Notes</label>
-                    <textarea name="notes" class="form-input" placeholder="Optional notes..."></textarea>
+                    <textarea name="notes" class="form-input tm-auto-expand" placeholder="Optional notes..."
+                              style="resize:none;overflow:hidden;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Recurrence</label>
+                    <select name="recurrence" class="form-input" id="dash_recurrence">
+                        <option value="">— None (one-time) —</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
+                    </select>
                 </div>
             </div>
             <div class="modal-footer">
@@ -583,6 +594,36 @@ function statusLabel(string $s): string {
         if (!s.value) s.value = today;
         if (!d.value) d.value = today;
     });
+})();
+</script>
+
+<script>
+(function () {
+    // ── Auto-expand textareas ──────────────────────────────
+    function autoExpand(el) {
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + 'px';
+    }
+    document.querySelectorAll('textarea.tm-auto-expand').forEach(function (ta) {
+        ta.addEventListener('input', function () { autoExpand(ta); });
+    });
+
+    // ── Daily recurrence: sync start & due in Add modal ───
+    (function () {
+        var recEl   = document.getElementById('dash_recurrence');
+        var startEl = document.getElementById('dash_startDate');
+        var dueEl   = document.getElementById('dash_dueDate');
+        if (!recEl || !startEl || !dueEl) return;
+        recEl.addEventListener('change', function () {
+            if (recEl.value === 'daily' && startEl.value) dueEl.value = startEl.value;
+        });
+        startEl.addEventListener('change', function () {
+            if (recEl.value === 'daily') dueEl.value = startEl.value;
+        });
+        dueEl.addEventListener('change', function () {
+            if (recEl.value === 'daily') startEl.value = dueEl.value;
+        });
+    })();
 })();
 </script>
 

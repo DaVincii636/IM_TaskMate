@@ -10,7 +10,7 @@ $uid   = tm_uid();
 $stmt  = tm_exec(
     "SELECT task_id, task_name, TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
             TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
-            category, custom_category, priority, color, notes, status
+            category, custom_category, priority, color, notes, status, recurrence
      FROM TM_Tasks WHERE user_id = :p1 ORDER BY start_date ASC",
     [$uid]
 );
@@ -204,7 +204,7 @@ $blockerMapJson = json_encode($blockerMap);
                 </div>
                 <div class="form-group dep-group">
                     <label class="form-label">Must Complete First</label>
-                    <p class="dep-hint">Add tasks that must be finished before this one can be marked done.</p>
+
                     <select id="addDepSelect" class="form-input dep-select">
                         <option value="">— Pick a task —</option>
                     </select>
@@ -213,16 +213,18 @@ $blockerMapJson = json_encode($blockerMap);
                 </div>
                 <div class="form-group">
                     <label class="form-label">Recurrence</label>
-                    <select name="recurrence" class="form-input">
+                    <select name="recurrence" class="form-input" id="addRecurrence">
                         <option value="">— None (one-time) —</option>
                         <option value="daily">Daily</option>
                         <option value="weekly">Weekly</option>
                         <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
                     </select>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Notes</label>
-                    <textarea name="notes" class="form-input" placeholder="Optional notes..."></textarea>
+                    <textarea name="notes" class="form-input tm-auto-expand" placeholder="Optional notes..."
+                              style="resize:none;overflow:hidden;"></textarea>
                 </div>
             </div>
             <div class="modal-footer">
@@ -297,7 +299,7 @@ $blockerMapJson = json_encode($blockerMap);
                 </div>
                 <div class="form-group dep-group">
                     <label class="form-label">Must Complete First</label>
-                    <p class="dep-hint">Add tasks that must be finished before this one can be marked done.</p>
+
                     <select id="depSelect" class="form-input dep-select">
                         <option value="">— Pick a task —</option>
                     </select>
@@ -306,8 +308,20 @@ $blockerMapJson = json_encode($blockerMap);
                 </div>
 
                 <div class="form-group">
+                    <label class="form-label">Recurrence</label>
+                    <select name="recurrence" class="form-input" id="calEditRecurrence">
+                        <option value="">— None (one-time) —</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label class="form-label">Notes</label>
-                    <textarea name="notes" class="form-input" id="editTaskNotes" placeholder="Optional notes..."></textarea>
+                    <textarea name="notes" class="form-input tm-auto-expand" id="editTaskNotes"
+                              placeholder="Optional notes..."
+                              style="resize:none;overflow:hidden;"></textarea>
                 </div>
             </div>
             <div class="modal-footer">
@@ -375,7 +389,8 @@ $blockerMapJson = json_encode($blockerMap);
         Priority:       t.priority,
         Color:          t.color,
         Notes:          t.notes,
-        Status:         t.status || 'pending'
+        Status:         t.status || 'pending',
+        Recurrence:     t.recurrence || ''
     }));
 
     // Map of task_id → unresolved blocker count (for calendar dot indicators)
@@ -488,6 +503,52 @@ $blockerMapJson = json_encode($blockerMap);
     if(btn) btn.addEventListener('click',function(e){e.preventDefault();modal.classList.add('active');});
     if(cancel) cancel.addEventListener('click',function(){modal.classList.remove('active');});
     if(modal) modal.addEventListener('click',function(e){if(e.target===modal)modal.classList.remove('active');});
+})();
+</script>
+<script>
+(function () {
+    // ── Auto-expand textareas ──────────────────────────────
+    function autoExpand(el) {
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + 'px';
+    }
+    document.querySelectorAll('textarea.tm-auto-expand').forEach(function (ta) {
+        ta.addEventListener('input', function () { autoExpand(ta); });
+    });
+
+    // ── Daily recurrence: sync start & due in Add modal ───
+    (function () {
+        var recEl   = document.getElementById('addRecurrence');
+        var startEl = document.getElementById('addTaskStart');
+        var dueEl   = document.getElementById('addTaskDue');
+        if (!recEl || !startEl || !dueEl) return;
+        recEl.addEventListener('change', function () {
+            if (recEl.value === 'daily' && startEl.value) dueEl.value = startEl.value;
+        });
+        startEl.addEventListener('change', function () {
+            if (recEl.value === 'daily') dueEl.value = startEl.value;
+        });
+        dueEl.addEventListener('change', function () {
+            if (recEl.value === 'daily') startEl.value = dueEl.value;
+        });
+    })();
+
+    // ── Daily recurrence: sync start & due in Edit modal ──
+    (function () {
+        var recEl   = document.getElementById('calEditRecurrence');
+        var startEl = document.getElementById('editTaskStart');
+        var dueEl   = document.getElementById('editTaskDue');
+        if (!recEl || !startEl || !dueEl) return;
+        recEl.addEventListener('change', function () {
+            if (recEl.value === 'daily' && startEl.value) dueEl.value = startEl.value;
+        });
+        startEl.addEventListener('change', function () {
+            if (recEl.value === 'daily') dueEl.value = startEl.value;
+        });
+        dueEl.addEventListener('change', function () {
+            if (recEl.value === 'daily') startEl.value = dueEl.value;
+        });
+    })();
 })();
 </script>
 </body>

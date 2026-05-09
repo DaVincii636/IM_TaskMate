@@ -147,18 +147,20 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Recurrence <span style="font-size:11px;font-weight:400;color:var(--gray-400)">(Feature 6)</span></label>
+                    <label class="form-label">Recurrence</label>
                     <select name="recurrence" class="form-input" id="tmEditRecurrence">
                         <option value="">— None (one-time) —</option>
                         <option value="daily">Daily</option>
                         <option value="weekly">Weekly</option>
                         <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
                     </select>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Notes</label>
-                    <textarea name="notes" class="form-input" id="tmEditTaskNotes"
-                              placeholder="Optional notes..." rows="3"></textarea>
+                    <textarea name="notes" class="form-input tm-auto-expand" id="tmEditTaskNotes"
+                              placeholder="Optional notes..." rows="3"
+                              style="resize:none;overflow:hidden;"></textarea>
                 </div>
             </div>
             <div class="modal-footer">
@@ -292,6 +294,13 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
 <script>
 (function () {
     'use strict';
+
+    // ── Auto-expand helper (used inline & by event listeners) ─
+    function autoExpand(el) {
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + 'px';
+    }
 
     // ── Task data keyed by id ─────────────────────────────
     const RAW  = <?= $_modalTasksJson ?>;
@@ -443,10 +452,12 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         document.getElementById('editTaskDue').value   = t.due;
         document.getElementById('editTaskNotes') && (document.getElementById('tmEditTaskNotes').value = t.notes);
         document.getElementById('tmEditTaskNotes').value  = t.notes;
+        autoExpand(document.getElementById('tmEditTaskNotes'));
         document.getElementById('tmEditCategoryInput').value = t.cat;
         document.getElementById('tmEditPriorityInput').value = t.pri;
         document.getElementById('tmEditColorInput').value    = t.color;
         document.getElementById('tmEditTaskStatus').value    = t.status;
+        document.getElementById('tmEditRecurrence').value    = t.recurrence || '';
 
         // Category buttons
         document.querySelectorAll('#tmEditCatOptions .cat-btn').forEach(function (b) {
@@ -562,6 +573,31 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         if (!el) return;
         var id = el.getAttribute('data-task-id');
         if (id) tmOpenView(id);
+    });
+
+    // ── Daily recurrence: keep start & due in sync ────────
+    (function () {
+        var recEl   = document.getElementById('tmEditRecurrence');
+        var startEl = document.getElementById('editTaskStart');
+        var dueEl   = document.getElementById('editTaskDue');
+        if (!recEl || !startEl || !dueEl) return;
+
+        function syncDates(changedField) {
+            if (recEl.value !== 'daily') return;
+            if (changedField === 'start') dueEl.value   = startEl.value;
+            else                          startEl.value = dueEl.value;
+        }
+
+        recEl.addEventListener('change', function () {
+            if (recEl.value === 'daily' && startEl.value) {
+                dueEl.value = startEl.value;
+            }
+        });
+        startEl.addEventListener('change', function () { syncDates('start'); });
+        dueEl.addEventListener('change',   function () { syncDates('due');   });
+    })();
+    document.querySelectorAll('textarea.tm-auto-expand').forEach(function (ta) {
+        ta.addEventListener('input', function () { autoExpand(ta); });
     });
 
 })();

@@ -201,7 +201,7 @@ switch ($action) {
         $col   = trim($_POST['color']          ?? '#ef4444');
         $notes = trim($_POST['notes']          ?? '');
         $recur = trim($_POST['recurrence']     ?? '');
-        if (!in_array($recur, ['daily','weekly','monthly'])) $recur = '';
+        if (!in_array($recur, ['daily','weekly','monthly','yearly'])) $recur = '';
 
         if (!$name || !$start || !$due) {
             if ($isApi) tm_api_err('Name and dates are required.');
@@ -256,7 +256,7 @@ switch ($action) {
         $notes  = trim($_POST['notes']          ?? '');
         $status = trim($_POST['status']         ?? 'pending');
         $recur  = trim($_POST['recurrence']     ?? '');
-        if (!in_array($recur, ['daily','weekly','monthly'])) $recur = '';
+        if (!in_array($recur, ['daily','weekly','monthly','yearly'])) $recur = '';
         $allowed_statuses = ['pending', 'in_progress', 'review', 'done', 'cancelled'];
         if (!in_array($status, $allowed_statuses)) { $status = 'pending'; }
 
@@ -378,15 +378,19 @@ switch ($action) {
         if ($qdRecur && $qdDueStr) {
             $dueTs   = strtotime($qdDueStr);
             $startTs = strtotime($qdStartStr);
-            $gap     = max(0, $startTs - $dueTs); // start offset from due (usually 0 or negative)
+            // Preserve the original task duration (number of days from start to due)
+            $durationDays = max(0, (int)(($dueTs - $startTs) / 86400));
             $nextDue = match($qdRecur) {
                 'daily'   => date('Y-m-d', strtotime('+1 day',   $dueTs)),
                 'weekly'  => date('Y-m-d', strtotime('+1 week',  $dueTs)),
                 'monthly' => date('Y-m-d', strtotime('+1 month', $dueTs)),
+                'yearly'  => date('Y-m-d', strtotime('+1 year',  $dueTs)),
                 default   => null,
             };
             if ($nextDue) {
-                $nextStart = date('Y-m-d', strtotime($nextDue) + $gap);
+                $nextDueTs = strtotime($nextDue);
+                // Start date = next due minus the original duration
+                $nextStart = date('Y-m-d', $nextDueTs - ($durationDays * 86400));
                 $qdCat   = $qdRow['category']        ?? $qdRow['CATEGORY']        ?? 'errands';
                 $qdCcat  = $qdRow['custom_category'] ?? $qdRow['CUSTOM_CATEGORY'] ?? '';
                 $qdPri   = $qdRow['priority']        ?? $qdRow['PRIORITY']        ?? 'mid';

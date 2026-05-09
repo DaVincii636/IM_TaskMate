@@ -275,10 +275,19 @@ const CalendarApp = (() => {
         document.getElementById('editTaskStart').value = t.StartDate;
         document.getElementById('editTaskDue').value = t.DueDate;
         document.getElementById('editTaskNotes').value = t.Notes || '';
+        // Auto-expand notes after populating
+        (function () {
+            var ta = document.getElementById('editTaskNotes');
+            if (ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+        })();
         document.getElementById('deleteTaskId').value = t.Id;
         document.getElementById('editCategoryInput').value = t.Category;
         document.getElementById('editPriorityInput').value = t.Priority;
         document.getElementById('editColorInput').value = t.Color;
+
+        // Set recurrence dropdown
+        var recEl = document.getElementById('calEditRecurrence');
+        if (recEl) recEl.value = t.Recurrence || '';
 
         // Set status dropdown
         const statusEl = document.getElementById('editTaskStatus');
