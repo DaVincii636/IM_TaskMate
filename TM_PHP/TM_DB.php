@@ -83,10 +83,12 @@ function tm_api_err(string $message, int $status = 400): void {
 }
 
 /**
- * Insert one row into TM_AuditLog.
- * Defined here (in TM_DB.php) so every action handler can use it
- * without redeclaring it — which would cause a fatal error when two
- * handlers are included in the same request.
+ * Insert one row into TM_AuditLog via inline SQL.
+ * Kept as the fallback for callers that haven't been migrated to the
+ * TM_WriteAuditLog stored procedure yet, and for contexts where the
+ * TM_WriteAuditLog procedure itself is not available (e.g. fresh install
+ * before TM_StoredProcedures.sql has been run).
+ *
  * Errors are swallowed so a logging failure never blocks the real action.
  */
 function tm_audit(int $userId, string $action, string $entityType,
@@ -104,5 +106,131 @@ function tm_audit(int $userId, string $action, string $entityType,
         );
     } catch (Throwable $e) {
         // Never let audit failure surface to the user
+    }
+}
+
+// =============================================
+// Feature 9 — PL/SQL Stored Procedure helpers
+// IM101 Week 12: calling named Oracle procedures from PHP.
+// PHP uses anonymous PL/SQL blocks (BEGIN … END) with OUT bind variables.
+// =============================================
+
+/**
+ * Call TM_CreateTask stored procedure.
+ *
+ * Atomically inserts a new task and writes a 'create' audit entry inside
+ * Oracle — PHP never writes to TM_Tasks or TM_AuditLog directly.
+ *
+ * @return int  The new task_id assigned by Oracle.
+ */
+function tm_sp_create_task(
+    int    $userId,
+    string $taskName,
+    string $startDate,
+    string $dueDate,
+    string $category,
+    string $customCategory,
+    string $priority,
+    string $color,
+    string $notes,
+    string $recurrence
+): int {
+    global $conn;
+
+    $plsql = "BEGIN
+                  TM_CreateTask(
+                      :p_user_id, :p_task_name, :p_start_date, :p_due_date,
+                      :p_category, :p_custom_category, :p_priority, :p_color,
+                      :p_notes, :p_recurrence, :p_new_task_id
+                  );
+              END;";
+
+    $stmt = oci_parse($conn, $plsql);
+
+    // IN parameters
+    oci_bind_by_name($stmt, ':p_user_id',         $userId,         -1);
+    oci_bind_by_name($stmt, ':p_task_name',        $taskName,       255);
+    oci_bind_by_name($stmt, ':p_start_date',       $startDate,      10);
+    oci_bind_by_name($stmt, ':p_due_date',         $dueDate,        10);
+    oci_bind_by_name($stmt, ':p_category',         $category,       50);
+    oci_bind_by_name($stmt, ':p_custom_category',  $customCategory, 100);
+    oci_bind_by_name($stmt, ':p_priority',         $priority,       20);
+    oci_bind_by_name($stmt, ':p_color',            $color,          20);
+    oci_bind_by_name($stmt, ':p_notes',            $notes,          -1);
+    oci_bind_by_name($stmt, ':p_recurrence',       $recurrence,     20);
+
+    // OUT parameter — Oracle writes the new task_id here
+    $newTaskId = 0;
+    oci_bind_by_name($stmt, ':p_new_task_id', $newTaskId, 10);
+
+    oci_execute($stmt, OCI_NO_AUTO_COMMIT); // procedure does its own COMMIT
+    oci_free_statement($stmt);
+
+    return (int)$newTaskId;
+}
+
+/**
+ * Call TM_UpdateTaskStatus stored procedure.
+ *
+ * Updates a task's status and writes a 'status_change' audit entry
+ * atomically inside Oracle.
+ *
+ * Throws a RuntimeException (wrapping ORA-20001) if the task is not
+ * found or does not belong to $userId.
+ */
+function tm_sp_update_status(int $taskId, int $userId, string $newStatus): void {
+    global $conn;
+
+    $plsql = "BEGIN
+                  TM_UpdateTaskStatus(:p_task_id, :p_user_id, :p_new_status);
+              END;";
+
+    $stmt = oci_parse($conn, $plsql);
+    oci_bind_by_name($stmt, ':p_task_id',    $taskId,    10);
+    oci_bind_by_name($stmt, ':p_user_id',    $userId,    10);
+    oci_bind_by_name($stmt, ':p_new_status', $newStatus, 20);
+
+    $ok = @oci_execute($stmt, OCI_NO_AUTO_COMMIT);
+    if (!$ok) {
+        $err = oci_error($stmt);
+        oci_free_statement($stmt);
+        throw new RuntimeException($err['message'] ?? 'TM_UpdateTaskStatus failed');
+    }
+    oci_free_statement($stmt);
+}
+
+/**
+ * Call TM_WriteAuditLog stored procedure.
+ *
+ * Drop-in replacement for tm_audit() that delegates to an Oracle stored
+ * procedure instead of issuing inline INSERT SQL from PHP.
+ * Errors are swallowed identically to tm_audit().
+ */
+function tm_audit_sp(int $userId, string $action, string $entityType,
+                     int $entityId, string $entityName,
+                     string $oldValue = '', string $newValue = ''): void {
+    global $conn;
+    try {
+        $plsql = "BEGIN
+                      TM_WriteAuditLog(
+                          :p_user_id, :p_action, :p_entity_type, :p_entity_id,
+                          :p_entity_name, :p_old_value, :p_new_value
+                      );
+                  END;";
+
+        $stmt = oci_parse($conn, $plsql);
+        oci_bind_by_name($stmt, ':p_user_id',     $userId,                    10);
+        oci_bind_by_name($stmt, ':p_action',      $action,                    20);
+        oci_bind_by_name($stmt, ':p_entity_type', $entityType,                20);
+        oci_bind_by_name($stmt, ':p_entity_id',   $entityId,                  10);
+        oci_bind_by_name($stmt, ':p_entity_name', substr($entityName, 0, 255), 255);
+        oci_bind_by_name($stmt, ':p_old_value',   substr($oldValue,   0, 500), 500);
+        oci_bind_by_name($stmt, ':p_new_value',   substr($newValue,   0, 500), 500);
+
+        oci_execute($stmt, OCI_NO_AUTO_COMMIT); // procedure handles its own INSERT
+        oci_commit($conn);
+        oci_free_statement($stmt);
+    } catch (Throwable $e) {
+        // Audit must never block the real action
     }
 }

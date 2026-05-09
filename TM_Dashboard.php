@@ -8,6 +8,16 @@ $firstName = tm_uname();
 $fullName  = $firstName . ' ' . ($_SESSION['tm_last_name'] ?? '');
 $uid       = tm_uid();
 
+// ── Feature 11: Onboarding check (HCI101 Week 2 — Learnability) ───────────────
+// Check TM_UserPrefs to see if this user has already seen the walkthrough.
+// If no row exists yet, treat it as "not done" (new user).
+$prefsRow = tm_fetch_one(tm_exec(
+    "SELECT onboarding_done FROM TM_UserPrefs WHERE user_id = :p1",
+    [$uid]
+));
+$showOnboarding = (!$prefsRow || (int)($prefsRow['onboarding_done'] ?? 0) === 0);
+// ── End onboarding check ──────────────────────────────────────────────────────
+
 // ── Stat queries ──────────────────────────────────────────────────────────────
 // Oracle returns column names uppercase; use reset() to grab the first column
 // value regardless of case so we never silently get 0 from a wrong key.
@@ -575,5 +585,15 @@ function statusLabel(string $s): string {
     });
 })();
 </script>
+
+<?php if ($showOnboarding): ?>
+<!-- Feature 11: Onboarding Tooltip Walkthrough (HCI101 Week 2, 4, 10-11) -->
+<script>
+    // Flag read by TM_Onboarding.js to decide whether to show the overlay.
+    // Only true for first-time users (TM_UserPrefs.onboarding_done = 0).
+    window.TM_SHOW_ONBOARDING = true;
+</script>
+<script src="TM_JS/TM_Onboarding.js"></script>
+<?php endif; ?>
 </body>
 </html>

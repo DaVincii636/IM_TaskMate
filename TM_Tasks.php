@@ -259,8 +259,23 @@ table.task-table tbody tr.row-overdue td:first-child {
 }
 
 /* ── Action btns ─────────────────────────────  */
-.btn-quick-done {
-    padding: 5px 12px; border-radius: 50px;
+/* Feature 10 — Export buttons */
+.tasks-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 1rem; }
+.tasks-header h1 { margin: 0; }
+.tasks-header p { margin: .2rem 0 0; }
+.export-btns { display: flex; gap: 8px; flex-shrink: 0; margin-top: 4px; }
+.btn-export {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 50px; font-size: 12px; font-weight: 600;
+    font-family: 'Poppins', sans-serif; text-decoration: none;
+    background: var(--white); border: 1.5px solid var(--border);
+    color: var(--gray-500); transition: all .2s; cursor: pointer;
+}
+.btn-export:hover { background: var(--gray-100); color: var(--black); border-color: var(--black); }
+.btn-export-report { background: var(--black); color: var(--white); border-color: var(--black); }
+.btn-export-report:hover { opacity: .85; color: var(--white); }
+
+.btn-quick-done {    padding: 5px 12px; border-radius: 50px;
     font-size: 11px; font-weight: 700; font-family: 'Poppins', sans-serif;
     border: 1.5px solid #16a34a; color: #16a34a; background: transparent;
     cursor: pointer; transition: all .15s; white-space: nowrap;
@@ -555,6 +570,17 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
     <div class="tasks-header">
         <h1>Tasks</h1>
         <p>Browse, filter, and manage all your tasks in one place.</p>
+        <!-- Feature 10: CSV / Report Export (IM101 Week 14 — Data Warehousing) -->
+        <div class="export-btns">
+            <a href="TM_PHP/TM_TaskActions.php?action=export&format=csv"
+               class="btn-export" title="Download all tasks as CSV">
+                <i class="fa-solid fa-file-csv"></i> Export CSV
+            </a>
+            <a href="TM_PHP/TM_TaskActions.php?action=export&format=html"
+               class="btn-export btn-export-report" title="Download printable HTML report">
+                <i class="fa-solid fa-file-lines"></i> Export Report
+            </a>
+        </div>
     </div>
 
     <!-- Tab bar -->

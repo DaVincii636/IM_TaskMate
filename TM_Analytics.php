@@ -370,9 +370,28 @@ $chartDue       = array_column(array_values($weeks), 'total_due');
 <div class="analytics-page">
 
     <!-- Heading -->
-    <div class="page-heading">
-        <h1>Analytics</h1>
-        <p>Your task patterns, completion history, and productivity trends.</p>
+    <div class="page-heading" style="display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:10px;">
+        <div>
+            <h1>Analytics</h1>
+            <p>Your task patterns, completion history, and productivity trends.</p>
+        </div>
+        <!-- Feature 10: Export (IM101 Week 14 — Data Warehousing) -->
+        <div style="display:flex;gap:8px;flex-shrink:0;margin-top:4px;">
+            <a href="TM_PHP/TM_TaskActions.php?action=export&format=csv"
+               style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:50px;font-size:12px;font-weight:600;font-family:'Poppins',sans-serif;text-decoration:none;background:#fff;border:1.5px solid #e5e5e5;color:#666;transition:all .2s;"
+               onmouseover="this.style.background='#f5f5f5';this.style.color='#111';"
+               onmouseout="this.style.background='#fff';this.style.color='#666';"
+               title="Download all tasks as CSV">
+                <i class="fa-solid fa-file-csv"></i> Export CSV
+            </a>
+            <a href="TM_PHP/TM_TaskActions.php?action=export&format=html"
+               style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:50px;font-size:12px;font-weight:600;font-family:'Poppins',sans-serif;text-decoration:none;background:#111;border:1.5px solid #111;color:#fff;transition:all .2s;"
+               onmouseover="this.style.opacity='.85';"
+               onmouseout="this.style.opacity='1';"
+               title="Download printable HTML report">
+                <i class="fa-solid fa-file-lines"></i> Export Report
+            </a>
+        </div>
     </div>
 
     <!-- Hero strip -->

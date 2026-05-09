@@ -232,3 +232,40 @@ ALTER TABLE TM_Tasks ADD CONSTRAINT chk_tm_recurrence
     CHECK (recurrence IS NULL OR recurrence IN ('daily','weekly','monthly'));
 
 COMMIT;
+
+-- =============================================
+-- FEATURE 11 — ONBOARDING TOOLTIPS
+-- TM_UserPrefs table: stores per-user preference flags.
+-- onboarding_done: 0 = walkthrough not yet shown, 1 = completed/dismissed.
+-- HCI101 Week 2 (Learnability & Memorability), Week 4 (UCD), Week 10-11
+-- (Prototyping — the overlay IS an interactive prototype on the live system).
+-- =============================================
+CREATE TABLE TM_UserPrefs (
+    pref_id          NUMBER(10)   NOT NULL,
+    user_id          NUMBER(10)   NOT NULL,
+    onboarding_done  NUMBER(1)    DEFAULT 0 NOT NULL,
+    updated_at       TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_tm_userprefs  PRIMARY KEY (pref_id),
+    CONSTRAINT fk_prefs_user    FOREIGN KEY (user_id)
+        REFERENCES TM_Users(user_id) ON DELETE CASCADE,
+    CONSTRAINT uq_prefs_user    UNIQUE (user_id),
+    CONSTRAINT chk_onboarding   CHECK (onboarding_done IN (0, 1))
+);
+
+CREATE SEQUENCE TM_UserPrefs_seq START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
+
+CREATE OR REPLACE TRIGGER trg_tm_userprefs_id
+    BEFORE INSERT ON TM_UserPrefs FOR EACH ROW
+BEGIN
+    IF :NEW.pref_id IS NULL THEN
+        SELECT TM_UserPrefs_seq.NEXTVAL INTO :NEW.pref_id FROM DUAL;
+    END IF;
+END;
+/
+
+CREATE INDEX idx_tm_userprefs_user ON TM_UserPrefs(user_id);
+
+COMMIT;
+
+-- VERIFY
+SELECT 'TM_UserPrefs', COUNT(*) FROM TM_UserPrefs;
