@@ -33,16 +33,19 @@ CREATE OR REPLACE PROCEDURE TM_CreateTask (
     p_color           IN  TM_Tasks.color%TYPE,
     p_notes           IN  TM_Tasks.notes%TYPE,
     p_recurrence      IN  TM_Tasks.recurrence%TYPE,
-    p_new_task_id     OUT TM_Tasks.task_id%TYPE
+    p_new_task_id     OUT TM_Tasks.task_id%TYPE,
+    -- Feature 6: org_id required so every task is tenant-scoped from creation
+    p_org_id          IN  TM_Tasks.org_id%TYPE DEFAULT 1
 ) AS
     v_audit_new VARCHAR2(500);
 BEGIN
     -- Insert the task; trigger trg_tm_tasks_id populates task_id via sequence
     INSERT INTO TM_Tasks (
-        user_id, task_name, start_date, due_date,
+        user_id, org_id, task_name, start_date, due_date,
         category, custom_category, priority, color, notes, recurrence
     ) VALUES (
         p_user_id,
+        p_org_id,
         p_task_name,
         TO_DATE(p_start_date, 'YYYY-MM-DD'),
         TO_DATE(p_due_date,   'YYYY-MM-DD'),

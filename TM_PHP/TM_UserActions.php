@@ -8,6 +8,7 @@ tm_require_role('moderator');
 $action   = $_POST['action'] ?? $_GET['action'] ?? '';
 $is_admin = tm_is_admin();
 $uid      = tm_uid();
+$oid      = tm_org_id(); // Feature 6: org-scoped operations
 
 // ── JSON API detection ────────────────────────────────────────────────────────
 // Mirrors the detection in TM_TaskActions.php.
@@ -19,10 +20,19 @@ $isApi = (($_GET['format'] ?? '') === 'json')
 // Admin/moderator only. Returns the full user list as a JSON array.
 if ($action === 'list') {
     if (!$isApi) tm_api_err('This endpoint requires ?format=json or Accept: application/json', 406);
-    $stmt = tm_exec(
-        'SELECT user_id, username, email, first_name, last_name, phone, role
-         FROM TM_Users ORDER BY user_id ASC'
-    );
+    // Feature 6: system admins see all users; org_admins see only their org
+    if ($is_admin) {
+        $stmt = tm_exec(
+            'SELECT user_id, username, email, first_name, last_name, phone, role, org_id
+             FROM TM_Users ORDER BY user_id ASC'
+        );
+    } else {
+        $stmt = tm_exec(
+            'SELECT user_id, username, email, first_name, last_name, phone, role, org_id
+             FROM TM_Users WHERE org_id = :p1 ORDER BY user_id ASC',
+            [$oid]
+        );
+    }
     $rows = tm_fetch_all($stmt);
     $users = array_map(function ($row) {
         $row['user_id'] = (int)$row['user_id'];
@@ -61,10 +71,16 @@ switch ($action) {
             tm_flash('error', 'Email already exists.'); break;
         }
         $un = strtolower(explode('@', $em)[0]) . '_' . rand(100, 999);
+        // Feature 6: new users added by an org_admin inherit the admin's org_id.
+        // System admins can optionally supply a target org via POST['org_id'].
+        $targetOrgId = $is_admin && isset($_POST['org_id']) && (int)$_POST['org_id'] > 0
+            ? (int)$_POST['org_id']
+            : $oid;
+
         tm_exec(
-            'INSERT INTO TM_Users (username, email, password_hash, first_name, last_name, phone, role)
-             VALUES (:p1, :p2, :p3, :p4, :p5, :p6, :p7)',
-            [$un, $em, password_hash($pw, PASSWORD_BCRYPT), $fn, $ln, $ph, $role]
+            'INSERT INTO TM_Users (username, email, password_hash, first_name, last_name, phone, role, org_id, status)
+             VALUES (:p1, :p2, :p3, :p4, :p5, :p6, :p7, :p8, :p9)',
+            [$un, $em, password_hash($pw, PASSWORD_BCRYPT), $fn, $ln, $ph, $role, $targetOrgId, 'active']
         );
         $newIdRow = tm_fetch_one(tm_exec(
             "SELECT TM_Users_seq.CURRVAL AS new_id FROM DUAL"
@@ -98,8 +114,12 @@ switch ($action) {
             tm_flash('error', 'New password must be at least 6 characters.'); break;
         }
 
+        // Feature 6: org_admins can only edit users within their own org
         $oldRow  = tm_fetch_one(tm_exec(
-            "SELECT role FROM TM_Users WHERE user_id=:p1", [$id]
+            $is_admin
+                ? "SELECT role, org_id FROM TM_Users WHERE user_id=:p1"
+                : "SELECT role, org_id FROM TM_Users WHERE user_id=:p1 AND org_id=:p2",
+            $is_admin ? [$id] : [$id, $oid]
         ));
         if (!$oldRow) {
             if ($isApi) tm_api_err('User not found.', 404);
@@ -135,8 +155,12 @@ switch ($action) {
             tm_flash('error', 'Invalid user.'); break;
         }
 
+        // Feature 6: org_admins can only delete users within their own org
         $delRow  = tm_fetch_one(tm_exec(
-            "SELECT first_name, last_name, role FROM TM_Users WHERE user_id=:p1", [$id]
+            $is_admin
+                ? "SELECT first_name, last_name, role FROM TM_Users WHERE user_id=:p1"
+                : "SELECT first_name, last_name, role FROM TM_Users WHERE user_id=:p1 AND org_id=:p2",
+            $is_admin ? [$id] : [$id, $oid]
         ));
         if (!$delRow) {
             if ($isApi) tm_api_err('User not found.', 404);
@@ -160,8 +184,12 @@ switch ($action) {
         $id = (int)($_POST['id'] ?? 0);
         if ($id <= 0) { tm_flash('error', 'Invalid user.'); break; }
 
+        // Feature 6: scope to org
         $row = tm_fetch_one(tm_exec(
-            "SELECT first_name, last_name, status FROM TM_Users WHERE user_id=:p1", [$id]
+            $is_admin
+                ? "SELECT first_name, last_name, status FROM TM_Users WHERE user_id=:p1"
+                : "SELECT first_name, last_name, status FROM TM_Users WHERE user_id=:p1 AND org_id=:p2",
+            $is_admin ? [$id] : [$id, $oid]
         ));
         if (!$row) { tm_flash('error', 'User not found.'); break; }
 
@@ -262,10 +290,11 @@ switch ($action) {
             $un   = strtolower(explode('@', $em)[0]) . '_' . rand(100, 999);
             $hash = password_hash($pw, PASSWORD_BCRYPT);
 
+            // Feature 6: imported users are placed in the importing admin's org
             tm_exec(
-                'INSERT INTO TM_Users (username, email, password_hash, first_name, last_name, phone, role, status)
-                 VALUES (:p1, :p2, :p3, :p4, :p5, :p6, :p7, :p8)',
-                [$un, $em, $hash, $fn, $ln, $ph, $role, 'active']
+                'INSERT INTO TM_Users (username, email, password_hash, first_name, last_name, phone, role, status, org_id)
+                 VALUES (:p1, :p2, :p3, :p4, :p5, :p6, :p7, :p8, :p9)',
+                [$un, $em, $hash, $fn, $ln, $ph, $role, 'active', $oid]
             );
             $success++;
         }

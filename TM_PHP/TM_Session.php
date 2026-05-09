@@ -27,10 +27,36 @@ function tm_role(): string {
     return $_SESSION['tm_role'] ?? 'user';
 }
 
+// ── Feature 6: Organization helpers ──────────────────────────────────────────
+/**
+ * Returns the org_id of the currently logged-in user.
+ * Every query that touches TM_Tasks or TM_Users must filter by this value
+ * to enforce org-level data isolation.
+ */
+function tm_org_id(): int {
+    return (int)($_SESSION['tm_org_id'] ?? 0);
+}
+
+/**
+ * Convenience: returns the org name stored in session (display only).
+ */
+function tm_org_name(): string {
+    return $_SESSION['tm_org_name'] ?? '';
+}
+
+/**
+ * Returns true if the current user is an org_admin or system admin.
+ * org_admins can manage users and settings within their own organization.
+ */
+function tm_is_org_admin(): bool {
+    return in_array(tm_role(), ['org_admin', 'admin']);
+}
+// ── End Feature 6 ─────────────────────────────────────────────────────────────
+
 function tm_require_role(string $role): void {
     tm_require_login();
     // 'admin' required → only admin passes
-    // 'moderator' required → both admin and moderator pass
+    // 'moderator' required → both admin, org_admin and moderator pass
     if ($role === 'moderator') {
         if (!tm_is_moderator()) {
             header('Location: ../TM_Dashboard.php');
@@ -60,5 +86,5 @@ function tm_is_admin(): bool {
 }
 
 function tm_is_moderator(): bool {
-    return in_array(tm_role(), ['admin', 'moderator']);
+    return in_array(tm_role(), ['admin', 'org_admin', 'moderator']);
 }

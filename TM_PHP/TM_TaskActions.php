@@ -20,6 +20,7 @@ tm_require_login();
 
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 $uid    = tm_uid();
+$oid    = tm_org_id(); // Feature 6: org-scoped filtering
 
 // ── COLLABORATION helper: get username without requiring TM_CollabActions.php ─
 if (!function_exists('tm_get_username_inline')) {
@@ -47,8 +48,9 @@ if ($action === 'list') {
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
          WHERE user_id = :p1
+           AND org_id  = :p2
          ORDER BY due_date ASC",
-        [$uid]
+        [$uid, $oid]
     );
     $rows = tm_fetch_all($stmt);
     // Cast task_id to int so JSON encodes it as a number, not a string
@@ -86,8 +88,9 @@ if ($action === 'export') {
                 TO_CHAR(created_at,'YYYY-MM-DD HH24:MI:SS') AS created_at
          FROM TM_Tasks
          WHERE user_id = :p1
+           AND org_id  = :p2
          ORDER BY due_date ASC",
-        [$uid]
+        [$uid, $oid]
     );
     $rows = tm_fetch_all($stmt);
 
@@ -342,9 +345,10 @@ switch ($action) {
         // PHP no longer writes SQL inline to TM_Tasks or TM_AuditLog.
         // The procedure handles the INSERT + audit atomically inside Oracle
         // (IM101 Week 12: security, integrity, performance, reuse).
+        // Feature 6: pass org_id so the stored procedure stamps the new task correctly
         $newId = tm_sp_create_task(
             $uid, $name, $start, $due,
-            $cat, $ccat, $pri, $col, $notes, $recur
+            $cat, $ccat, $pri, $col, $notes, $recur, $oid
         );
         // ── End stored procedure call ─────────────────────────────────────────
 
@@ -401,8 +405,8 @@ switch ($action) {
                 $bid = (int)trim($rawBid);
                 if ($bid <= 0 || $bid === $newId) continue;
                 $bo = tm_fetch_one(tm_exec(
-                    "SELECT task_id FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2",
-                    [$bid, $uid]
+                    "SELECT task_id FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2 AND org_id=:p3",
+                    [$bid, $uid, $oid]
                 ));
                 if (!$bo) continue;
                 tm_exec(
@@ -452,8 +456,8 @@ switch ($action) {
 
         $oldRow = tm_fetch_one(tm_exec(
             "SELECT task_name, status, priority FROM TM_Tasks
-             WHERE task_id=:p1 AND user_id=:p2",
-            [$id, $uid]
+             WHERE task_id=:p1 AND user_id=:p2 AND org_id=:p3",
+            [$id, $uid, $oid]
         ));
         if (!$oldRow) {
             if ($isApi) tm_api_err('Task not found.', 404);
@@ -519,8 +523,8 @@ switch ($action) {
         }
 
         $delRow = tm_fetch_one(tm_exec(
-            "SELECT task_name FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2",
-            [$id, $uid]
+            "SELECT task_name FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2 AND org_id=:p3",
+            [$id, $uid, $oid]
         ));
         if (!$delRow) {
             if ($isApi) tm_api_err('Task not found.', 404);
@@ -529,8 +533,8 @@ switch ($action) {
         $delName = $delRow['task_name'] ?? "task #{$id}";
 
         tm_exec(
-            'DELETE FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2',
-            [$id, $uid]
+            'DELETE FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2 AND org_id=:p3',
+            [$id, $uid, $oid]
         );
         tm_audit($uid, 'delete', 'task', $id, $delName, $delName, '');
         tm_log_task_change($id, $uid, 'delete');
@@ -551,8 +555,8 @@ switch ($action) {
                      TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
                      TO_CHAR(due_date,'YYYY-MM-DD')   AS due_date,
                      category, custom_category, priority, color
-              FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2",
-            [$id, $uid]
+              FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2 AND org_id=:p3",
+            [$id, $uid, $oid]
         ));
         if (!$qdRow) {
             if ($isApi) tm_api_err('Task not found.', 404);
@@ -610,9 +614,9 @@ switch ($action) {
                 $qdPri   = $qdRow['priority']        ?? $qdRow['PRIORITY']        ?? 'mid';
                 $qdCol   = $qdRow['color']           ?? $qdRow['COLOR']           ?? '#ef4444';
                 tm_exec(
-                    "INSERT INTO TM_Tasks (user_id, task_name, start_date, due_date, category, custom_category, priority, color, recurrence)
-                     VALUES (:p1,:p2,TO_DATE(:p3,'YYYY-MM-DD'),TO_DATE(:p4,'YYYY-MM-DD'),:p5,:p6,:p7,:p8,:p9)",
-                    [$uid, $qdName, $nextStart, $nextDue, $qdCat, $qdCcat, $qdPri, $qdCol, $qdRecur]
+                    "INSERT INTO TM_Tasks (user_id, org_id, task_name, start_date, due_date, category, custom_category, priority, color, recurrence)
+                     VALUES (:p1,:p2,:p3,TO_DATE(:p4,'YYYY-MM-DD'),TO_DATE(:p5,'YYYY-MM-DD'),:p6,:p7,:p8,:p9,:p10)",
+                    [$uid, $oid, $qdName, $nextStart, $nextDue, $qdCat, $qdCcat, $qdPri, $qdCol, $qdRecur]
                 );
                 $nextFlash = "Done! Next {$qdRecur} recurrence created for {$nextDue}.";
             }
@@ -639,8 +643,8 @@ switch ($action) {
         }
 
         $taskRow = tm_fetch_one(tm_exec(
-            "SELECT task_name, status FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2",
-            [$id, $uid]
+            "SELECT task_name, status FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2 AND org_id=:p3",
+            [$id, $uid, $oid]
         ));
         if (!$taskRow) {
             if ($isApi) tm_api_err('Task not found.', 404);
@@ -675,8 +679,8 @@ switch ($action) {
 
         $taskName = $taskRow['task_name'] ?? "task #{$id}";
         tm_exec(
-            "UPDATE TM_Tasks SET status=:p1 WHERE task_id=:p2 AND user_id=:p3",
-            [$prevStatus, $id, $uid]
+            "UPDATE TM_Tasks SET status=:p1 WHERE task_id=:p2 AND user_id=:p3 AND org_id=:p4",
+            [$prevStatus, $id, $uid, $oid]
         );
         tm_log_task_change($id, $uid, 'update');
         tm_audit($uid, 'status_change', 'task', $id, $taskName,

@@ -21,8 +21,14 @@ if ($action === 'login') {
         header('Location: ../TM_Login.php'); exit;
     }
 
+    // Feature 6: also fetch org_id and org_name so we can store them in session
     $stmt = tm_exec(
-        'SELECT user_id, first_name, last_name, email, password_hash, role, status FROM TM_Users WHERE email = :p1',
+        'SELECT u.user_id, u.first_name, u.last_name, u.email,
+                u.password_hash, u.role, u.status,
+                u.org_id, o.org_name
+         FROM TM_Users u
+         JOIN TM_Organizations o ON o.org_id = u.org_id
+         WHERE u.email = :p1',
         [$email]
     );
     $user = tm_fetch_one($stmt);
@@ -49,6 +55,10 @@ if ($action === 'login') {
     $_SESSION['tm_email']      = $user['email'];
     $_SESSION['tm_role']       = $user['role'] ?? 'user';
 
+    // Feature 6: Store org context in session — used by tm_org_id() everywhere
+    $_SESSION['tm_org_id']   = (int)($user['org_id']   ?? 1);
+    $_SESSION['tm_org_name'] = $user['org_name'] ?? 'Default Organization';
+
     header('Location: ../TM_Dashboard.php'); exit;
 }
 
@@ -60,6 +70,11 @@ if ($action === 'register') {
     $ph  = trim($_POST['phone']          ?? '');
     $pw  = $_POST['password']            ?? '';
     $cpw = $_POST['confirmPassword']     ?? '';
+
+    // Feature 6: allow registrants to supply an org invite code or org name.
+    // If omitted, they land in org_id = 1 (Default Organization) and an admin
+    // can reassign them later via TM_UserList.php.
+    $orgCode = trim($_POST['org_code'] ?? '');
 
     if (!$fn || !$ln || !$em || !$ph || !$pw) {
         tm_flash('error', 'All fields are required.');
@@ -84,16 +99,31 @@ if ($action === 'register') {
         header('Location: ../TM_Register.php'); exit;
     }
 
+    // Feature 6: Resolve org_id from invite code (org_name match) or default to 1
+    $resolvedOrgId = 1; // Default Organization
+    if ($orgCode !== '') {
+        $orgRow = tm_fetch_one(tm_exec(
+            'SELECT org_id FROM TM_Organizations WHERE LOWER(org_name) = LOWER(:p1)',
+            [$orgCode]
+        ));
+        if ($orgRow) {
+            $resolvedOrgId = (int)$orgRow['org_id'];
+        } else {
+            tm_flash('error', 'Organization not found. Leave blank to use the default.');
+            header('Location: ../TM_Register.php'); exit;
+        }
+    }
+
     $un   = strtolower(explode('@', $em)[0]) . '_' . rand(100, 999);
     $hash = password_hash($pw, PASSWORD_BCRYPT);
 
     // Feature 7: Self-registered accounts start as 'pending' until admin approves.
-    // Admins adding users directly via the Admin Panel use 'active' (see TM_UserActions.php).
-tm_exec(
-    'INSERT INTO TM_Users (username, email, password_hash, first_name, last_name, phone, status, org_id)
-     VALUES (:p1, :p2, :p3, :p4, :p5, :p6, :p7, :p8)',
-    [$un, $em, $hash, $fn, $ln, $ph, 'pending', 1]
-);
+    // Feature 6: org_id is now resolved above — never hardcoded to 1.
+    tm_exec(
+        'INSERT INTO TM_Users (username, email, password_hash, first_name, last_name, phone, status, org_id)
+         VALUES (:p1, :p2, :p3, :p4, :p5, :p6, :p7, :p8)',
+        [$un, $em, $hash, $fn, $ln, $ph, 'pending', $resolvedOrgId]
+    );
 
     tm_flash('success', 'Account created! An administrator will review and activate your account shortly.');
     header('Location: ../TM_Login.php'); exit;

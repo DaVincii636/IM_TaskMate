@@ -10,9 +10,11 @@
 CREATE TABLE TM_Organizations (
     org_id      NUMBER(10)    NOT NULL,
     org_name    VARCHAR2(100) NOT NULL,
+    plan        VARCHAR2(20)  DEFAULT 'free'   NOT NULL,
     created_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_tm_orgs    PRIMARY KEY (org_id),
-    CONSTRAINT uq_tm_orgname UNIQUE (org_name)
+    CONSTRAINT pk_tm_orgs     PRIMARY KEY (org_id),
+    CONSTRAINT uq_tm_orgname  UNIQUE (org_name),
+    CONSTRAINT chk_tm_org_plan CHECK (plan IN ('free','pro','enterprise'))
 );
 
 CREATE SEQUENCE TM_Orgs_seq START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
@@ -27,7 +29,7 @@ END;
 /
 
 -- 2. Seed a default organization so existing rows get a valid FK
-INSERT INTO TM_Organizations (org_name) VALUES ('Default Organization');
+INSERT INTO TM_Organizations (org_name, plan) VALUES ('Default Organization', 'free');
 COMMIT;
 
 -- 3. Add org_id to TM_Users (nullable first so existing rows are valid)
@@ -42,6 +44,13 @@ ALTER TABLE TM_Users MODIFY org_id NUMBER(10) NOT NULL;
 
 ALTER TABLE TM_Users ADD CONSTRAINT fk_users_org
     FOREIGN KEY (org_id) REFERENCES TM_Organizations(org_id);
+
+-- Extend role to include 'org_admin' (organization-level admin)
+-- org_admin: can manage users within their own org
+-- admin: system-wide superadmin
+ALTER TABLE TM_Users DROP CONSTRAINT chk_tm_role;
+ALTER TABLE TM_Users ADD CONSTRAINT chk_tm_role
+    CHECK (role IN ('user', 'moderator', 'org_admin', 'admin'));
 
 -- 4. Add org_id to TM_Tasks
 ALTER TABLE TM_Tasks ADD org_id NUMBER(10);
@@ -75,6 +84,52 @@ SELECT
     t.due_date
 FROM TM_Tasks t
 JOIN TM_Organizations o ON o.org_id = t.org_id;
+
+-- 7. Stored procedures for org management
+--    TM_CreateOrg   — create a new organization and assign an initial org_admin
+--    TM_TransferOrg — move a user from one org to another (system admin only)
+
+CREATE OR REPLACE PROCEDURE TM_CreateOrg(
+    p_org_name   IN  VARCHAR2,
+    p_plan       IN  VARCHAR2 DEFAULT 'free',
+    p_new_org_id OUT NUMBER
+) AS
+BEGIN
+    INSERT INTO TM_Organizations (org_name, plan)
+    VALUES (p_org_name, p_plan)
+    RETURNING org_id INTO p_new_org_id;
+    COMMIT;
+END TM_CreateOrg;
+/
+
+CREATE OR REPLACE PROCEDURE TM_TransferUserOrg(
+    p_user_id    IN NUMBER,
+    p_new_org_id IN NUMBER,
+    p_moved_by   IN NUMBER
+) AS
+    v_old_org NUMBER;
+BEGIN
+    SELECT org_id INTO v_old_org FROM TM_Users WHERE user_id = p_user_id;
+
+    UPDATE TM_Users SET org_id = p_new_org_id WHERE user_id = p_user_id;
+
+    -- Re-scope all tasks belonging to this user to the new org
+    UPDATE TM_Tasks SET org_id = p_new_org_id WHERE user_id = p_user_id;
+
+    INSERT INTO TM_AuditLog
+        (user_id, action, entity_type, entity_id, entity_name, old_value, new_value)
+    VALUES
+        (p_moved_by, 'edit', 'user', p_user_id,
+         'org_transfer',
+         'org_id:' || v_old_org,
+         'org_id:' || p_new_org_id);
+
+    COMMIT;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RAISE_APPLICATION_ERROR(-20010, 'User not found: ' || p_user_id);
+END TM_TransferUserOrg;
+/
 
 COMMIT;
 
