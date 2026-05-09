@@ -162,3 +162,63 @@ UNION ALL
 SELECT 'TM_Tasks',          COUNT(*) FROM TM_Tasks
 UNION ALL
 SELECT 'TM_Notifications',  COUNT(*) FROM TM_Notifications;
+
+-- =============================================
+-- TASK LINKS TABLE
+-- Append this block to the bottom of TM_DatabaseSetup.sql
+-- Run in Oracle BEFORE implementing the dependency UI (step 2)
+-- and enforcement (step 3).
+--
+-- Models directed relationships between tasks:
+--   link_type = 'blocks'     → task_id cannot be marked done
+--                               until depends_on_id is done
+--   link_type = 'relates_to' → informational only, no enforcement
+--
+-- Both task_id and depends_on_id FK to TM_Tasks with ON DELETE CASCADE
+-- so removing a task automatically removes every link it was part of.
+-- =============================================
+
+CREATE TABLE TM_TaskLinks (
+    link_id        NUMBER(10)  NOT NULL,
+    task_id        NUMBER(10)  NOT NULL,   -- the task that is blocked
+    depends_on_id  NUMBER(10)  NOT NULL,   -- the task that must be done first
+    link_type      VARCHAR2(20) NOT NULL,
+    created_at     TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_tm_tasklinks     PRIMARY KEY (link_id),
+    CONSTRAINT fk_tl_task          FOREIGN KEY (task_id)
+        REFERENCES TM_Tasks(task_id) ON DELETE CASCADE,
+    CONSTRAINT fk_tl_depends_on    FOREIGN KEY (depends_on_id)
+        REFERENCES TM_Tasks(task_id) ON DELETE CASCADE,
+    CONSTRAINT chk_tl_link_type    CHECK (link_type IN ('blocks','relates_to')),
+    CONSTRAINT uq_tl_pair          UNIQUE (task_id, depends_on_id)
+);
+
+CREATE SEQUENCE TM_TaskLinks_seq START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
+
+CREATE OR REPLACE TRIGGER trg_tm_tasklinks_id
+    BEFORE INSERT ON TM_TaskLinks FOR EACH ROW
+BEGIN
+    IF :NEW.link_id IS NULL THEN
+        SELECT TM_TaskLinks_seq.NEXTVAL INTO :NEW.link_id FROM DUAL;
+    END IF;
+END;
+/
+
+-- Index for the most common query pattern:
+--   "find all tasks that block task X" (used by enforcement in step 3)
+--   "find all tasks that task X blocks" (used by the dependency UI in step 2)
+CREATE INDEX idx_tl_task_id       ON TM_TaskLinks(task_id);
+CREATE INDEX idx_tl_depends_on_id ON TM_TaskLinks(depends_on_id);
+
+COMMIT;
+
+-- VERIFY (full schema)
+SELECT 'TM_Users'         AS tbl, COUNT(*) AS rows FROM TM_Users
+UNION ALL
+SELECT 'TM_Tasks',         COUNT(*) FROM TM_Tasks
+UNION ALL
+SELECT 'TM_Notifications', COUNT(*) FROM TM_Notifications
+UNION ALL
+SELECT 'TM_AuditLog',      COUNT(*) FROM TM_AuditLog
+UNION ALL
+SELECT 'TM_TaskLinks',     COUNT(*) FROM TM_TaskLinks;
