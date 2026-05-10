@@ -432,7 +432,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
     const RAW  = <?= $_modalTasksJson ?>;
     const TASKS = {};
     RAW.forEach(function (r) {
-        var id = r['task_id'] || r['TASK_ID'];
+        var id = parseInt(r['TASK_ID'] || r['task_id'], 10);
         TASKS[id] = {
             id:       id,
             recurrence: r['recurrence'] || r['RECURRENCE'] || '',
@@ -568,6 +568,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
 
     // ── Open EDIT modal directly ───────────────────────────
     window.tmOpenEdit = function (id) {
+        id = parseInt(id, 10) || id;
         var t = TASKS[id];
         if (!t) return;
         _currentTaskId = id;

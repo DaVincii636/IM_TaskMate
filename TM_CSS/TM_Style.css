@@ -1382,3 +1382,71 @@ tbody td {
 .priority-btn.high { color: #ef4444; border-color: #ef4444; }
 .priority-btn.mid  { color: #f97316; border-color: #f97316; }
 .priority-btn.low  { color: #22c55e; border-color: #22c55e; }
+
+
+/* =============================================
+   Category & Priority button styles
+   (shared across Calendar, Dashboard, Tasks)
+   ============================================= */
+.category-options {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.cat-btn {
+    padding: 7px 14px;
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1.5px solid var(--border);
+    background: var(--white);
+    color: var(--gray-500);
+    transition: all 0.2s;
+    cursor: pointer;
+    font-family: 'Poppins', sans-serif;
+}
+
+    .cat-btn.active {
+        border-color: var(--black);
+        background: var(--black);
+        color: var(--white);
+    }
+
+.priority-options {
+    display: flex;
+    gap: 8px;
+}
+
+.priority-btn {
+    flex: 1;
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 600;
+    border: 1.5px solid var(--border);
+    background: var(--white);
+    color: var(--gray-500);
+    text-align: center;
+    transition: all 0.2s;
+    cursor: pointer;
+    font-family: 'Poppins', sans-serif;
+}
+
+    .priority-btn.high.active {
+        border-color: #ef4444;
+        background: #ef4444;
+        color: white;
+    }
+
+    .priority-btn.mid.active {
+        border-color: #f97316;
+        background: #f97316;
+        color: white;
+    }
+
+    .priority-btn.low.active {
+        border-color: #22c55e;
+        background: #22c55e;
+        color: white;
+    }

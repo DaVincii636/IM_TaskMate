@@ -39,7 +39,7 @@ if ($filterTeam > 0) {
         if (!empty($memberIds)) {
             $inList     = implode(',', array_map('intval', $memberIds));
             // Team view: members' tasks + org-wide tasks for this org
-            $taskWhere  = "(user_id IN ($inList) OR (is_org_task = 1 AND org_id = :p_oid))";
+            $taskWhere  = "(user_id IN ($inList) OR (is_org_task = 1 AND org_id = :p1))";
             $taskParams = [$oid];
         }
         // Get team name for the UI label
@@ -81,18 +81,24 @@ require_once 'TM_PHP/TM_NavNotif.php';
 // ── Blocker counts: how many unresolved blockers each task has ────────────────
 // Keyed by task_id → count of blocking tasks not yet done.
 // Used by JS to show the "Blocked by X" indicator on calendar dots.
-$blockerCountRows = tm_fetch_all(tm_exec(
-    "SELECT tl.task_id, COUNT(*) AS blocker_count
-     FROM TM_TaskLinks tl
-     JOIN TM_Tasks blocker ON blocker.task_id = tl.depends_on_id
-     WHERE tl.link_type = 'blocks'
-       AND blocker.status NOT IN ('done', 'cancelled')
-       AND tl.task_id IN (
-           SELECT task_id FROM TM_Tasks WHERE $taskWhere
-       )
-     GROUP BY tl.task_id",
-    $taskParams
-));
+// Build blocker map from already-fetched task IDs to avoid re-using $taskWhere
+// (which contains named/duplicate placeholders that conflict with tm_exec's
+// positional :p1/:p2 binding — ORA-01036 / ORA-01008).
+$_fetchedTaskIds = array_map('intval', array_column($tasks, 'task_id'));
+$blockerCountRows = [];
+if (!empty($_fetchedTaskIds)) {
+    $_idList = implode(',', $_fetchedTaskIds);
+    $blockerCountRows = tm_fetch_all(tm_exec(
+        "SELECT tl.task_id, COUNT(*) AS blocker_count
+         FROM TM_TaskLinks tl
+         JOIN TM_Tasks blocker ON blocker.task_id = tl.depends_on_id
+         WHERE tl.link_type = 'blocks'
+           AND blocker.status NOT IN ('done', 'cancelled')
+           AND tl.task_id IN ($_idList)
+         GROUP BY tl.task_id",
+        []
+    ));
+}
 $blockerMap = [];
 foreach ($blockerCountRows as $row) {
     $tid = (int)($row['TASK_ID'] ?? $row['task_id']);
@@ -222,10 +228,11 @@ $blockerMapJson = json_encode($blockerMap);
 
 </main>
 
-<!-- ADD TASK MODAL -->
-<?php require_once 'TM_PHP/TM_AddTaskModal.php'; ?>
-
+<!-- SHARED MODALS: TaskModal first so tmInitMentionAutocomplete is defined
+     before TM_AddTaskModal's IIFE calls it -->
 <?php require_once 'TM_PHP/TM_TaskModal.php'; ?>
+
+<?php require_once 'TM_PHP/TM_AddTaskModal.php'; ?>
 
 
 <div class="task-tooltip" id="taskTooltip"></div>
@@ -234,17 +241,17 @@ $blockerMapJson = json_encode($blockerMap);
 <script>
     // Oracle tasks passed from PHP → JS
     const serverTasks = <?= $tasksJson ?>.map(t => ({
-        Id:             t.task_id,
-        Name:           t.task_name,
-        StartDate:      t.start_date,
-        DueDate:        t.due_date,
-        Category:       t.category,
-        CustomCategory: t.custom_category,
-        Priority:       t.priority,
-        Color:          t.color,
-        Notes:          t.notes,
-        Status:         t.status || 'pending',
-        Recurrence:     t.recurrence || ''
+        Id:             parseInt(t.TASK_ID || t.task_id, 10),
+        Name:           t.TASK_NAME       || t.task_name,
+        StartDate:      t.START_DATE      || t.start_date,
+        DueDate:        t.DUE_DATE        || t.due_date,
+        Category:       t.CATEGORY        || t.category,
+        CustomCategory: t.CUSTOM_CATEGORY || t.custom_category,
+        Priority:       t.PRIORITY        || t.priority,
+        Color:          t.COLOR           || t.color,
+        Notes:          t.NOTES           || t.notes,
+        Status:         (t.STATUS         || t.status         || 'pending'),
+        Recurrence:     (t.RECURRENCE     || t.recurrence     || '')
     }));
 
     // Map of task_id → unresolved blocker count (for calendar dot indicators)

@@ -913,11 +913,11 @@ function updateTaskStatus(taskId, newStatus, btn) {
     // ?open=ID — open the task modal
     var openId = params.get('open');
     if (openId && parseInt(openId, 10) > 0) {
-        window.addEventListener('DOMContentLoaded', function () {
-            if (typeof window.tmOpenView === 'function') {
-                window.tmOpenView(openId);
-            }
-        });
+        // DOMContentLoaded has already fired by the time this script runs
+        // (it's at the bottom of <body>). Call tmOpenView directly.
+        if (typeof window.tmOpenView === 'function') {
+            window.tmOpenView(openId);
+        }
         history.replaceState(null, '', window.location.pathname +
             (params.get('view') ? '?view=' + params.get('view') : ''));
         return;

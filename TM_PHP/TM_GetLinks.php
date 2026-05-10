@@ -25,10 +25,13 @@ if ($taskId <= 0) {
     exit;
 }
 
-// Verify ownership
+// Verify access: owned by, assigned to, or an org-wide task in this user's org
+$oid      = tm_org_id();
 $ownerRow = tm_fetch_one(tm_exec(
-    "SELECT task_id FROM TM_Tasks WHERE task_id = :p1 AND user_id = :p2",
-    [$taskId, $uid]
+    "SELECT task_id FROM TM_Tasks
+      WHERE task_id = :p1
+        AND (user_id = :p2 OR assigned_to = :p3 OR (is_org_task = 1 AND org_id = :p4))",
+    [$taskId, $uid, $uid, $oid]
 ));
 if (!$ownerRow) {
     echo json_encode(['ok' => false, 'error' => 'Task not found']);

@@ -291,9 +291,8 @@ const CalendarApp = (() => {
         bindCatBtns('#addTaskModal .category-options', 'addCategoryInput', 'addOthersWrap');
         bindPriorityBtns('#addTaskModal .priority-options', 'addPriorityInput');
 
-        // Bind category & priority for shared edit modal (tm-prefixed IDs)
-        bindCatBtns('#tmEditCatOptions', 'tmEditCategoryInput', 'tmEditOthersWrap');
-        bindPriorityBtns('#tmEditPriorityOptions', 'tmEditPriorityInput');
+        // NOTE: category & priority buttons for the edit modal are bound
+        // by TM_TaskModal.php's own inline script — do not bind here again.
 
         // Nav buttons
         document.getElementById('prevMonth').addEventListener('click', () => {
