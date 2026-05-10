@@ -21,9 +21,10 @@ $_tstmt  = tm_exec(
 $myTeams = tm_fetch_all($_tstmt);
 
 // Build the WHERE clause and params based on whether a team filter is active
-// Default: own tasks + assigned tasks + org-wide tasks in this org
-$taskWhere  = '(user_id = :p1 OR assigned_to = :p1 OR (is_org_task = 1 AND org_id = :p2))';
-$taskParams = [$uid, $oid];
+// Default: own tasks + assigned tasks + org-wide tasks + project member tasks
+$taskWhere  = '(user_id = :p1 OR assigned_to = :p1 OR (is_org_task = 1 AND org_id = :p2)
+                OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id = :p3))';
+$taskParams = [$uid, $oid, $uid];
 $activeTeamName = '';
 
 if ($filterTeam > 0) {

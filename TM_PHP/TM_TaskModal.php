@@ -1011,14 +1011,11 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         var sel = document.getElementById(selId);
         if (!sel) return;
         fetchUsers(function (users) {
-            // Remove previously added options (keep first "Unassigned")
             while (sel.options.length > 1) sel.remove(1);
             users.forEach(function (u) {
                 var opt = document.createElement('option');
                 opt.value = u.user_id;
-                opt.textContent = u.full_name
-                    ? u.full_name + ' (@' + u.username + ')'
-                    : '@' + u.username;
+                opt.textContent = u.full_name || ('User #' + u.user_id);
                 if (parseInt(currentAssignedTo, 10) === u.user_id) opt.selected = true;
                 sel.appendChild(opt);
             });
@@ -1122,9 +1119,9 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         el.className = 'tm-comment-item';
         el.dataset.commentId = c.comment_id;
 
-        var displayName = c.full_name && c.full_name.trim()
-            ? c.full_name + ' (@' + escHtml(c.username) + ')'
-            : '@' + escHtml(c.username);
+        var displayName = (c.full_name && c.full_name.trim())
+            ? c.full_name
+            : ('User #' + c.user_id);
 
         el.innerHTML =
             '<div class="tm-comment-meta">' +
@@ -1239,26 +1236,67 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         });
     };
 
-    // ── View modal: show assigned user ────────────────────────────
+    // ── View modal: show assigned user, project, and team ────────────
     var _origOpenView = window.tmOpenView;
     window.tmOpenView = function (id) {
         _origOpenView(id);
-        // Fetch collab details and inject assigned-to pill into view modal
         fetch('TM_PHP/TM_CollabActions.php?action=get_task_collab&task_id=' + encodeURIComponent(id))
             .then(function (r) { return r.json(); })
             .then(function (d) {
-                if (!d.ok || !d.assigned_username) return;
+                if (!d.ok) return;
                 var body = document.getElementById('viewModalBody');
                 if (!body) return;
-                // Append assign pill if not already there
-                if (!body.querySelector('.vm-assign-pill')) {
-                    var pill = document.createElement('div');
-                    pill.style.cssText = 'margin-top:.75rem;';
-                    pill.innerHTML =
-                        '<span class="vm-label" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--gray-400);">Assigned To</span><br>' +
-                        '<span class="vm-assign-pill"><i class="fa-solid fa-user"></i>' +
-                        escHtml(d.assigned_username) + '</span>';
-                    body.appendChild(pill);
+                if (body.querySelector('.vm-collab-extras')) return;
+
+                var extras = document.createElement('div');
+                extras.className = 'vm-collab-extras';
+                extras.style.cssText = 'margin-top:.85rem;';
+
+                var gridHtml = '<div style="height:1px;background:var(--gray-100);margin:0 0 .85rem;"></div><div class="vm-grid" style="margin-bottom:0;">';
+                var hasExtra = false;
+
+                if (d.assigned_to) {
+                    hasExtra = true;
+                    var displayName = (d.assigned_full_name && d.assigned_full_name.trim())
+                        ? d.assigned_full_name
+                        : ('User #' + d.assigned_to);
+                    gridHtml += '<div class="vm-field">' +
+                        '<span class="vm-label"><i class="fa-solid fa-user" style="margin-right:4px;"></i>Assigned To</span>' +
+                        '<span class="vm-value"><span class="vm-assign-pill"><i class="fa-solid fa-user"></i>' +
+                        escHtml(displayName) + '</span></span></div>';
+                }
+
+                if (d.project_id && d.project_name) {
+                    hasExtra = true;
+                    var dotColor = d.project_color ? 'background:' + escHtml(d.project_color) + ';' : 'background:#6366f1;';
+                    gridHtml += '<div class="vm-field">' +
+                        '<span class="vm-label"><i class="fa-solid fa-folder" style="margin-right:4px;"></i>Project</span>' +
+                        '<span class="vm-value" style="display:flex;align-items:center;gap:5px;">' +
+                        '<span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;' + dotColor + 'display:inline-block;"></span>' +
+                        escHtml(d.project_name) + '</span></div>';
+                }
+
+                if (d.team_id && d.team_name) {
+                    hasExtra = true;
+                    gridHtml += '<div class="vm-field">' +
+                        '<span class="vm-label"><i class="fa-solid fa-people-group" style="margin-right:4px;"></i>Team</span>' +
+                        '<span class="vm-value">' + escHtml(d.team_name) + '</span></div>';
+                }
+
+                // Recurrence — from TASKS dict
+                var taskData = (typeof TASKS !== 'undefined') ? TASKS[parseInt(id, 10)] : null;
+                if (taskData && taskData.recurrence) {
+                    hasExtra = true;
+                    var recLabels = {daily:'Daily',weekly:'Weekly',monthly:'Monthly',yearly:'Yearly'};
+                    gridHtml += '<div class="vm-field">' +
+                        '<span class="vm-label"><i class="fa-solid fa-rotate" style="margin-right:4px;"></i>Recurrence</span>' +
+                        '<span class="vm-value">' + (recLabels[taskData.recurrence] || taskData.recurrence) + '</span></div>';
+                }
+
+                gridHtml += '</div>';
+                if (hasExtra) {
+                    extras.innerHTML = gridHtml;
+                    body.appendChild(extras);
                 }
             }).catch(function () {});
     };
@@ -1276,12 +1314,10 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         fetchUsers(function (users) {
             sel.innerHTML = '<option value="">— Pick a user —</option>';
             users.forEach(function (u) {
-                if (u.user_id === currentOwnerId) return; // skip current owner
+                if (u.user_id === currentOwnerId) return;
                 var opt = document.createElement('option');
                 opt.value = u.user_id;
-                opt.textContent = u.full_name
-                    ? u.full_name + ' (@' + u.username + ')'
-                    : '@' + u.username;
+                opt.textContent = u.full_name || ('User #' + u.user_id);
                 sel.appendChild(opt);
             });
         });

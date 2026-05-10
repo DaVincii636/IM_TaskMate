@@ -19,7 +19,10 @@ $dateTo    = trim($_GET['to']   ?? '');
 
 $extraWhere  = '';
 $oid         = tm_org_id();
-$extraParams = [$uid, $uid, $oid]; // :p1 = user_id (owned), :p2 = user_id (assigned_to), :p3 = org_id (org-wide)
+// Full scope: owned + assigned + org-wide + project member
+$baseScope   = "(user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3)
+                 OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id = :p4))";
+$extraParams = [$uid, $uid, $oid, $uid];
 
 if ($search !== '') {
     $extraWhere .= " AND UPPER(task_name) LIKE UPPER(:p" . (count($extraParams)+1) . ")";
@@ -65,7 +68,7 @@ if ($view === 'done') {
                 TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3)) AND status IN ('done','done_late')
+         WHERE $baseScope AND status IN ('done','done_late')
          $extraWhere
          ORDER BY $sortSql",
         $extraParams
@@ -76,7 +79,7 @@ if ($view === 'done') {
                 TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3))
+         WHERE $baseScope
            AND due_date < SYSDATE
            AND status NOT IN ('done','cancelled')
          $extraWhere
@@ -84,13 +87,13 @@ if ($view === 'done') {
         $extraParams
     );
 } else {
-    // all — include org-wide tasks + tasks delegated to this user via assigned_to
+    // all — own + assigned + org-wide + project member tasks
     $stmt = tm_exec(
         "SELECT task_id, task_name, TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
                 TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3))
+         WHERE $baseScope
          $extraWhere
          ORDER BY $sortSql",
         $extraParams
@@ -452,31 +455,31 @@ table.task-table tbody tr.row-overdue td:first-child {
 <?php endif; ?>
 
 <?php
-// Count tasks for tab badges — scope mirrors the main queries:
-// owned by user  OR  assigned to user  OR  org-wide tasks in the same org.
+// Count tasks for tab badges — full scope: owned + assigned + org-wide + project member
 $_cntUid = $uid;
 $_cntOid = $oid;
+$_cntScope = "(user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)
+               OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id=:p4))";
 
 $_r = tm_fetch_all(tm_exec(
-    "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)",
-    [$_cntUid, $_cntUid, $_cntOid]
+    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE $_cntScope",
+    [$_cntUid, $_cntUid, $_cntOid, $_cntUid]
 ));
 $cntAll = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 
 $_r = tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3))
+     WHERE ($_cntScope)
        AND due_date < SYSDATE AND status NOT IN ('done','cancelled')",
-    [$_cntUid, $_cntUid, $_cntOid]
+    [$_cntUid, $_cntUid, $_cntOid, $_cntUid]
 ));
 $cntMissing = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 
 $_r = tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3))
+     WHERE ($_cntScope)
        AND status IN ('done','done_late')",
-    [$_cntUid, $_cntUid, $_cntOid]
+    [$_cntUid, $_cntUid, $_cntOid, $_cntUid]
 ));
 $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 ?>
@@ -835,9 +838,14 @@ function showUndoToast(msg, taskId, taskName) {
         }
     }, 8000);
 
-    // Cancel timer if manually closed
+    // On manual close: mark dismissed, stop the timer, then reload
+    // so the completed task is removed from the to-do list
     toast.querySelector('.toast-close').addEventListener('click', function(){
-        dismissed = true; clearTimeout(timer);
+        if (dismissed) return;
+        dismissed = true;
+        clearTimeout(timer);
+        toast.classList.remove('show');
+        setTimeout(function(){ location.reload(); }, 300);
     });
 }
 

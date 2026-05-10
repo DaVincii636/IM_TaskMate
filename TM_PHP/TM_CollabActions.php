@@ -205,10 +205,10 @@ switch ($action) {
             [$uid, $oid]
         );
         $users = array_map(function ($r) {
+            $full = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? ''));
             return [
-                'user_id'    => (int)$r['user_id'],
-                'username'   => $r['username'] ?? '',
-                'full_name'  => trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')),
+                'user_id'   => (int)$r['user_id'],
+                'full_name' => $full ?: ('User #' . (int)$r['user_id']),
             ];
         }, tm_fetch_all($stmt));
         echo json_encode(['ok' => true, 'data' => $users]);
@@ -374,11 +374,11 @@ switch ($action) {
             [$projectId]
         );
         $members = array_map(function ($r) {
+            $full = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? ''));
             return [
                 'user_id'   => (int)$r['user_id'],
-                'username'  => $r['username']   ?? '',
-                'full_name' => trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')),
-                'role'      => $r['role']        ?? 'member',
+                'full_name' => $full ?: ('User #' . (int)$r['user_id']),
+                'role'      => $r['role'] ?? 'member',
             ];
         }, tm_fetch_all($stmt));
         echo json_encode(['ok' => true, 'data' => $members]);
@@ -656,7 +656,7 @@ switch ($action) {
         $projectId = (int)($_GET['project_id'] ?? 0);
         if (!$projectId) { echo json_encode(['ok' => false, 'error' => 'Missing project_id']); exit; }
 
-        // OCI8: each bind placeholder must appear exactly once — repeat values as :p3/:p4/:p5
+        // OCI8: each bind placeholder must appear exactly once
         $stmt = tm_exec(
             "SELECT t.task_id, t.task_name AS name, t.status,
                     TO_CHAR(t.due_date, 'YYYY-MM-DD') AS due_date
@@ -668,7 +668,12 @@ switch ($action) {
              ORDER BY t.due_date ASC, t.task_name ASC",
             [$projectId, $projectId, $uid, $uid, $uid]
         );
-        echo json_encode(['ok' => true, 'data' => tm_fetch_all($stmt)]);
+        // OCI8 returns uppercase keys — normalise to lowercase for JS
+        $rows = array_map(
+            fn($r) => array_change_key_case($r, CASE_LOWER),
+            tm_fetch_all($stmt)
+        );
+        echo json_encode(['ok' => true, 'data' => $rows]);
         exit;
     }
 
@@ -681,7 +686,6 @@ switch ($action) {
         $projectId = (int)($_GET['project_id'] ?? 0);
         if (!$projectId) { echo json_encode(['ok' => false, 'error' => 'Missing project_id']); exit; }
 
-        // OCI8: :p1 can only appear once — repeat uid as :p3
         $stmt = tm_exec(
             "SELECT t.task_id, t.task_name AS name,
                     TO_CHAR(t.due_date, 'YYYY-MM-DD') AS due_date
@@ -692,7 +696,11 @@ switch ($action) {
              ORDER BY t.task_name ASC",
             [$uid, $projectId, $uid]
         );
-        echo json_encode(['ok' => true, 'data' => tm_fetch_all($stmt)]);
+        $rows = array_map(
+            fn($r) => array_change_key_case($r, CASE_LOWER),
+            tm_fetch_all($stmt)
+        );
+        echo json_encode(['ok' => true, 'data' => $rows]);
         exit;
     }
 
@@ -739,54 +747,60 @@ switch ($action) {
         exit;
     }
 
-    default:
-        echo json_encode(['ok' => false, 'error' => "Unknown action: '{$action}'"]);
-        exit;
-
     /**
      * get_task_collab
      * GET: task_id
-     * Returns assigned_to, assigned_username, project_id, owner_id for a task
+     * Returns assigned_to (with full name), project_id/name/color,
+     * team_id/name, and owner_id for a task.
      */
     case 'get_task_collab': {
         $taskId = (int)($_GET['task_id'] ?? $_POST['task_id'] ?? 0);
         if ($taskId <= 0) {
             echo json_encode(['ok' => false, 'error' => 'task_id required']); exit;
         }
-        // Feature 10: moderators can fetch collab info for any org task
         $isMod = tm_is_moderator();
+        $taskCond = $isMod
+            ? "t.task_id = :p1 AND t.org_id = :p2"
+            : "t.task_id = :p1 AND (t.user_id = :p2 OR t.assigned_to = :p3
+               OR EXISTS (SELECT 1 FROM TM_ProjectMembers pm
+                          WHERE pm.project_id = t.project_id AND pm.user_id = :p4))";
+        $taskParams = $isMod ? [$taskId, $oid] : [$taskId, $uid, $uid, $uid];
+
         $row = tm_fetch_one(tm_exec(
-            $isMod
-                ? "SELECT t.user_id AS owner_id, t.assigned_to, t.project_id,
-                          u.username AS assigned_username,
-                          u.first_name, u.last_name
-                   FROM TM_Tasks t
-                   LEFT JOIN TM_Users u ON u.user_id = t.assigned_to
-                   WHERE t.task_id = :p1 AND t.org_id = :p2"
-                : "SELECT t.user_id AS owner_id, t.assigned_to, t.project_id,
-                          u.username AS assigned_username,
-                          u.first_name, u.last_name
-                   FROM TM_Tasks t
-                   LEFT JOIN TM_Users u ON u.user_id = t.assigned_to
-                   WHERE t.task_id = :p1
-                     AND (t.user_id = :p2 OR t.assigned_to = :p3
-                          OR EXISTS (
-                              SELECT 1 FROM TM_ProjectMembers pm
-                              WHERE pm.project_id = t.project_id AND pm.user_id = :p4
-                          ))",
-            $isMod ? [$taskId, $oid] : [$taskId, $uid, $uid, $uid]
+            "SELECT t.user_id AS owner_id, t.assigned_to, t.project_id,
+                    u.first_name  AS asgn_first,  u.last_name  AS asgn_last,
+                    p.name        AS project_name, p.color      AS project_color,
+                    p.team_id,
+                    tm.team_name
+             FROM TM_Tasks t
+             LEFT JOIN TM_Users    u  ON u.user_id    = t.assigned_to
+             LEFT JOIN TM_Projects p  ON p.project_id = t.project_id
+             LEFT JOIN TM_Teams    tm ON tm.team_id   = p.team_id
+             WHERE $taskCond",
+            $taskParams
         ));
         if (!$row) {
             echo json_encode(['ok' => false, 'error' => 'Not found']); exit;
         }
+        // OCI8 returns uppercase keys — normalise
+        $r = array_change_key_case($row, CASE_LOWER);
+        $fullName = trim(($r['asgn_first'] ?? '') . ' ' . ($r['asgn_last'] ?? '')) ?: null;
         echo json_encode([
             'ok'                 => true,
-            'owner_id'           => $row['owner_id']           ? (int)$row['owner_id']    : null,
-            'assigned_to'        => $row['assigned_to']        ? (int)$row['assigned_to'] : null,
-            'assigned_username'  => $row['assigned_username']  ?? null,
-            'assigned_full_name' => trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '')) ?: null,
-            'project_id'         => $row['project_id']         ? (int)$row['project_id']  : null,
+            'owner_id'           => $r['owner_id']      ? (int)$r['owner_id']    : null,
+            'assigned_to'        => $r['assigned_to']   ? (int)$r['assigned_to'] : null,
+            'assigned_full_name' => $fullName,
+            'project_id'         => $r['project_id']    ? (int)$r['project_id']  : null,
+            'project_name'       => $r['project_name']  ?? null,
+            'project_color'      => $r['project_color'] ?? null,
+            'team_id'            => $r['team_id']       ? (int)$r['team_id']     : null,
+            'team_name'          => $r['team_name']      ?? null,
         ]);
         exit;
     }
+
+    default:
+        echo json_encode(['ok' => false, 'error' => "Unknown action: '{$action}'"]);
+        exit;
 }
+

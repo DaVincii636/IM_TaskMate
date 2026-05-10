@@ -410,6 +410,14 @@ require_once 'TM_PHP/TM_NavNotif.php';
             .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    function friendlyDate(s) {
+        if (!s) return '';
+        var p = s.split('-');
+        if (p.length < 3) return s;
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return months[parseInt(p[1],10)-1] + ' ' + parseInt(p[2],10) + ', ' + p[0];
+    }
+
     function openModal(id) { document.getElementById(id).classList.add('active'); }
     function closeModal(id) { document.getElementById(id).classList.remove('active'); }
     window.openModal  = openModal;  // expose for other script blocks
@@ -638,8 +646,8 @@ require_once 'TM_PHP/TM_NavNotif.php';
                 }
                 list.innerHTML = d.data.map(function(m) {
                     var displayName = (m.full_name && m.full_name.trim())
-                        ? esc(m.full_name) + ' <span style="color:var(--gray-400);font-weight:400;">@' + esc(m.username) + '</span>'
-                        : '@' + esc(m.username);
+                        ? esc(m.full_name)
+                        : ('User #' + m.user_id);
                     var isOwner = m.role === 'owner';
                     var canRemove = _membersProjIsOwner && !isOwner;
                     return [
@@ -650,7 +658,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
                             '</div>',
                             (canRemove
                                 ? '<button class="btn-proj btn-proj-danger" style="font-size:11px;padding:4px 10px;"' +
-                                      ' onclick="removeMember(' + m.user_id + ',\'' + esc(m.username) + '\')">' +
+                                      ' onclick="removeMember(' + m.user_id + ',\'' + esc(displayName) + '\')">' +
                                       '<i class="fa-solid fa-user-minus"></i> Remove</button>'
                                 : ''),
                         '</div>',
@@ -695,8 +703,8 @@ require_once 'TM_PHP/TM_NavNotif.php';
     };
 
     // ── REMOVE MEMBER ──────────────────────────────────────
-    window.removeMember = function(userId, username) {
-        if (!confirm('Remove @' + username + ' from this project?')) return;
+    window.removeMember = function(userId, displayName) {
+        if (!confirm('Remove ' + displayName + ' from this project?')) return;
 
         var fd = new FormData();
         fd.append('action',     'remove_project_member');
@@ -796,7 +804,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
         var p = (window._projects || []).find(function(x) { return x.project_id === projId; });
         _tasksProjName = p ? p.name : 'Project';
         document.getElementById('projTasksTitle').textContent = _tasksProjName + ' — Tasks';
-        document.getElementById('projTasksSubtitle').textContent = 'View, link, or unlink tasks for this project';
+        document.getElementById('projTasksSubtitle').textContent = '';
         document.getElementById('projTaskLinkFeedback').textContent = '';
         loadProjectTasks();
         loadUnlinkedTasks();
@@ -827,7 +835,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
                                 (t.status === 'done' ? 'text-decoration:line-through;color:#9ca3af;' : '') + '">' + escHtml(t.name) + '</div>',
                                 '<div style="font-size:11px;color:var(--gray-400);margin-top:2px;">',
                                     '<span style="color:' + statusColor + ';font-weight:600;">' + statusLabel + '</span>',
-                                    (t.due_date ? ' · Due ' + t.due_date : ''),
+                                    (t.due_date ? ' · Due ' + friendlyDate(t.due_date) : ''),
                                 '</div>',
                             '</div>',
                             '<button class="proj-unlink-btn" onclick="doUnlinkTask(' + t.task_id + ')" title="Remove from project">',
@@ -854,7 +862,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
                 _allUnlinkedTasks.forEach(function(t) {
                     var opt = document.createElement('option');
                     opt.value = t.task_id;
-                    opt.textContent = t.name + (t.due_date ? ' (due ' + t.due_date + ')' : '');
+                    opt.textContent = t.name + (t.due_date ? ' (due ' + friendlyDate(t.due_date) + ')' : '');
                     sel.appendChild(opt);
                 });
                 if (_allUnlinkedTasks.length === 0) {

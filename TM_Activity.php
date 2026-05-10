@@ -26,9 +26,14 @@ if (!in_array($filterType, $allowed_types)) $filterType = '';
 
 
 // ── Build WHERE clause ────────────────────────────────────────────────────────
-// Show own activity + activity on org-wide tasks created by any org member
-$where  = 'WHERE (a.user_id = :p1 OR a.entity_id IN (SELECT task_id FROM TM_Tasks WHERE is_org_task = 1 AND org_id = :p2))';
-$params = [$uid, $oid];
+// Show own activity + activity on tasks assigned to user + org-wide + project tasks
+$where  = 'WHERE (a.user_id = :p1 OR a.entity_id IN (
+    SELECT task_id FROM TM_Tasks
+    WHERE assigned_to = :p2
+       OR (is_org_task = 1 AND org_id = :p3)
+       OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id = :p4)
+))';
+$params = [$uid, $uid, $oid, $uid];
 
 if ($filterType !== '') {
     $params[] = $filterType;
