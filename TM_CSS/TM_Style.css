@@ -616,11 +616,11 @@ tbody td {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 5vh 0;
+    padding: 5vh 16px;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.25s;
-    overflow-y: auto;
+    overflow: hidden;
 }
 
 .modal-overlay.active {
@@ -633,7 +633,8 @@ tbody td {
     border-radius: var(--radius-lg);
     width: 420px;
     max-width: 95vw;
-    max-height: 85vh;
+    height: 82vh;
+    max-height: 82vh;
     display: flex;
     flex-direction: column;
     box-shadow: var(--shadow-xl);
@@ -683,9 +684,11 @@ tbody td {
 
 .modal-body {
     padding: 28px;
-    overflow-y: auto;
+    overflow-y: scroll;
     flex: 1;
     min-height: 0;
+    max-height: calc(82vh - 140px); /* 140px ≈ header + footer */
+    scrollbar-gutter: stable;
 }
 
 .modal-footer {

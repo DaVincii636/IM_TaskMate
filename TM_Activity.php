@@ -12,8 +12,10 @@ $firstName = tm_uname();
 $flash     = tm_get_flash();
 
 // ── Filters ───────────────────────────────────────────────────────────────────
-$filterAction = '';                              // action dropdown removed
+$filterAction = trim($_GET['action'] ?? '');
 $filterType   = trim($_GET['type']  ?? '');
+$allowed_actions = ['create','edit','status_change','delete',''];
+if (!in_array($filterAction, $allowed_actions)) $filterAction = '';
 $sortOrder    = trim($_GET['sort']  ?? 'desc');  // 'desc' = newest first, 'asc' = oldest first
 $page         = max(1, (int)($_GET['page'] ?? 1));
 $perPage      = 25;
@@ -31,6 +33,11 @@ $params = [$uid, $oid];
 if ($filterType !== '') {
     $params[] = $filterType;
     $where   .= ' AND a.entity_type = :p' . count($params);
+}
+
+if ($filterAction !== '') {
+    $params[] = $filterAction;
+    $where   .= ' AND a.action = :p' . count($params);
 }
 
 // ── Total count for pagination ────────────────────────────────────────────────
@@ -82,14 +89,16 @@ foreach ($statsRows as $s) {
 
 // ── URL builder ───────────────────────────────────────────────────────────────
 function buildActivityUrl(array $ov = []): string {
-    global $filterType, $sortOrder, $page;
-    $pg   = (int)(array_key_exists('page', $ov) ? $ov['page'] : $page);
-    $type = array_key_exists('type', $ov) ? $ov['type'] : $filterType;
-    $sort = array_key_exists('sort', $ov) ? $ov['sort'] : $sortOrder;
+    global $filterType, $filterAction, $sortOrder, $page;
+    $pg     = (int)(array_key_exists('page',   $ov) ? $ov['page']   : $page);
+    $type   = array_key_exists('type',   $ov) ? $ov['type']   : $filterType;
+    $action = array_key_exists('action', $ov) ? $ov['action'] : $filterAction;
+    $sort   = array_key_exists('sort',   $ov) ? $ov['sort']   : $sortOrder;
     $p = array_filter([
-        'type' => $type,
-        'sort' => ($sort !== 'desc' ? $sort : ''), // omit default
-        'page' => $pg,
+        'type'   => $type,
+        'action' => $action,
+        'sort'   => ($sort !== 'desc' ? $sort : ''), // omit default
+        'page'   => $pg,
     ], fn($v) => $v !== '' && $v !== 0 && $v !== 1);
     return 'TM_Activity.php' . ($p ? '?' . http_build_query($p) : '');
 }
@@ -326,26 +335,26 @@ require_once 'TM_PHP/TM_NavNotif.php';
 
     <!-- Stats strip — click to filter -->
     <div class="stats-strip">
-        <div class="stat-pill">
+        <a href="<?= buildActivityUrl(['action'=>'','type'=>'','page'=>1]) ?>" class="stat-pill<?= ($filterType==='' && ($filterAction??'')==='') ? ' active' : '' ?>" style="text-decoration:none;">
             <i class="fa-solid fa-list" style="color:var(--gray-400)"></i>
             <span class="num"><?= array_sum($statMap) ?></span> All
-        </div>
-        <div class="stat-pill">
+        </a>
+        <a href="<?= buildActivityUrl(['action'=>'create','type'=>'','page'=>1]) ?>" class="stat-pill<?= (($filterAction??'')==='create') ? ' active' : '' ?>" style="text-decoration:none;">
             <i class="fa-solid fa-plus" style="color:#15803d"></i>
             <span class="num"><?= $statMap['create'] ?? 0 ?></span> Created
-        </div>
-        <div class="stat-pill">
+        </a>
+        <a href="<?= buildActivityUrl(['action'=>'edit','type'=>'','page'=>1]) ?>" class="stat-pill<?= (($filterAction??'')==='edit') ? ' active' : '' ?>" style="text-decoration:none;">
             <i class="fa-solid fa-pen" style="color:#1d4ed8"></i>
             <span class="num"><?= $statMap['edit'] ?? 0 ?></span> Edited
-        </div>
-        <div class="stat-pill">
+        </a>
+        <a href="<?= buildActivityUrl(['action'=>'status_change','type'=>'','page'=>1]) ?>" class="stat-pill<?= (($filterAction??'')==='status_change') ? ' active' : '' ?>" style="text-decoration:none;">
             <i class="fa-solid fa-arrow-right-arrow-left" style="color:#92400e"></i>
             <span class="num"><?= $statMap['status_change'] ?? 0 ?></span> Status Changes
-        </div>
-        <div class="stat-pill">
+        </a>
+        <a href="<?= buildActivityUrl(['action'=>'delete','type'=>'','page'=>1]) ?>" class="stat-pill<?= (($filterAction??'')==='delete') ? ' active' : '' ?>" style="text-decoration:none;">
             <i class="fa-solid fa-trash" style="color:#b91c1c"></i>
             <span class="num"><?= $statMap['delete'] ?? 0 ?></span> Deleted
-        </div>
+        </a>
         <span class="result-count" style="margin-left:auto;font-size:12px;color:var(--gray-500);align-self:center">
             <?= number_format($totalRows) ?> event<?= $totalRows !== 1 ? 's' : '' ?>
         </span>

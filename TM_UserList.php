@@ -930,6 +930,45 @@ require_once 'TM_PHP/TM_NavNotif.php';
 </div>
 
 <script>
+// ── Modal helpers ─────────────────────────────────────────────────────────────
+function openAdminModal(id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.add('active');
+}
+function closeAdminModal(id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+}
+function openPcModal(id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.add('active');
+}
+function closePcModal(id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+}
+
+// ── Edit User modal ───────────────────────────────────────────────────────────
+function openEditModal(btn) {
+    document.getElementById('edit_id').value             = btn.dataset.id;
+    document.getElementById('edit_fname').value          = btn.dataset.fname;
+    document.getElementById('edit_lname').value          = btn.dataset.lname;
+    document.getElementById('edit_email_display').value  = btn.dataset.email;
+    document.getElementById('edit_email_hidden').value   = btn.dataset.email;
+    document.getElementById('edit_phone_display').value  = btn.dataset.phone;
+    document.getElementById('edit_phone_hidden').value   = btn.dataset.phone;
+    var roleEl = document.getElementById('edit_role');
+    if (roleEl) roleEl.value = btn.dataset.role || 'user';
+    openAdminModal('editModal');
+}
+
+// ── Delete User modal ─────────────────────────────────────────────────────────
+function openDeleteUserModal(btn) {
+    document.getElementById('deleteUserName').textContent = btn.dataset.username;
+    document.getElementById('deleteUserId').value         = btn.dataset.userid;
+    openPcModal('deleteUserModal');
+}
+
 // ── Tab switching ─────────────────────────────────────────────────────────────
 function switchTab(panelId, btn) {
     document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });

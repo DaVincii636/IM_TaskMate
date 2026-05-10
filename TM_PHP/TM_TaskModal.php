@@ -109,7 +109,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         <form method="post" action="TM_PHP/TM_TaskActions.php" id="editTaskForm" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;">
             <input type="hidden" name="action" value="edit"/>
             <input type="hidden" name="id"     id="editTaskId"/>
-            <div class="modal-body" style="overflow-y:auto;">
+            <div class="modal-body" style="overflow-y:scroll;scrollbar-gutter:stable;flex:1;min-height:0;">
                 <div class="form-group">
                     <label class="form-label">Task Name</label>
                     <input type="text" name="name" class="form-input" id="editTaskName" required/>
@@ -425,7 +425,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
             pri:      r['priority']         || r['PRIORITY']         || 'mid',
             color:    r['color']            || r['COLOR']            || '#ef4444',
             notes:    r['notes']            || r['NOTES']            || '',
-            status:   r['status']           || r['STATUS']           || 'pending',
+            status:   (r['status'] || r['STATUS'] || 'pending').toString().toLowerCase(),
         };
     });
 
@@ -563,7 +563,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         document.getElementById('tmEditCategoryInput').value = t.cat;
         document.getElementById('tmEditPriorityInput').value = t.pri;
         document.getElementById('tmEditColorInput').value    = t.color;
-        document.getElementById('tmEditTaskStatus').value    = t.status;
+        document.getElementById('tmEditTaskStatus').value    = (t.status || 'pending').toLowerCase();
         document.getElementById('tmEditRecurrence').value    = t.recurrence || '';
 
         // Category buttons
