@@ -40,7 +40,7 @@ $orgs = [];
 $orgsById = [];
 if ($is_admin) {
     $orgStmt = tm_exec(
-        "SELECT o.org_id, o.org_name, o.plan,
+        "SELECT o.org_id, o.org_name,
                 TO_CHAR(o.created_at,'YYYY-MM-DD') AS created_at,
                 (SELECT COUNT(*) FROM TM_Users u WHERE u.org_id = o.org_id) AS member_count
          FROM TM_Organizations o
@@ -58,7 +58,6 @@ if ($is_admin) {
         return [
             'org_id'       => (int)($o['org_id']       ?? $o['ORG_ID']       ?? 0),
             'org_name'     => $o['org_name']     ?? $o['ORG_NAME']     ?? '',
-            'plan'         => $o['plan']         ?? $o['PLAN']         ?? 'free',
             'created_at'   => $o['created_at']   ?? $o['CREATED_AT']   ?? '',
             'member_count' => (int)($o['member_count'] ?? $o['MEMBER_COUNT'] ?? 0),
         ];
@@ -152,11 +151,8 @@ require_once 'TM_PHP/TM_NavNotif.php';
         .org-card:hover{box-shadow:0 4px 20px rgba(0,0,0,.08);}
         .org-card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;}
         .org-card-name{font-size:15px;font-weight:700;color:var(--black,#111);line-height:1.3;}
-        .org-card-plan{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+        .org-card-plan{display:none;
                        padding:2px 8px;border-radius:50px;}
-        .plan-free{background:#f3f4f6;color:#6b7280;}
-        .plan-pro{background:#dbeafe;color:#1d4ed8;}
-        .plan-enterprise{background:#fef3c7;color:#b45309;}
         .org-card-meta{font-size:12px;color:var(--gray-300,#9ca3af);margin-bottom:16px;}
         .org-card-meta span{margin-right:14px;}
         .org-card-actions{display:flex;gap:8px;flex-wrap:wrap;}
@@ -338,7 +334,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
     <div class="admin-tabs">
         <button class="admin-tab active" onclick="switchTab('tab-users', this)" title="View and manage user accounts"><i class="fa-solid fa-users" style="margin-right:6px;font-size:12px;"></i>Users</button>
         <?php if ($is_admin): ?>
-        <button class="admin-tab" onclick="switchTab('tab-orgs', this)" title="Manage organizations and their plans"><i class="fa-solid fa-building" style="margin-right:6px;font-size:12px;"></i>Organizations</button>
+        <button class="admin-tab" onclick="switchTab('tab-orgs', this)" title="Manage organizations"><i class="fa-solid fa-building" style="margin-right:6px;font-size:12px;"></i>Organizations</button>
         <?php endif; ?>
         <button class="admin-tab" onclick="switchTab('tab-teams', this)" title="Create and manage teams within organizations"><i class="fa-solid fa-people-group" style="margin-right:6px;font-size:12px;"></i>Teams</button>
     </div>
@@ -395,6 +391,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
                                 <?php
                                 $roleLabel = match($u['role'] ?? 'user') {
                                     'admin'     => '<span style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">ADMIN</span>',
+                                    'org_admin' => '<span style="background:#fce7f3;color:#9d174d;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">ORG ADMIN</span>',
                                     'moderator' => '<span style="background:#ede9fe;color:#7c3aed;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">MOD</span>',
                                     default     => '<span style="background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">USER</span>',
                                 };
@@ -465,7 +462,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
     <?php if ($is_admin): ?>
     <div class="tab-panel" id="tab-orgs">
     <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 18px;margin-bottom:18px;font-size:13px;color:#6b7280;">
-        <strong style="color:#111;">Organizations</strong> — Create and manage organizations (tenants). Each organization is an isolated workspace. You can set the plan (Free / Pro / Enterprise), rename orgs, and delete empty ones. Users can be moved between organizations from the Users tab.
+        <strong style="color:#111;">Organizations</strong> — Create and manage organizations (tenants). Each organization is an isolated workspace. You can rename orgs and delete empty ones. Users can be moved between organizations from the Users tab.
     </div>
 
         <div class="admin-bar">
@@ -482,15 +479,12 @@ require_once 'TM_PHP/TM_NavNotif.php';
         <?php else: ?>
         <div class="org-grid">
             <?php foreach ($orgs as $org):
-                $planClass  = 'plan-' . ($org['plan'] ?? 'free');
-                $planLabel  = strtoupper($org['plan'] ?? 'FREE');
                 $memberCount = (int)($org['member_count'] ?? 0);
                 $isDefault  = ((int)$org['org_id'] === 1);
             ?>
             <div class="org-card">
                 <div class="org-card-header">
                     <div class="org-card-name"><?= htmlspecialchars($org['org_name']) ?></div>
-                    <span class="org-card-plan <?= $planClass ?>"><?= $planLabel ?></span>
                 </div>
                 <div class="org-card-meta">
                     <span><i class="fa-solid fa-users" style="font-size:11px;margin-right:3px;"></i><?= $memberCount ?> member<?= $memberCount !== 1 ? 's' : '' ?></span>
@@ -503,7 +497,6 @@ require_once 'TM_PHP/TM_NavNotif.php';
                     <button class="btn-org-edit"
                         data-org-id="<?= $org['org_id'] ?>"
                         data-org-name="<?= htmlspecialchars($org['org_name']) ?>"
-                        data-org-plan="<?= htmlspecialchars($org['plan']) ?>"
                         onclick="openEditOrgModal(this)">
                         <i class="fa-solid fa-pen" style="font-size:11px;margin-right:4px;"></i>Edit
                     </button>
@@ -961,12 +954,6 @@ require_once 'TM_PHP/TM_NavNotif.php';
                            placeholder="e.g. Acme Corp" required/>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Plan</label>
-                    <select name="org_plan" class="modal-select">
-                        <option value="free">Free</option>
-                        <option value="pro">Pro</option>
-                        <option value="enterprise">Enterprise</option>
-                    </select>
                 </div>
             </div>
             <div class="modal-footer">
@@ -993,12 +980,6 @@ require_once 'TM_PHP/TM_NavNotif.php';
                     <input type="text" name="org_name" class="form-input" id="editOrgName" required/>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Plan</label>
-                    <select name="org_plan" class="modal-select" id="editOrgPlan">
-                        <option value="free">Free</option>
-                        <option value="pro">Pro</option>
-                        <option value="enterprise">Enterprise</option>
-                    </select>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1301,7 +1282,6 @@ function switchTab(panelId, btn) {
 function openEditOrgModal(btn) {
     document.getElementById('editOrgId').value   = btn.dataset.orgId;
     document.getElementById('editOrgName').value = btn.dataset.orgName;
-    document.getElementById('editOrgPlan').value = btn.dataset.orgPlan || 'free';
     openAdminModal('editOrgModal');
 }
 

@@ -144,3 +144,11 @@ END;
 /
 
 COMMIT;
+
+-- ── ADD team_id TO TM_Tasks ───────────────────
+-- Allows tasks to be directly assigned to a team,
+-- making teams functional beyond visual grouping.
+ALTER TABLE TM_Tasks ADD team_id NUMBER(10) DEFAULT NULL;
+ALTER TABLE TM_Tasks ADD CONSTRAINT fk_tasks_team
+    FOREIGN KEY (team_id) REFERENCES TM_Teams(team_id) ON DELETE SET NULL;
+CREATE INDEX idx_tm_tasks_team ON TM_Tasks(team_id);

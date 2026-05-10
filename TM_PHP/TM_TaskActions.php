@@ -333,6 +333,8 @@ switch ($action) {
         $assignedTo = (int)($_POST['assigned_to']   ?? 0);
         $projectId  = (int)($_POST['project_id']    ?? 0);
         $isOrgTask  = isset($_POST['is_org_task']) && $_POST['is_org_task'] ? 1 : 0;
+        $teamId     = isset($_POST['team_id']) && (int)$_POST['team_id'] > 0
+                        ? (int)$_POST['team_id'] : null;
         if (!in_array($recur, ['daily','weekly','monthly','yearly'])) $recur = '';
 
         if (!$name || !$start || !$due) {
@@ -359,17 +361,19 @@ switch ($action) {
         }
         // ── End stored procedure call ─────────────────────────────────────────
 
-        // ── CHANGE 1 & 2: Update assigned_to and project_id after SP insert ──
-        if ($newId > 0 && ($assignedTo > 0 || $projectId > 0)) {
+        // ── CHANGE 1 & 2: Update assigned_to, project_id, and team_id after SP insert ──
+        if ($newId > 0 && ($assignedTo > 0 || $projectId > 0 || $teamId !== null)) {
             tm_exec(
                 "UPDATE TM_Tasks SET
                     assigned_to = :p1,
-                    project_id  = :p2
+                    project_id  = :p2,
+                    team_id     = :p4
                  WHERE task_id = :p3",
                 [
                     $assignedTo > 0 ? $assignedTo : null,
                     $projectId  > 0 ? $projectId  : null,
                     $newId,
+                    $teamId,
                 ]
             );
             // Notify assigned user

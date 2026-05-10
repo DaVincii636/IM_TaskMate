@@ -8,7 +8,7 @@
 //
 // Actions (POST):
 //   create_org    — create a new organization
-//   edit_org      — rename / change plan of an org
+//   edit_org      — rename an org
 //   delete_org    — delete org (only if empty of users)
 //   transfer_user — move a user to a different org
 //   set_org_admin — promote / demote a user to org_admin
@@ -27,9 +27,6 @@ switch ($action) {
     // ── Create a new organization ────────────────────────────────────────────
     case 'create_org':
         $name = trim($_POST['org_name'] ?? '');
-        $plan = trim($_POST['org_plan'] ?? 'free');
-        if (!in_array($plan, ['free', 'pro', 'enterprise'])) $plan = 'free';
-
         if (!$name) {
             tm_flash('error', 'Organization name is required.');
             header('Location: ../TM_UserList.php#orgs'); exit;
@@ -46,8 +43,8 @@ switch ($action) {
         }
 
         tm_exec(
-            'INSERT INTO TM_Organizations (org_name, plan) VALUES (:p1, :p2)',
-            [$name, $plan]
+            'INSERT INTO TM_Organizations (org_name) VALUES (:p1)',
+            [$name]
         );
 
         $newRow = tm_fetch_one(tm_exec(
@@ -56,7 +53,7 @@ switch ($action) {
         ));
         $newOrgId = (int)($newRow['org_id'] ?? $newRow['ORG_ID'] ?? 0);
 
-        tm_audit($uid, 'create', 'user', $newOrgId, $name, '', "plan:{$plan}");
+        tm_audit($uid, 'create', 'user', $newOrgId, $name, '', '');
         tm_flash('success', "Organization \"{$name}\" created.");
         header('Location: ../TM_UserList.php#orgs'); exit;
 
@@ -64,9 +61,6 @@ switch ($action) {
     case 'edit_org':
         $orgId = (int)($_POST['org_id'] ?? 0);
         $name  = trim($_POST['org_name'] ?? '');
-        $plan  = trim($_POST['org_plan'] ?? 'free');
-        if (!in_array($plan, ['free', 'pro', 'enterprise'])) $plan = 'free';
-
         if ($orgId <= 0 || !$name) {
             tm_flash('error', 'Invalid organization data.');
             header('Location: ../TM_UserList.php#orgs'); exit;
@@ -84,7 +78,7 @@ switch ($action) {
         }
 
         $oldRow = tm_fetch_one(tm_exec(
-            'SELECT org_name, plan FROM TM_Organizations WHERE org_id = :p1', [$orgId]
+            'SELECT org_name FROM TM_Organizations WHERE org_id = :p1', [$orgId]
         ));
         if (!$oldRow) {
             tm_flash('error', 'Organization not found.');
@@ -92,15 +86,14 @@ switch ($action) {
         }
 
         tm_exec(
-            'UPDATE TM_Organizations SET org_name = :p1, plan = :p2 WHERE org_id = :p3',
-            [$name, $plan, $orgId]
+            'UPDATE TM_Organizations SET org_name = :p1 WHERE org_id = :p2',
+            [$name, $orgId]
         );
 
         $oldName = $oldRow['org_name'] ?? $oldRow['ORG_NAME'] ?? '';
-        $oldPlan = $oldRow['plan']     ?? $oldRow['PLAN']     ?? 'free';
         tm_audit($uid, 'edit', 'user', $orgId, $name,
-                 "name:{$oldName}, plan:{$oldPlan}",
-                 "name:{$name}, plan:{$plan}");
+                 "name:{$oldName}",
+                 "name:{$name}");
         tm_flash('success', "Organization updated to \"{$name}\".");
         header('Location: ../TM_UserList.php#orgs'); exit;
 
