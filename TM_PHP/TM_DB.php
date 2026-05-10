@@ -146,8 +146,8 @@ function tm_sp_create_task(
     string $color,
     string $notes,
     string $recurrence,
-    int    $orgId = 1,    // Feature 6: tenant scope — defaults to 1 (Default Org)
-    int    $isOrgTask = 0 // Feature: org-wide task flag
+    int    $orgId     = 1, // Feature 6: tenant scope
+    int    $isOrgTask = 0  // org-wide task flag
 ): int {
     global $conn;
 
@@ -161,20 +161,24 @@ function tm_sp_create_task(
               END;";
 
     $stmt = oci_parse($conn, $plsql);
+    if (!$stmt) {
+        $e = oci_error($conn);
+        throw new RuntimeException('TM_CreateTask parse failed: ' . ($e['message'] ?? 'unknown'));
+    }
 
     // IN parameters
-    oci_bind_by_name($stmt, ':p_user_id',         $userId,         -1);
-    oci_bind_by_name($stmt, ':p_task_name',        $taskName,       255);
-    oci_bind_by_name($stmt, ':p_start_date',       $startDate,      10);
-    oci_bind_by_name($stmt, ':p_due_date',         $dueDate,        10);
-    oci_bind_by_name($stmt, ':p_category',         $category,       50);
-    oci_bind_by_name($stmt, ':p_custom_category',  $customCategory, 100);
-    oci_bind_by_name($stmt, ':p_priority',         $priority,       20);
-    oci_bind_by_name($stmt, ':p_color',            $color,          20);
-    oci_bind_by_name($stmt, ':p_notes',            $notes,          -1);
-    oci_bind_by_name($stmt, ':p_recurrence',       $recurrence,     20);
-    oci_bind_by_name($stmt, ':p_org_id',           $orgId,          10); // Feature 6
-    oci_bind_by_name($stmt, ':p_is_org_task',      $isOrgTask,       1);
+    oci_bind_by_name($stmt, ':p_user_id',         $userId,          -1);
+    oci_bind_by_name($stmt, ':p_task_name',        $taskName,        255);
+    oci_bind_by_name($stmt, ':p_start_date',       $startDate,       10);
+    oci_bind_by_name($stmt, ':p_due_date',         $dueDate,         10);
+    oci_bind_by_name($stmt, ':p_category',         $category,        50);
+    oci_bind_by_name($stmt, ':p_custom_category',  $customCategory,  100);
+    oci_bind_by_name($stmt, ':p_priority',         $priority,        20);
+    oci_bind_by_name($stmt, ':p_color',            $color,           20);
+    oci_bind_by_name($stmt, ':p_notes',            $notes,           -1);
+    oci_bind_by_name($stmt, ':p_recurrence',       $recurrence,      20);
+    oci_bind_by_name($stmt, ':p_org_id',           $orgId,           10); // Feature 6
+    oci_bind_by_name($stmt, ':p_is_org_task',      $isOrgTask,        1);
 
     // OUT parameter — Oracle writes the new task_id here
     $newTaskId = 0;
@@ -186,7 +190,12 @@ function tm_sp_create_task(
     // goes through but the TM_AuditLog INSERT is never committed, so the
     // Activity Feed shows nothing. OCI_COMMIT_ON_SUCCESS lets the procedure's
     // internal COMMIT persist both writes atomically.
-    oci_execute($stmt, OCI_COMMIT_ON_SUCCESS);
+    $ok = oci_execute($stmt, OCI_COMMIT_ON_SUCCESS);
+    if (!$ok) {
+        $e = oci_error($stmt);
+        oci_free_statement($stmt);
+        throw new RuntimeException('TM_CreateTask execute failed: ' . ($e['message'] ?? 'unknown OCI error'));
+    }
     oci_free_statement($stmt);
 
     return (int)$newTaskId;

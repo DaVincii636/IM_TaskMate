@@ -160,9 +160,6 @@
             const rows = document.querySelectorAll(`[data-task-id="${tid}"]`);
 
             rows.forEach(row => {
-                // Highlight the row briefly so the user notices the change
-                row.classList.add('tm-rt-flash');
-                setTimeout(() => row.classList.remove('tm-rt-flash'), 1200);
 
                 // Patch status pill
                 const statusPill = row.querySelector('.status-pill');
@@ -278,13 +275,6 @@
         const style = document.createElement('style');
         style.id = 'tm-rt-styles';
         style.textContent = `
-/* ── Real-time flash highlight ──────────────────────── */
-@keyframes tm-rt-flash-anim {
-    0%   { background: #fef9c3; }
-    100% { background: transparent; }
-}
-.tm-rt-flash { animation: tm-rt-flash-anim 1.2s ease-out forwards; }
-
 
 /* ── Live comment badge ─────────────────────────────── */
 .tm-live-badge {

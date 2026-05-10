@@ -51,6 +51,14 @@ ALTER TABLE TM_Tasks ADD CONSTRAINT fk_tasks_org
 
 CREATE INDEX idx_tm_tasks_org ON TM_Tasks(org_id);
 
+-- ── ADD is_org_task TO TM_Tasks ───────────────
+ALTER TABLE TM_Tasks ADD is_org_task NUMBER(1) DEFAULT 0 NOT NULL;
+
+ALTER TABLE TM_Tasks ADD CONSTRAINT chk_is_org_task
+    CHECK (is_org_task IN (0, 1));
+
+CREATE INDEX idx_tm_tasks_org_task ON TM_Tasks(org_id, is_org_task);
+
 -- ── ORG-SCOPED VIEW ───────────────────────────
 CREATE OR REPLACE VIEW VW_Tasks_OrgScoped AS
 SELECT
@@ -61,7 +69,8 @@ SELECT
     t.task_name,
     t.status,
     t.priority,
-    t.due_date
+    t.due_date,
+    t.is_org_task
 FROM TM_Tasks t
 JOIN TM_Organizations o ON o.org_id = t.org_id;
 

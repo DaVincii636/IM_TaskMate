@@ -17,7 +17,7 @@ CREATE OR REPLACE PROCEDURE TM_CreateTask (
     p_notes           IN  TM_Tasks.notes%TYPE,
     p_recurrence      IN  TM_Tasks.recurrence%TYPE,
     p_new_task_id     OUT TM_Tasks.task_id%TYPE,
-    p_org_id          IN  TM_Tasks.org_id%TYPE DEFAULT 1,
+    p_org_id          IN  TM_Tasks.org_id%TYPE      DEFAULT 1,
     p_is_org_task     IN  TM_Tasks.is_org_task%TYPE DEFAULT 0
 ) AS
     v_audit_new VARCHAR2(500);

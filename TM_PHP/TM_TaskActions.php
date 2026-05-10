@@ -48,10 +48,10 @@ if ($action === 'list') {
                 TO_CHAR(due_date,'YYYY-MM-DD')   AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3))
-           AND org_id  = :p4
+         WHERE (user_id = :p1 OR assigned_to = :p2)
+           AND org_id  = :p3
          ORDER BY due_date ASC",
-        [$uid, $uid, $oid, $oid]
+        [$uid, $uid, $oid]
     );
     $rows = tm_fetch_all($stmt);
     // Cast task_id to int so JSON encodes it as a number, not a string
@@ -88,10 +88,10 @@ if ($action === 'export') {
                 status, recurrence,
                 TO_CHAR(created_at,'YYYY-MM-DD HH24:MI:SS') AS created_at
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3))
-           AND org_id  = :p4
+         WHERE (user_id = :p1 OR assigned_to = :p2)
+           AND org_id  = :p3
          ORDER BY due_date ASC",
-        [$uid, $uid, $oid, $oid]
+        [$uid, $uid, $oid]
     );
     $rows = tm_fetch_all($stmt);
 
@@ -348,10 +348,15 @@ switch ($action) {
         // The procedure handles the INSERT + audit atomically inside Oracle
         // (IM101 Week 12: security, integrity, performance, reuse).
         // Feature 6: pass org_id so the stored procedure stamps the new task correctly
-        $newId = tm_sp_create_task(
-            $uid, $name, $start, $due,
-            $cat, $ccat, $pri, $col, $notes, $recur, $oid, $isOrgTask
-        );
+        try {
+            $newId = tm_sp_create_task(
+                $uid, $name, $start, $due,
+                $cat, $ccat, $pri, $col, $notes, $recur, $oid, $isOrgTask
+            );
+        } catch (RuntimeException $e) {
+            if ($isApi) tm_api_err('Could not save task: ' . $e->getMessage());
+            tm_flash('error', 'Could not save task: ' . $e->getMessage()); break;
+        }
         // ── End stored procedure call ─────────────────────────────────────────
 
         // ── CHANGE 1 & 2: Update assigned_to and project_id after SP insert ──
