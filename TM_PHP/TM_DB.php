@@ -27,12 +27,24 @@ if (!$conn) {
 function tm_exec(string $sql, array $params = []) {
     global $conn;
     $stmt = oci_parse($conn, $sql);
+    if (!$stmt) {
+        $e = oci_error($conn);
+        throw new RuntimeException('oci_parse failed: ' . ($e['message'] ?? 'unknown error'));
+    }
     $bound = [];  // keep bound values alive until oci_execute
     foreach ($params as $i => $val) {
         $bound[$i] = $val;
         oci_bind_by_name($stmt, ':p' . ($i + 1), $bound[$i], -1);
     }
-    oci_execute($stmt);
+    // FIX: check oci_execute result — if it fails and we silently return $stmt,
+    // any subsequent oci_fetch_assoc() call triggers ORA-24374 (define not done
+    // before fetch) because the statement was never actually executed.
+    $ok = oci_execute($stmt);
+    if (!$ok) {
+        $e = oci_error($stmt);
+        oci_free_statement($stmt);
+        throw new RuntimeException('Query failed: ' . ($e['message'] ?? 'unknown error'));
+    }
     return $stmt;
 }
 
