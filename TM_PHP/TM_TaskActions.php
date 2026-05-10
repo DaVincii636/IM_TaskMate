@@ -447,7 +447,7 @@ switch ($action) {
         $assignedTo = array_key_exists('assigned_to', $_POST) ? (int)$_POST['assigned_to'] : -1;
         $projectId  = array_key_exists('project_id',  $_POST) ? (int)$_POST['project_id']  : -1;
         if (!in_array($recur, ['daily','weekly','monthly','yearly'])) $recur = '';
-        $allowed_statuses = ['pending', 'in_progress', 'review', 'done', 'cancelled'];
+        $allowed_statuses = ['pending', 'in_progress', 'review', 'done', 'done_late', 'cancelled'];
         if (!in_array($status, $allowed_statuses)) { $status = 'pending'; }
 
         if ($id <= 0 || !$name || !$start || !$due) {
@@ -626,6 +626,28 @@ switch ($action) {
         tm_flash('success', 'Task deleted.');
         break;
 
+    case 'quick_status':
+        // Simple inline status update (Pending -> In Progress progression)
+        $id        = (int)($_POST['id']     ?? 0);
+        $newStatus = trim($_POST['status']  ?? '');
+        $allowed   = ['pending', 'in_progress'];
+        if ($id <= 0 || !in_array($newStatus, $allowed)) {
+            if ($isApi) tm_api_err('Invalid task or status.');
+            tm_flash('error', 'Invalid task or status.'); break;
+        }
+        $qsRow = tm_fetch_one(tm_exec(
+            "SELECT status FROM TM_Tasks WHERE task_id=:p1 AND (user_id=:p2 OR assigned_to=:p3) AND org_id=:p4",
+            [$id, $uid, $uid, $oid]
+        ));
+        if (!$qsRow) {
+            if ($isApi) tm_api_err('Task not found.', 404);
+            tm_flash('error', 'Task not found.'); break;
+        }
+        tm_sp_update_status($id, $uid, $newStatus);
+        if ($isApi) tm_api_ok(['task_id' => $id, 'status' => $newStatus]);
+        tm_flash('success', 'Task status updated.');
+        break;
+
     case 'quick_done':
         $id = (int)($_POST['id'] ?? 0);
         if ($id <= 0) {
@@ -667,15 +689,16 @@ switch ($action) {
         }
 
         // ── Feature 9: call TM_UpdateTaskStatus stored procedure ─────────────
-        // Atomically updates status and writes the audit entry inside Oracle.
-        tm_sp_update_status($id, $uid, 'done');
+        // Determine final status: done_late if task is overdue, else done
+        $qdDueStr   = $qdRow['due_date']   ?? $qdRow['DUE_DATE']   ?? '';
+        $qdStartStr = $qdRow['start_date'] ?? $qdRow['START_DATE'] ?? '';
+        $finalStatus = (!empty($qdDueStr) && $qdDueStr < date('Y-m-d')) ? 'done_late' : 'done';
+        tm_sp_update_status($id, $uid, $finalStatus);
         // ── End stored procedure call ─────────────────────────────────────────
 
         // ── Recurring: create next occurrence ────────────────────────────────
         $qdRecur    = $qdRow['recurrence'] ?? '';
-        $qdDueStr   = $qdRow['due_date']   ?? $qdRow['DUE_DATE']   ?? '';
-        $qdStartStr = $qdRow['start_date'] ?? $qdRow['START_DATE'] ?? '';
-        $nextFlash  = 'Task marked as done!';
+        $nextFlash  = ($finalStatus === 'done_late') ? 'Task marked as done (late)!' : 'Task marked as done!';
         if ($qdRecur && $qdDueStr) {
             $dueTs   = strtotime($qdDueStr);
             $startTs = strtotime($qdStartStr);
@@ -706,7 +729,7 @@ switch ($action) {
         }
         // ── End recurring ─────────────────────────────────────────────────────
 
-        if ($isApi) tm_api_ok(['task_id' => $id, 'status' => 'done', 'recurrence' => $qdRecur]);
+        if ($isApi) tm_api_ok(['task_id' => $id, 'status' => $finalStatus, 'recurrence' => $qdRecur]);
         tm_flash('success', $nextFlash);
         $ref = $_SERVER['HTTP_REFERER'] ?? '';
         if (strpos($ref, 'TM_Tasks.php') !== false) {
@@ -783,6 +806,7 @@ switch ($action) {
 }
 
 $redirect = match($action) {
+    'quick_status' => '../TM_Tasks.php',
     'quick_done' => '../TM_Tasks.php',
     default      => (function() {
         $ref = $_SERVER['HTTP_REFERER'] ?? '';

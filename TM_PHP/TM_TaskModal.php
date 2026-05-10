@@ -455,11 +455,11 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
     }
     function statusLabel(s) {
         return {pending:'Pending',in_progress:'In Progress',
-                review:'Review',done:'Done',cancelled:'Cancelled'}[s] || s;
+                review:'Review',done:'Done',done_late:'Done Late',cancelled:'Cancelled'}[s] || s;
     }
     function statusClass(s) {
         return {pending:'status-pending',in_progress:'status-in-progress',
-                review:'status-review',done:'status-done',
+                review:'status-review',done:'status-done',done_late:'status-done-late',
                 cancelled:'status-cancelled'}[s] || 'status-pending';
     }
     function priLabel(p) {
@@ -483,7 +483,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         _currentTaskId = id;
 
         var isOverdue = t.due < new Date().toISOString().slice(0,10)
-                        && t.status !== 'done' && t.status !== 'cancelled';
+                        && t.status !== 'done' && t.status !== 'done_late' && t.status !== 'cancelled';
 
         document.getElementById('viewModalBody').innerHTML =
             // ── Colour hero strip ──────────────────────────────
@@ -793,7 +793,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
             var tasks = getAvailTasks();
             var eligible = tasks.filter(function(t){
                 return t.Id !== _editingId &&
-                       !['done','cancelled'].includes((t.Status||'').toLowerCase()) &&
+                       !['done','done_late','cancelled'].includes((t.Status||'').toLowerCase()) &&
                        !_selected.find(function(s){return s.id===t.Id;}) &&
                        // Only include tasks due on or before this task's due date
                        (currentDue === '' || t.DueDate === '' || t.DueDate <= currentDue);

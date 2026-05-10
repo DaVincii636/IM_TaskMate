@@ -94,18 +94,21 @@
                     </select>
                 </div>
 
-                <!-- ── CHANGE 2: Project selector ─────────────── -->
-                <div class="form-group" id="addProjectGroup">
-                    <label class="form-label">
-                        <i class="fa-solid fa-folder" style="margin-right:4px;color:var(--gray-400)"></i>
-                        Project
+                <!-- ── Organization task checkbox (admin only) ──────── -->
+                <?php if (function_exists('tm_is_admin') && tm_is_admin()): ?>
+                <div class="form-group" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg);border-radius:var(--radius-sm);border:1.5px solid var(--border);">
+                    <input type="checkbox" name="is_org_task" id="addIsOrgTask" value="1"
+                           style="width:18px;height:18px;accent-color:var(--black);cursor:pointer;flex-shrink:0;"/>
+                    <label for="addIsOrgTask" style="font-size:13px;font-weight:600;cursor:pointer;margin:0;">
+                        <i class="fa-solid fa-building" style="margin-right:5px;color:var(--gray-400);font-size:12px;"></i>
+                        Organization-wide task
+                        <span style="display:block;font-size:11px;font-weight:400;color:var(--gray-400);margin-top:2px;">
+                            Check to mark this as a shared org task (leave unchecked for personal)
+                        </span>
                     </label>
-                    <select name="project_id" class="form-input" id="addProjectSelect">
-                        <option value="">— Personal (no project) —</option>
-                    </select>
                 </div>
 
-                <!-- ── CHANGE 1: Assign to user ───────────────── -->
+                <!-- ── CHANGE 1: Assign to user (admin only) ──────────── -->
                 <div class="form-group" id="addAssignGroup">
                     <label class="form-label">
                         <i class="fa-solid fa-user-plus" style="margin-right:4px;color:var(--gray-400)"></i>
@@ -115,6 +118,7 @@
                         <option value="">— Unassigned —</option>
                     </select>
                 </div>
+                <?php endif; ?>
 
                 <div class="form-group">
                     <label class="form-label">Notes</label>
@@ -135,10 +139,9 @@
 </div>
 
 <script>
-// ── Populate project and assign dropdowns when Add modal opens ────────────────
+// ── Populate assign dropdown when Add modal opens (admin only) ────────────────
 (function () {
-    var _usersLoaded    = false;
-    var _projectsLoaded = false;
+    var _usersLoaded = false;
 
     function loadUsers() {
         if (_usersLoaded) return;
@@ -160,25 +163,6 @@
             }).catch(function () {});
     }
 
-    function loadProjects() {
-        if (_projectsLoaded) return;
-        fetch('TM_PHP/TM_CollabActions.php?action=list_projects')
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                if (!data.ok) return;
-                _projectsLoaded = true;
-                var sel = document.getElementById('addProjectSelect');
-                if (!sel) return;
-                (data.data || []).forEach(function (p) {
-                    var opt = document.createElement('option');
-                    opt.value       = p.project_id;
-                    opt.textContent = p.name;
-                    opt.style.color = p.color;
-                    sel.appendChild(opt);
-                });
-            }).catch(function () {});
-    }
-
     // Load on first open of the Add modal
     var overlay = document.getElementById('addTaskModal');
     if (overlay) {
@@ -187,7 +171,6 @@
                 if (m.attributeName === 'class' &&
                     overlay.classList.contains('active')) {
                     loadUsers();
-                    loadProjects();
                 }
             });
         });

@@ -112,6 +112,7 @@ foreach ($weeklyRaw as $row) {
 // ══════════════════════════════════════════════════════════════════════════════
 // QUERY 2 — Most-missed deadlines by category
 // Overdue = due_date < today AND status not done/cancelled
+// Also includes tasks marked done_late (completed after due date)
 // ══════════════════════════════════════════════════════════════════════════════
 $stmtMissed = tm_exec(
     "SELECT cat_label, missed_count
@@ -129,10 +130,24 @@ $stmtMissed = tm_exec(
                        THEN custom_category
                        ELSE INITCAP(category)
                   END
-         ORDER BY missed_count DESC
+         UNION ALL
+         SELECT CASE WHEN category = 'others' AND custom_category IS NOT NULL
+                          THEN custom_category
+                          ELSE INITCAP(category)
+                END AS cat_label,
+                COUNT(*) AS missed_count
+         FROM TM_Tasks
+         WHERE user_id = :p2
+           AND due_date < TRUNC(SYSDATE)
+           AND status = 'done_late'
+         GROUP BY CASE WHEN category = 'others' AND custom_category IS NOT NULL
+                       THEN custom_category
+                       ELSE INITCAP(category)
+                  END
      )
-     WHERE ROWNUM <= 6",
-    [$uid]
+     GROUP BY cat_label
+     ORDER BY SUM(missed_count) DESC",
+    [$uid, $uid]
 );
 $missedRows = tm_fetch_all($stmtMissed);
 
@@ -211,13 +226,14 @@ foreach ($allDays as $d) {
 // QUERY 5 — Top-level summary numbers for the hero strip
 // ══════════════════════════════════════════════════════════════════════════════
 $cntDone    = (int)_an_val(tm_fetch_all(tm_exec(
-    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 AND status='done'", [$uid])), 'n');
+    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 AND status IN ('done','done_late')", [$uid])), 'n');
 $cntTotal   = (int)_an_val(tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1", [$uid])), 'n');
 $cntOverdue = (int)_an_val(tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE user_id=:p1 AND due_date < TRUNC(SYSDATE) AND status NOT IN ('done','cancelled')",
-    [$uid])), 'n');
+     WHERE user_id=:p1 AND due_date < TRUNC(SYSDATE) AND status NOT IN ('done','cancelled')
+       OR (user_id=:p2 AND status = 'done_late')",
+    [$uid, $uid])), 'n');
 $completionPct = $cntTotal > 0 ? round($cntDone / $cntTotal * 100) : 0;
 
 // ── Pass data to JS for the bar chart ─────────────────────────────────────────
@@ -365,7 +381,7 @@ $chartDue       = array_column(array_values($weeks), 'total_due');
         <a href="TM_Profile.php" class="btn-logout" title="My Profile" style="display:inline-flex;align-items:center;gap:5px;"><i class="fa-solid fa-user-circle"></i></a>
         <a href="TM_Dashboard.php" class="btn-logout">Home</a>
         <a href="TM_Calendar.php"  class="btn-logout">Calendar</a>
-        <a href="TM_Tasks.php"     class="btn-logout">Tasks</a>
+        <a href="TM_Tasks.php"     class="btn-logout">To-Do List</a>
         <a href="TM_Activity.php"  class="btn-logout">Activity</a>
         <a href="TM_Analytics.php" class="btn-logout" style="font-weight:700;">Analytics</a>
                 <!-- Global Search (Feature 5) -->
@@ -448,7 +464,7 @@ $chartDue       = array_column(array_values($weeks), 'total_due');
         <div class="hero-card c-red">
             <div class="hero-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
             <div class="hero-value"><?= $cntOverdue ?></div>
-            <div class="hero-label">Overdue</div>
+            <div class="hero-label">Overdue / Done Late</div>
         </div>
         <div class="hero-card c-amber">
             <div class="hero-icon"><i class="fa-solid fa-percent"></i></div>
@@ -476,7 +492,7 @@ $chartDue       = array_column(array_values($weeks), 'total_due');
         <div class="panel-card">
             <div class="panel-header">
                 <span class="panel-title">Missed Deadlines by Category</span>
-                <span class="panel-sub">Overdue &amp; not done</span>
+                <span class="panel-sub">Overdue, not done, or done late</span>
             </div>
             <div class="panel-body">
                 <?php if (empty($missedRows)): ?>

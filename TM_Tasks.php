@@ -6,9 +6,9 @@ tm_require_login();
 $flash = tm_get_flash();
 $uid   = tm_uid();
 
-// Which tab is active: all | missing | done | board
+// Which tab is active: all | missing | done
 $view = $_GET['view'] ?? 'all';
-if (!in_array($view, ['all', 'missing', 'done', 'board'])) { $view = 'all'; }
+if (!in_array($view, ['all', 'missing', 'done'])) { $view = 'all'; }
 
 // ── Search & filter params (URL-driven, so results are bookmarkable) ──────────
 $search    = trim($_GET['q']    ?? '');
@@ -66,18 +66,14 @@ $sortExpr = match($sortCol) {
 $sortSql = "$sortExpr " . strtoupper($sortDir);
 
 // Build query based on active tab
-// Board view fetches all non-cancelled tasks grouped by status — skip the list query.
-// $stmt is initialised here so static analysis never sees it as possibly undefined.
 $stmt = null;
-if ($view === 'board') {
-    $tasks = []; // placeholder; board section does its own query below
-} elseif ($view === 'done') {
+if ($view === 'done') {
     $stmt = tm_exec(
         "SELECT task_id, task_name, TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
                 TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p2) AND status = 'done'
+         WHERE (user_id = :p1 OR assigned_to = :p2) AND status IN ('done','done_late')
          $extraWhere
          ORDER BY $sortSql",
         $extraParams
@@ -109,7 +105,7 @@ if ($view === 'board') {
     );
 }
 
-$tasks = ($view !== 'board') ? tm_fetch_all($stmt) : [];
+$tasks = tm_fetch_all($stmt);
 
 // Resolve CLOB/LOB fields to plain strings (list views only)
 $tasks = array_map(function($row) {
@@ -131,6 +127,7 @@ function statusLabel(string $s): string {
         'in_progress' => 'In Progress',
         'review'      => 'Review',
         'done'        => 'Done',
+        'done_late'   => 'Done Late',
         'cancelled'   => 'Cancelled',
         default       => ucfirst($s),
     };
@@ -141,6 +138,7 @@ function statusClass(string $s): string {
         'in_progress' => 'status-in-progress',
         'review'      => 'status-review',
         'done'        => 'status-done',
+        'done_late'   => 'status-done-late',
         'cancelled'   => 'status-cancelled',
         default       => 'status-pending',
     };
@@ -191,7 +189,7 @@ function categoryDisplay(array $row): string {
     return ucfirst(htmlspecialchars($row['category']));
 }
 function isOverdue(string $dueDate, string $status): bool {
-    return $dueDate < date('Y-m-d') && !in_array($status, ['done','cancelled']);
+    return $dueDate < date('Y-m-d') && !in_array($status, ['done','done_late','cancelled']);
 }
 
 // ── Feature 8: Load teams for the filter dropdown ────────────────────────────
@@ -211,7 +209,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Tasks - TaskMate</title>
+    <title>To-Do List - TaskMate</title>
     <link rel="stylesheet" href="TM_CSS/TM_Style.css"/>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
     <style>
@@ -293,6 +291,7 @@ table.task-table tbody tr.row-overdue td:first-child {
 .status-in-progress { background: #dbeafe; color: #1d4ed8; }
 .status-review      { background: #fef9c3; color: #92400e; }
 .status-done        { background: #dcfce7; color: #15803d; }
+.status-done-late   { background: #fef3c7; color: #b45309; }
 .status-cancelled   { background: #fee2e2; color: #b91c1c; }
 
 /* ── Priority pills ──────────────────────────  */
@@ -328,12 +327,21 @@ table.task-table tbody tr.row-overdue td:first-child {
 .btn-export-report { background: var(--black); color: var(--white); border-color: var(--black); }
 .btn-export-report:hover { opacity: .85; color: var(--white); }
 
-.btn-quick-done {    padding: 5px 12px; border-radius: 50px;
+/* ── Status action buttons ───────────────────────  */
+.btn-status-action {
+    padding: 5px 12px; border-radius: 50px;
     font-size: 11px; font-weight: 700; font-family: 'Poppins', sans-serif;
-    border: 1.5px solid #16a34a; color: #16a34a; background: transparent;
-    cursor: pointer; transition: all .15s; white-space: nowrap;
+    border: 1.5px solid; cursor: pointer; transition: all .15s; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 5px;
 }
-.btn-quick-done:hover { background: #dcfce7; }
+.btn-status-progress {
+    border-color: #2563eb; color: #2563eb; background: transparent;
+}
+.btn-status-progress:hover { background: #dbeafe; }
+.btn-status-done-action {
+    border-color: #16a34a; color: #16a34a; background: transparent;
+}
+.btn-status-done-action:hover { background: #dcfce7; }
 
 /* ── Empty state ─────────────────────────────  */
 .empty-state {
@@ -385,148 +393,6 @@ table.task-table tbody tr.row-overdue td:first-child {
 }
 .btn-filter-clear:hover { background: var(--gray-100); }
 
-/* ── Kanban board ────────────────────────────  */
-.kanban-board {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 1rem;
-    align-items: start;
-}
-@media (max-width: 900px) {
-    .kanban-board { grid-template-columns: repeat(2, 1fr); }
-}
-@media (max-width: 500px) {
-    .kanban-board { grid-template-columns: 1fr; }
-}
-
-.kanban-col {
-    background: var(--bg);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--gray-100);
-    min-height: 200px;
-    display: flex;
-    flex-direction: column;
-}
-.kanban-col-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: .75rem 1rem;
-    border-bottom: 1px solid var(--gray-100);
-    background: var(--white);
-    border-radius: var(--radius-md) var(--radius-md) 0 0;
-    position: sticky;
-    top: 0;
-}
-.kanban-col-title {
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: .04em;
-    text-transform: uppercase;
-    color: var(--gray-500);
-}
-.kanban-col-count {
-    font-size: 11px;
-    font-weight: 700;
-    background: var(--gray-100);
-    color: var(--gray-500);
-    border-radius: 50px;
-    padding: 1px 8px;
-}
-/* Column accent colours */
-.kanban-col[data-status="pending"]     .kanban-col-header { border-top: 3px solid #9ca3af; }
-.kanban-col[data-status="in_progress"] .kanban-col-header { border-top: 3px solid #3b82f6; }
-.kanban-col[data-status="review"]      .kanban-col-header { border-top: 3px solid #eab308; }
-.kanban-col[data-status="done"]        .kanban-col-header { border-top: 3px solid #22c55e; }
-
-.kanban-col[data-status="pending"]     .kanban-col-title { color: #6b7280; }
-.kanban-col[data-status="in_progress"] .kanban-col-title { color: #1d4ed8; }
-.kanban-col[data-status="review"]      .kanban-col-title { color: #92400e; }
-.kanban-col[data-status="done"]        .kanban-col-title { color: #15803d; }
-
-.kanban-col[data-status="in_progress"] .kanban-col-count { background: #dbeafe; color: #1d4ed8; }
-.kanban-col[data-status="review"]      .kanban-col-count { background: #fef9c3; color: #92400e; }
-.kanban-col[data-status="done"]        .kanban-col-count { background: #dcfce7; color: #15803d; }
-
-.kanban-cards {
-    padding: .6rem;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: .5rem;
-    min-height: 80px;
-}
-/* Drop-zone highlight */
-.kanban-cards.drag-over {
-    background: rgba(59,130,246,.07);
-    border-radius: 0 0 var(--radius-md) var(--radius-md);
-    outline: 2px dashed #93c5fd;
-    outline-offset: -4px;
-}
-
-/* Individual task card */
-.kanban-card {
-    background: var(--white);
-    border: 1px solid var(--gray-100);
-    border-radius: 8px;
-    padding: .75rem;
-    cursor: grab;
-    box-shadow: 0 1px 4px rgba(0,0,0,.06);
-    transition: box-shadow .15s, opacity .15s;
-    user-select: none;
-}
-.kanban-card:active { cursor: grabbing; }
-.kanban-card.dragging {
-    opacity: .45;
-    box-shadow: 0 6px 20px rgba(0,0,0,.15);
-}
-
-.kanban-card-name {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--black);
-    margin-bottom: .4rem;
-    line-height: 1.4;
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-}
-.kanban-card-name .color-dot {
-    flex-shrink: 0;
-    margin-top: 3px;
-}
-.kanban-card-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    align-items: center;
-    margin-top: .35rem;
-}
-.kanban-card-cat {
-    font-size: 11px;
-    color: var(--gray-400);
-    background: var(--bg);
-    border-radius: 50px;
-    padding: 1px 7px;
-    font-weight: 600;
-}
-.kanban-card-due {
-    font-size: 11px;
-    color: var(--gray-400);
-    margin-left: auto;
-}
-.kanban-card-due.overdue { color: #ef4444; font-weight: 700; }
-
-/* Drop placeholder ghost card */
-.kanban-placeholder {
-    border: 2px dashed #93c5fd;
-    border-radius: 8px;
-    height: 60px;
-    background: rgba(59,130,246,.05);
-}
-
-/* Saving spinner overlay on card */
-.kanban-card.saving { opacity: .6; pointer-events: none; }
 
 /* ── Sortable column headers ──────────────────  */
 .th-sort {
@@ -573,7 +439,7 @@ table.task-table tbody tr.row-overdue td:first-child {
         <a href="TM_Profile.php" class="btn-logout" title="My Profile" style="display:inline-flex;align-items:center;gap:5px;"><i class="fa-solid fa-user-circle"></i></a>
         <a href="TM_Dashboard.php" class="btn-logout">Home</a>
         <a href="TM_Calendar.php" class="btn-logout">Calendar</a>
-        <a href="TM_Tasks.php"    class="btn-logout">Tasks</a>
+        <a href="TM_Tasks.php"    class="btn-logout">To-Do List</a>
         <a href="TM_Activity.php" class="btn-logout">Activity</a>
         <a href="TM_Analytics.php" class="btn-logout">Analytics</a>
                 <!-- Global Search (Feature 5) -->
@@ -626,14 +492,14 @@ $_r = tm_fetch_all(tm_exec(
 ));
 $cntMissing = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 
-$_r = tm_fetch_all(tm_exec("SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 AND status='done'", [$uid]));
+$_r = tm_fetch_all(tm_exec("SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 AND status IN ('done','done_late')", [$uid]));
 $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 ?>
 
 <div class="tasks-page">
 
     <div class="tasks-header">
-        <h1>Tasks</h1>
+        <h1>To-Do List</h1>
         <p>Browse, filter, and manage all your tasks in one place.</p>
         <!-- Feature 10: CSV / Report Export (IM101 Week 14 — Data Warehousing) -->
         <div class="export-btns">
@@ -658,9 +524,6 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
         </a>
         <a href="<?= buildUrl(['view'=>'done']) ?>"    class="tab-btn <?= $view==='done'    ? 'active' : '' ?>">
             Done <span class="tab-count"><?= (int)$cntDone ?></span>
-        </a>
-        <a href="<?= buildUrl(['view'=>'board']) ?>"   class="tab-btn <?= $view==='board'   ? 'active' : '' ?>">
-            <i class="fa-solid fa-table-columns" style="font-size:11px;"></i> Board
         </a>
     </div>
 
@@ -820,22 +683,29 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
                         </span>
                     </td>
 
-                    <!-- Quick-done action (hidden on Done tab) -->
+                    <!-- Status action buttons (hidden on Done tab) -->
                     <?php if ($view !== 'done'): ?>
                     <td>
-                        <?php if ($status !== 'done' && $status !== 'cancelled'): ?>
-                        <form method="POST" action="TM_PHP/TM_TaskActions.php" class="quick-done-form" id="qdf-<?= (int)$taskId ?>">
-                            <input type="hidden" name="action"    value="quick_done"/>
-                            <input type="hidden" name="id"        value="<?= (int)$taskId ?>"/>
-                        </form>
-                        <button class="btn-quick-done"
+                        <?php if ($status === 'pending'): ?>
+                        <button class="btn-status-action btn-status-progress"
+                                onclick="event.stopPropagation(); updateTaskStatus(<?= (int)$taskId ?>, 'in_progress', this)"
+                                title="Mark as In Progress">
+                            <i class="fa-solid fa-play"></i> In Progress
+                        </button>
+                        <?php elseif ($status === 'in_progress'): ?>
+                        <button class="btn-status-action btn-status-done-action"
                                 onclick="event.stopPropagation(); submitQuickDone(<?= (int)$taskId ?>)"
-                                title="Mark as done">
+                                title="Mark as Done">
                             <i class="fa-solid fa-check"></i> Done
                         </button>
                         <?php else: ?>
                         <span style="color:var(--gray-300);font-size:12px;">—</span>
                         <?php endif; ?>
+                        <!-- Hidden form for status update -->
+                        <form method="POST" action="TM_PHP/TM_TaskActions.php" class="quick-done-form" id="qdf-<?= (int)$taskId ?>">
+                            <input type="hidden" name="action" value="quick_done"/>
+                            <input type="hidden" name="id"    value="<?= (int)$taskId ?>"/>
+                        </form>
                     </td>
                     <?php endif; ?>
                 </tr>
@@ -845,84 +715,6 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
         </div>
         <?php endif; ?>
     </div><!-- /.task-table-card -->
-
-    <?php if ($view === 'board'):
-        // ── Fetch all non-cancelled tasks for the board ──────────
-        $boardStmt = tm_exec(
-            "SELECT task_id, task_name, TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
-                    category, custom_category, priority, color, status
-             FROM TM_Tasks
-             WHERE (user_id = :p1 OR assigned_to = :p2)
-               AND status NOT IN ('cancelled')
-             ORDER BY due_date ASC",
-            [$uid, $uid]
-        );
-        $boardTasks = tm_fetch_all($boardStmt);
-
-        // Group by status
-        $cols = ['pending' => [], 'in_progress' => [], 'review' => [], 'done' => []];
-        foreach ($boardTasks as $bt) {
-            $st = $bt['STATUS'] ?? $bt['status'] ?? 'pending';
-            if (isset($cols[$st])) $cols[$st][] = $bt;
-        }
-        $colLabels = [
-            'pending'     => 'Pending',
-            'in_progress' => 'In Progress',
-            'review'      => 'Review',
-            'done'        => 'Done',
-        ];
-    ?>
-    <!-- Kanban board -->
-    <div class="kanban-board" id="kanbanBoard">
-        <?php foreach ($cols as $colStatus => $colCards): ?>
-        <div class="kanban-col" data-status="<?= $colStatus ?>">
-            <div class="kanban-col-header">
-                <span class="kanban-col-title"><?= $colLabels[$colStatus] ?></span>
-                <span class="kanban-col-count" id="colCount-<?= $colStatus ?>"><?= count($colCards) ?></span>
-            </div>
-            <div class="kanban-cards" id="col-<?= $colStatus ?>">
-                <?php foreach ($colCards as $bc):
-                    $bId   = $bc['TASK_ID']   ?? $bc['task_id'];
-                    $bName = $bc['TASK_NAME'] ?? $bc['task_name'];
-                    $bDue  = $bc['DUE_DATE']  ?? $bc['due_date'];
-                    $bCat  = $bc['CATEGORY']  ?? $bc['category'];
-                    $bCcat = $bc['CUSTOM_CATEGORY'] ?? $bc['custom_category'] ?? '';
-                    $bPri  = $bc['PRIORITY']  ?? $bc['priority'];
-                    $bCol  = $bc['COLOR']     ?? $bc['color'];
-                    $bSt   = $bc['STATUS']    ?? $bc['status'];
-                    $bOver = $bDue < date('Y-m-d') && !in_array($bSt, ['done','cancelled']);
-                    $bCatLabel = ($bCat === 'custom' && $bCcat) ? $bCcat : ucfirst($bCat);
-                ?>
-                <div class="kanban-card"
-                     draggable="true"
-                     data-id="<?= (int)$bId ?>"
-                     data-task-id="<?= (int)$bId ?>"
-                     data-status="<?= htmlspecialchars($bSt) ?>"
-                     data-name="<?= htmlspecialchars($bName) ?>"
-                     data-due="<?= htmlspecialchars($bDue) ?>"
-                     data-pri="<?= htmlspecialchars($bPri) ?>"
-                     data-cat="<?= htmlspecialchars($bCat) ?>"
-                     data-ccat="<?= htmlspecialchars($bCcat) ?>"
-                     data-color="<?= htmlspecialchars($bCol) ?>">
-                    <div class="kanban-card-name">
-                        <span class="color-dot" style="background:<?= htmlspecialchars($bCol) ?>"></span>
-                        <?= htmlspecialchars($bName) ?>
-                    </div>
-                    <div class="kanban-card-meta">
-                        <span class="kanban-card-cat"><?= htmlspecialchars($bCatLabel) ?></span>
-                        <span class="pri-pill <?= priorityClass($bPri) ?>"><?= priorityLabel($bPri) ?></span>
-                        <span class="kanban-card-due<?= $bOver ? ' overdue' : '' ?>">
-                            <?= htmlspecialchars(date('M j', strtotime($bDue))) ?>
-                            <?= $bOver ? '⚠' : '' ?>
-                        </span>
-                    </div>
-                </div>
-                <?php endforeach; ?>
-            </div>
-        </div>
-        <?php endforeach; ?>
-    </div><!-- /.kanban-board -->
-    <?php endif; ?>
 
 </div><!-- /.tasks-page -->
 
@@ -1108,196 +900,43 @@ function submitQuickDone(id) {
 })();
 </script>
 <script>
-// ── Kanban drag-and-drop ───────────────────────────────────────────────────
+// ── Status progression: Pending → In Progress ────────────────────────────
+function updateTaskStatus(taskId, newStatus, btn) {
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
+    var fd = new FormData();
+    fd.append('action', 'quick_status');
+    fd.append('id',     taskId);
+    fd.append('status', newStatus);
+
+    fetch('TM_PHP/TM_TaskActions.php?format=json', { method: 'POST', body: fd })
+        .then(function(r){ return r.json(); })
+        .then(function(data) {
+            if (!data.ok) {
+                showToast(data.error || 'Could not update status.', 'error');
+                if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+                return;
+            }
+            showToast('Status updated to In Progress!', 'success');
+            setTimeout(function(){ location.reload(); }, 800);
+        })
+        .catch(function() {
+            showToast('Network error. Please try again.', 'error');
+            if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+        });
+}
+
 (function () {
     'use strict';
-
-    var board = document.getElementById('kanbanBoard');
-    if (!board) return; // only runs on board view
-
-    var dragging   = null;   // the card element being dragged
-    var placeholder = null;  // the ghost drop-slot element
-
-    // ── Helper: show a toast message ──────────────────────────
-    function showToast(msg, type) {
-        var t = document.getElementById('toast');
-        if (!t) return;
-        t.textContent = msg;
-        t.className = 'toast ' + (type === 'error' ? 'toast-error' : 'toast-success');
-        t.classList.add('show');
-        setTimeout(function () { t.classList.remove('show'); }, 3000);
-    }
-
-    // ── Helper: update the column count badges ─────────────────
-    function refreshColCounts() {
-        board.querySelectorAll('.kanban-col').forEach(function (col) {
-            var st    = col.getAttribute('data-status');
-            var count = col.querySelectorAll('.kanban-card').length;
-            var badge = document.getElementById('colCount-' + st);
-            if (badge) badge.textContent = count;
-        });
-    }
-
-    // ── Persist a status change via fetch ─────────────────────
-    function persistStatus(card, newStatus) {
-        card.classList.add('saving');
-
-        var fd = new FormData();
-        fd.append('action',         'edit');
-        fd.append('id',             card.dataset.id);
-        fd.append('name',           card.dataset.name);
-        fd.append('startDate',      card.dataset.due);   // fallback — same as due
-        fd.append('dueDate',        card.dataset.due);
-        fd.append('category',       card.dataset.cat);
-        fd.append('customCategory', card.dataset.ccat || '');
-        fd.append('priority',       card.dataset.pri);
-        fd.append('color',          card.dataset.color);
-        fd.append('notes',          '');
-        fd.append('status',         newStatus);
-
-        fetch('TM_PHP/TM_TaskActions.php', { method: 'POST', body: fd })
-            .then(function (res) {
-                // TM_TaskActions redirects on success — any 2xx/3xx is fine
-                card.dataset.status = newStatus;
-                card.classList.remove('saving');
-                refreshColCounts();
-                showToast('Status updated to "' + newStatus.replace('_', ' ') + '"', 'success');
-            })
-            .catch(function () {
-                card.classList.remove('saving');
-                showToast('Could not save — please try again.', 'error');
-                // Move card back to its original column
-                var orig = document.getElementById('col-' + card.dataset.status);
-                if (orig) orig.appendChild(card);
-                refreshColCounts();
-            });
-    }
-
-    // ── Make placeholder ───────────────────────────────────────
-    function makePlaceholder() {
-        var el = document.createElement('div');
-        el.className = 'kanban-placeholder';
-        return el;
-    }
-
-    // ── Drag events on cards (use event delegation) ────────────
-    board.addEventListener('dragstart', function (e) {
-        var card = e.target.closest('.kanban-card');
-        if (!card) return;
-        dragging = card;
-        window._tmDragging = true;
-        dragging.classList.add('dragging');
-        placeholder = makePlaceholder();
-        e.dataTransfer.effectAllowed = 'move';
-        // Firefox requires setData
-        e.dataTransfer.setData('text/plain', card.dataset.id);
-    });
-
-    board.addEventListener('dragend', function () {
-        if (dragging) dragging.classList.remove('dragging');
-        window._tmDragging = false;
-        if (placeholder && placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
-        dragging    = null;
-        placeholder = null;
-        board.querySelectorAll('.kanban-cards').forEach(function (c) {
-            c.classList.remove('drag-over');
-        });
-    });
-
-    // ── Drop-zone events on columns ────────────────────────────
-    board.addEventListener('dragover', function (e) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-
-        var col = e.target.closest('.kanban-col');
-        if (!col || !dragging) return;
-
-        var cards = col.querySelector('.kanban-cards');
-        if (!cards) return;
-
-        // Highlight the column
-        board.querySelectorAll('.kanban-cards').forEach(function (c) {
-            c.classList.remove('drag-over');
-        });
-        cards.classList.add('drag-over');
-
-        // Position the placeholder before the nearest card below the cursor
-        var afterCard = getDragAfterElement(cards, e.clientY);
-        if (placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
-        if (afterCard) {
-            cards.insertBefore(placeholder, afterCard);
-        } else {
-            cards.appendChild(placeholder);
-        }
-    });
-
-    board.addEventListener('dragleave', function (e) {
-        var cards = e.target.closest('.kanban-cards');
-        if (cards && !cards.contains(e.relatedTarget)) {
-            cards.classList.remove('drag-over');
-        }
-    });
-
-    board.addEventListener('drop', function (e) {
-        e.preventDefault();
-        if (!dragging) return;
-
-        var col = e.target.closest('.kanban-col');
-        if (!col) return;
-
-        var newStatus = col.getAttribute('data-status');
-        var cards     = col.querySelector('.kanban-cards');
-        if (!cards) return;
-
-        // Insert card where the placeholder is
-        if (placeholder && placeholder.parentNode === cards) {
-            cards.insertBefore(dragging, placeholder);
-        } else {
-            cards.appendChild(dragging);
-        }
-
-        // Clean up
-        cards.classList.remove('drag-over');
-        if (placeholder && placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
-
-        var oldStatus = dragging.dataset.status;
-        if (newStatus !== oldStatus) {
-            persistStatus(dragging, newStatus);
-        }
-    });
-
-    // ── Helper: find the card the cursor is above ──────────────
-    function getDragAfterElement(container, y) {
-        var cards = Array.from(container.querySelectorAll('.kanban-card:not(.dragging)'));
-        return cards.reduce(function (closest, child) {
-            var box    = child.getBoundingClientRect();
-            var offset = y - box.top - box.height / 2;
-            if (offset < 0 && offset > closest.offset) {
-                return { offset: offset, element: child };
-            }
-            return closest;
-        }, { offset: Number.NEGATIVE_INFINITY }).element;
-    }
-
-})();
-</script>
-
-<script>
-// ── Notification auto-open: open task modal when arriving via ?open=ID ─────
-// Also handles legacy ?highlight=ID (scroll + flash only, no modal)
-(function () {
     var params = new URLSearchParams(window.location.search);
 
-    // ?open=ID — mark-read already happened client-side; just open the modal
+    // ?open=ID — open the task modal
     var openId = params.get('open');
     if (openId && parseInt(openId, 10) > 0) {
-        // Wait for TM_TaskModal.php JS to initialise (it runs in DOMContentLoaded)
         window.addEventListener('DOMContentLoaded', function () {
             if (typeof window.tmOpenView === 'function') {
                 window.tmOpenView(openId);
             }
         });
-        // Clean the URL so refreshing doesn't re-open the modal
         history.replaceState(null, '', window.location.pathname +
             (params.get('view') ? '?view=' + params.get('view') : ''));
         return;

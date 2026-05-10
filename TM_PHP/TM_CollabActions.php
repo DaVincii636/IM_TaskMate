@@ -18,6 +18,7 @@ header('Content-Type: application/json');
 tm_require_login();
 
 $uid    = tm_uid();
+$oid    = tm_org_id();
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 // ═══════════════════════════════════════════════════════════════
@@ -187,15 +188,21 @@ switch ($action) {
     /**
      * list_users
      * GET: Returns all users (id + username + full name) for assignment dropdown.
-     * Excludes the current user so you can't assign to yourself.
+     * Restricted to admin users only. Admins see all registered users in the org.
      */
     case 'list_users': {
+        // Only admin users may fetch the full user list for task assignment
+        if (!tm_is_admin()) {
+            echo json_encode(['ok' => false, 'error' => 'Insufficient permissions.']);
+            exit;
+        }
         $stmt = tm_exec(
             "SELECT user_id, username, first_name, last_name
              FROM TM_Users
              WHERE user_id <> :p1
+               AND org_id  =  :p2
              ORDER BY username ASC",
-            [$uid]
+            [$uid, $oid]
         );
         $users = array_map(function ($r) {
             return [

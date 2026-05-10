@@ -37,7 +37,7 @@ $cntPending = _tm_count(tm_fetch_all(tm_exec(
 )));
 
 $cntDone = _tm_count(tm_fetch_all(tm_exec(
-    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE (user_id=:p1 OR assigned_to=:p2) AND status='done'",
+    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE (user_id=:p1 OR assigned_to=:p2) AND status IN ('done','done_late')",
     [$uid, $uid]
 )));
 
@@ -122,14 +122,14 @@ function priorityLabel(string $p): string {
 function statusClass(string $s): string {
     return match($s) {
         'pending'=>'status-pending','in_progress'=>'status-in-progress',
-        'review'=>'status-review','done'=>'status-done','cancelled'=>'status-cancelled',
+        'review'=>'status-review','done'=>'status-done','done_late'=>'status-done-late','cancelled'=>'status-cancelled',
         default=>'status-pending',
     };
 }
 function statusLabel(string $s): string {
     return match($s) {
         'pending'=>'Pending','in_progress'=>'In Progress','review'=>'Review',
-        'done'=>'Done','cancelled'=>'Cancelled', default=>ucfirst($s),
+        'done'=>'Done','done_late'=>'Done Late','cancelled'=>'Cancelled', default=>ucfirst($s),
     };
 }
 ?><!DOCTYPE html>
@@ -277,6 +277,7 @@ function statusLabel(string $s): string {
 .status-in-progress { background: #dbeafe; color: #1d4ed8; }
 .status-review      { background: #fef9c3; color: #92400e; }
 .status-done        { background: #dcfce7; color: #15803d; }
+.status-done-late   { background: #fef3c7; color: #b45309; }
 .status-cancelled   { background: #fee2e2; color: #b91c1c; }
 
 .pri-pill { display: inline-block; border-radius: 50px; font-size: 11px; font-weight: 700; padding: 3px 10px; }
@@ -373,7 +374,7 @@ function statusLabel(string $s): string {
         <a href="TM_Profile.php" class="btn-logout" title="My Profile" style="display:inline-flex;align-items:center;gap:5px;"><i class="fa-solid fa-user-circle"></i></a>
         <a href="TM_Dashboard.php" class="btn-logout">Home</a>
         <a href="TM_Calendar.php"  class="btn-logout">Calendar</a>
-        <a href="TM_Tasks.php"     class="btn-logout">Tasks</a>
+        <a href="TM_Tasks.php"     class="btn-logout">To-Do List</a>
         <a href="TM_Activity.php"  class="btn-logout">Activity</a>
         <a href="TM_Analytics.php" class="btn-logout">Analytics</a>
                 <!-- Global Search (Feature 5) -->
@@ -468,7 +469,7 @@ function statusLabel(string $s): string {
     <!-- Upcoming tasks -->
     <div class="panel-card">
         <div class="panel-header">
-            <span class="panel-title">Upcoming Tasks</span>
+            <span class="panel-title">Upcoming To-Dos</span>
             <a href="TM_Tasks.php?view=all" class="panel-link">View all →</a>
         </div>
         <?php if (empty($upcoming)): ?>
@@ -688,7 +689,7 @@ const serverTasks = <?= $tasksJson ?>.map(function(t) {
             // A blocker must be finishable before the new task's deadline.
             var currentDue = (document.getElementById('addTaskDue') || {}).value || '';
             var eligible = getAvailTasks().filter(function(t) {
-                return !['done','cancelled'].includes((t.Status||'').toLowerCase()) &&
+                return !['done','done_late','cancelled'].includes((t.Status||'').toLowerCase()) &&
                        !_selected.find(function(s) { return s.id === t.Id; }) &&
                        (currentDue === '' || !t.DueDate || t.DueDate <= currentDue);
             });

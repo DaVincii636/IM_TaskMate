@@ -351,10 +351,17 @@ switch ($action) {
 
         // If user wants to change password, verify current password first
         if ($pw) {
+            // Current password field must not be blank
+            if ($cur === '') {
+                if ($isApi) tm_api_err('Current password is required to set a new password.', 403);
+                tm_flash('error', 'Current password is required to set a new password.'); break;
+            }
             $hashRow = tm_fetch_one(tm_exec(
                 'SELECT password_hash FROM TM_Users WHERE user_id=:p1', [$uid]
             ));
-            if (!$hashRow || !password_verify($cur, $hashRow['password_hash'])) {
+            // Normalize key in case Oracle returns uppercase column name
+            $storedHash = $hashRow['password_hash'] ?? $hashRow['PASSWORD_HASH'] ?? '';
+            if (!$hashRow || !$storedHash || !password_verify($cur, $storedHash)) {
                 if ($isApi) tm_api_err('Current password is incorrect.', 403);
                 tm_flash('error', 'Current password is incorrect.'); break;
             }

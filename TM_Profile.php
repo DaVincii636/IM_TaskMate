@@ -468,12 +468,20 @@ document.querySelectorAll('.pw-toggle').forEach(function(btn) {
 
 // Client-side password confirmation check
 document.getElementById('profileForm').addEventListener('submit', function(e) {
+    var curPw  = document.getElementById('prof_curpw').value;
     var newPw  = document.getElementById('prof_newpw').value;
     var newPw2 = document.getElementById('prof_newpw2').value;
+    if (newPw && !curPw) {
+        e.preventDefault();
+        showToast('Please enter your current password to set a new one.', 'error');
+        document.getElementById('prof_curpw').focus();
+        return;
+    }
     if (newPw && newPw !== newPw2) {
         e.preventDefault();
         showToast('New passwords do not match.', 'error');
         document.getElementById('prof_newpw2').focus();
+        return;
     }
     if (newPw && newPw.length < 6) {
         e.preventDefault();
