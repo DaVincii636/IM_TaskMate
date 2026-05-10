@@ -645,7 +645,9 @@ tbody td {
 
 /* Compact variant for simple admin modals (org, team, transfer) */
 .modal-card.modal-sm {
-    width: 360px;
+    width: 420px;
+    height: auto;
+    max-height: 90vh;
 }
 
 .modal-overlay.active .modal-card {
