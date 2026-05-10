@@ -299,14 +299,14 @@ switch ($action) {
 
     /**
      * add_project_member
-     * POST: project_id, username (to invite by username)
+     * POST: project_id, email (invite by email address)
      */
     case 'add_project_member': {
         $projectId = (int)($_POST['project_id'] ?? 0);
-        $username  = trim($_POST['username'] ?? '');
+        $email     = trim($_POST['email'] ?? '');
 
-        if ($projectId <= 0 || !$username) {
-            echo json_encode(['ok' => false, 'error' => 'project_id and username required']); exit;
+        if ($projectId <= 0 || !$email) {
+            echo json_encode(['ok' => false, 'error' => 'project_id and email required']); exit;
         }
 
         // Caller must be owner
@@ -320,11 +320,11 @@ switch ($action) {
         }
 
         $targetRow = tm_fetch_one(tm_exec(
-            "SELECT user_id, username FROM TM_Users WHERE LOWER(username) = LOWER(:p1)",
-            [$username]
+            "SELECT user_id, username FROM TM_Users WHERE LOWER(email) = LOWER(:p1)",
+            [$email]
         ));
         if (!$targetRow) {
-            echo json_encode(['ok' => false, 'error' => "User '{$username}' not found"]); exit;
+            echo json_encode(['ok' => false, 'error' => "No account found for '{$email}'"]); exit;
         }
         $targetId = (int)$targetRow['user_id'];
 

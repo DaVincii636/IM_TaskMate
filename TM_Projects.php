@@ -177,26 +177,26 @@ require_once 'TM_PHP/TM_NavNotif.php';
         .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
                          z-index:600; align-items:center; justify-content:center; }
         .modal-overlay.active { display:flex; }
-        .modal-card { background:var(--white,#fff); border-radius:16px; width:100%;
-                      max-width:480px; box-shadow:0 20px 60px rgba(0,0,0,.18);
-                      max-height:90vh; overflow-y:auto; }
+        .modal-card { background:var(--white,#fff); border-radius:14px; width:100%;
+                      max-width:400px; box-shadow:0 16px 48px rgba(0,0,0,.16);
+                      max-height:88vh; overflow-y:auto; }
         .modal-header { display:flex; align-items:center; justify-content:space-between;
-                        padding:20px 24px 0; }
-        .modal-title { font-size:16px; font-weight:700; color:var(--black,#111); }
-        .modal-close { background:none; border:none; font-size:18px; cursor:pointer;
+                        padding:16px 20px 0; }
+        .modal-title { font-size:15px; font-weight:700; color:var(--black,#111); }
+        .modal-close { background:none; border:none; font-size:17px; cursor:pointer;
                        color:var(--gray-400,#9ca3af); line-height:1; padding:4px; }
         .modal-close:hover { color:var(--black,#111); }
-        .modal-body { padding:20px 24px; }
-        .modal-footer { padding:0 24px 20px; display:flex; justify-content:flex-end; gap:10px; }
-        .form-group { display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+        .modal-body { padding:16px 20px; }
+        .modal-footer { padding:0 20px 16px; display:flex; justify-content:flex-end; gap:10px; }
+        .form-group { display:flex; flex-direction:column; gap:5px; margin-bottom:13px; }
         .form-label { font-size:11px; font-weight:600; color:var(--gray-500,#6b7280);
                       text-transform:uppercase; letter-spacing:1.2px; }
-        .form-input { width:100%; padding:11px 14px; border:1.5px solid var(--border,#e5e7eb);
-                      border-radius:8px; font-size:14px; font-family:'Poppins',sans-serif;
+        .form-input { width:100%; padding:9px 12px; border:1.5px solid var(--border,#e5e7eb);
+                      border-radius:8px; font-size:13px; font-family:'Poppins',sans-serif;
                       color:var(--black,#111); background:var(--bg,#f9fafb); box-sizing:border-box;
                       transition:border-color .2s; }
         .form-input:focus { border-color:var(--black,#111); background:#fff; outline:none; }
-        textarea.form-input { resize:vertical; min-height:70px; }
+        textarea.form-input { resize:vertical; min-height:60px; }
         .btn-cancel-modal { padding:9px 22px; border-radius:50px; font-size:13px; font-weight:600;
                             border:1.5px solid var(--border,#e5e7eb); background:var(--white,#fff);
                             color:var(--gray-500,#6b7280); cursor:pointer; font-family:'Poppins',sans-serif; transition:all .2s; }
@@ -340,11 +340,11 @@ require_once 'TM_PHP/TM_NavNotif.php';
         </div>
         <div class="modal-body">
             <!-- Invite row — only shown to owner -->
-            <div id="inviteSection" style="margin-bottom:20px;">
-                <label class="form-label" style="margin-bottom:8px;display:block;">Invite by Username</label>
+            <div id="inviteSection" style="margin-bottom:16px;">
+                <label class="form-label" style="margin-bottom:6px;display:block;">Invite by Email</label>
                 <div class="invite-row">
-                    <input type="text" class="form-input" id="inviteUsernameInput"
-                           placeholder="Enter username…" autocomplete="off"
+                    <input type="email" class="form-input" id="inviteEmailInput"
+                           placeholder="teammate@example.com" autocomplete="off"
                            onkeydown="if(event.key==='Enter')doInvite()"/>
                     <button class="btn-invite" onclick="doInvite()">
                         <i class="fa-solid fa-user-plus"></i> Invite
@@ -677,10 +677,10 @@ require_once 'TM_PHP/TM_NavNotif.php';
 
     // ── INVITE MEMBER ──────────────────────────────────────
     window.doInvite = function() {
-        var inp = document.getElementById('inviteUsernameInput');
-        var fb  = document.getElementById('inviteFeedback');
-        var username = inp.value.trim();
-        if (!username) { fb.style.color = '#ef4444'; fb.textContent = 'Enter a username.'; return; }
+        var inp   = document.getElementById('inviteEmailInput');
+        var fb    = document.getElementById('inviteFeedback');
+        var email = inp.value.trim();
+        if (!email) { fb.style.color = '#ef4444'; fb.textContent = 'Enter an email address.'; return; }
 
         fb.style.color = 'var(--gray-500)';
         fb.textContent = 'Inviting…';
@@ -688,14 +688,14 @@ require_once 'TM_PHP/TM_NavNotif.php';
         var fd = new FormData();
         fd.append('action',     'add_project_member');
         fd.append('project_id', _membersProjId);
-        fd.append('username',   username);
+        fd.append('email',      email);
 
         fetch('TM_PHP/TM_CollabActions.php', { method: 'POST', body: fd })
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 if (d.ok) {
                     fb.style.color = '#15803d';
-                    fb.textContent = d.info || ('✓ ' + username + ' added successfully.');
+                    fb.textContent = d.info || '✓ Member added successfully.';
                     inp.value = '';
                     loadMembersList();
                     loadProjects(); // refresh member_count on cards
