@@ -18,9 +18,10 @@ function tm_log_task_change(int $taskId, int $changedBy, string $type = 'update'
 
 tm_require_login();
 
-$action = $_POST['action'] ?? $_GET['action'] ?? '';
-$uid    = tm_uid();
-$oid    = tm_org_id(); // Feature 6: org-scoped filtering
+$action   = $_POST['action'] ?? $_GET['action'] ?? '';
+$uid      = tm_uid();
+$oid      = tm_org_id(); // Feature 6: org-scoped filtering
+$is_admin = tm_is_admin(); // used by the reassign action to relax task ownership check
 
 // ── COLLABORATION helper: get username without requiring TM_CollabActions.php ─
 if (!function_exists('tm_get_username_inline')) {
@@ -47,10 +48,10 @@ if ($action === 'list') {
                 TO_CHAR(due_date,'YYYY-MM-DD')   AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE user_id = :p1
-           AND org_id  = :p2
+         WHERE (user_id = :p1 OR assigned_to = :p2)
+           AND org_id  = :p3
          ORDER BY due_date ASC",
-        [$uid, $oid]
+        [$uid, $uid, $oid]
     );
     $rows = tm_fetch_all($stmt);
     // Cast task_id to int so JSON encodes it as a number, not a string
@@ -87,10 +88,10 @@ if ($action === 'export') {
                 status, recurrence,
                 TO_CHAR(created_at,'YYYY-MM-DD HH24:MI:SS') AS created_at
          FROM TM_Tasks
-         WHERE user_id = :p1
-           AND org_id  = :p2
+         WHERE (user_id = :p1 OR assigned_to = :p2)
+           AND org_id  = :p3
          ORDER BY due_date ASC",
-        [$uid, $oid]
+        [$uid, $uid, $oid]
     );
     $rows = tm_fetch_all($stmt);
 
@@ -457,8 +458,8 @@ switch ($action) {
         $oldRow = tm_fetch_one(tm_exec(
             // Feature 10: allow editing tasks you own OR tasks delegated to you
             "SELECT task_name, status, priority FROM TM_Tasks
-             WHERE task_id=:p1 AND (user_id=:p2 OR assigned_to=:p2) AND org_id=:p3",
-            [$id, $uid, $oid]
+             WHERE task_id=:p1 AND (user_id=:p2 OR assigned_to=:p3) AND org_id=:p4",
+            [$id, $uid, $uid, $oid]
         ));
         if (!$oldRow) {
             if ($isApi) tm_api_err('Task not found.', 404);
@@ -477,12 +478,12 @@ switch ($action) {
              status=:p9, recurrence=:p10,
              assigned_to=CASE WHEN :p11 = -1 THEN assigned_to ELSE :p12 END,
              project_id =CASE WHEN :p13 = -1 THEN project_id  ELSE :p14 END
-             WHERE task_id=:p15 AND user_id=:p16",
+             WHERE task_id=:p15 AND (user_id=:p16 OR assigned_to=:p17)",
             [
                 $name, $start, $due, $cat, $ccat, $pri, $col, $notes, $status, $recur ?: null,
                 $assignedTo, $assignedTo > 0 ? $assignedTo : null, // p11/p12
                 $projectId,  $projectId  > 0 ? $projectId  : null, // p13/p14
-                $id, $uid,
+                $id, $uid, $uid,
             ]
         );
 
@@ -605,8 +606,8 @@ switch ($action) {
 
         $delRow = tm_fetch_one(tm_exec(
             // Feature 10: allow deleting tasks you own OR tasks delegated to you
-            "SELECT task_name FROM TM_Tasks WHERE task_id=:p1 AND (user_id=:p2 OR assigned_to=:p2) AND org_id=:p3",
-            [$id, $uid, $oid]
+            "SELECT task_name FROM TM_Tasks WHERE task_id=:p1 AND (user_id=:p2 OR assigned_to=:p3) AND org_id=:p4",
+            [$id, $uid, $uid, $oid]
         ));
         if (!$delRow) {
             if ($isApi) tm_api_err('Task not found.', 404);
@@ -615,8 +616,8 @@ switch ($action) {
         $delName = $delRow['task_name'] ?? "task #{$id}";
 
         tm_exec(
-            'DELETE FROM TM_Tasks WHERE task_id=:p1 AND (user_id=:p2 OR assigned_to=:p2) AND org_id=:p3',
-            [$id, $uid, $oid]
+            'DELETE FROM TM_Tasks WHERE task_id=:p1 AND (user_id=:p2 OR assigned_to=:p3) AND org_id=:p4',
+            [$id, $uid, $uid, $oid]
         );
         tm_audit($uid, 'delete', 'task', $id, $delName, $delName, '');
         tm_log_task_change($id, $uid, 'delete');

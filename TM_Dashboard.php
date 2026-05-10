@@ -777,5 +777,15 @@ const serverTasks = <?= $tasksJson ?>.map(function(t) {
 </script>
 <script src="TM_JS/TM_Onboarding.js"></script>
 <?php endif; ?>
+
+    <!-- Feature 5: Real-time collaboration polling -->
+    <script>
+        window.TM_RT_CONFIG = {
+            pageType: 'dashboard',
+            scope:    'mine',
+            interval: 5000
+        };
+    </script>
+    <script src="TM_JS/TM_Realtime.js"></script>
 </body>
 </html>

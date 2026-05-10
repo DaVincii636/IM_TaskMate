@@ -41,9 +41,12 @@ if ($dateTo !== '') {
     $extraWhere .= " AND due_date <= TO_DATE(:p" . (count($extraParams)+1) . ",'YYYY-MM-DD')";
     $extraParams[] = $dateTo;
 }
-// Feature 8: team filter — restrict to tasks owned by members of the selected team
+// Feature 8: team filter — restrict to tasks owned by OR assigned to members of the selected team
 if ($filterTeam > 0) {
-    $extraWhere .= " AND user_id IN (SELECT user_id FROM TM_TeamMembers WHERE team_id = :p" . (count($extraParams)+1) . ")";
+    $pIdx = count($extraParams) + 1;
+    $extraWhere .= " AND (user_id IN (SELECT user_id FROM TM_TeamMembers WHERE team_id = :p{$pIdx})"
+                 . " OR assigned_to IN (SELECT user_id FROM TM_TeamMembers WHERE team_id = :p" . ($pIdx + 1) . "))";
+    $extraParams[] = $filterTeam;
     $extraParams[] = $filterTeam;
 }
 
@@ -1311,5 +1314,15 @@ function submitQuickDone(id) {
     setTimeout(function () { el.style.boxShadow = ''; }, 2000);
 })();
 </script>
+
+    <!-- Feature 5: Real-time collaboration polling -->
+    <script>
+        window.TM_RT_CONFIG = {
+            pageType: 'tasks',
+            scope:    'mine',
+            interval: 5000
+        };
+    </script>
+    <script src="TM_JS/TM_Realtime.js"></script>
 </body>
 </html>
