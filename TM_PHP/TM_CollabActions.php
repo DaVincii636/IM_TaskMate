@@ -647,6 +647,94 @@ switch ($action) {
         exit;
     }
 
+    /**
+     * get_project_tasks
+     * GET: project_id
+     * Returns all tasks linked to this project that the user can see.
+     */
+    case 'get_project_tasks': {
+        $projectId = (int)($_GET['project_id'] ?? 0);
+        if (!$projectId) { echo json_encode(['ok' => false, 'error' => 'Missing project_id']); exit; }
+
+        $stmt = tm_exec(
+            "SELECT t.task_id, t.name, t.status, t.due_date
+             FROM TM_Tasks t
+             WHERE t.project_id = :p1
+               AND (t.user_id = :p2 OR t.assigned_to = :p2 OR EXISTS(
+                   SELECT 1 FROM TM_ProjectMembers pm
+                   WHERE pm.project_id = :p1 AND pm.user_id = :p2))
+             ORDER BY t.due_date ASC, t.name ASC",
+            [$projectId, $uid]
+        );
+        echo json_encode(['ok' => true, 'data' => tm_fetch_all($stmt)]);
+        exit;
+    }
+
+    /**
+     * get_unlinked_tasks
+     * GET: project_id
+     * Returns tasks owned by or assigned to this user that are NOT yet in this project.
+     */
+    case 'get_unlinked_tasks': {
+        $projectId = (int)($_GET['project_id'] ?? 0);
+        if (!$projectId) { echo json_encode(['ok' => false, 'error' => 'Missing project_id']); exit; }
+
+        $stmt = tm_exec(
+            "SELECT t.task_id, t.name, t.due_date
+             FROM TM_Tasks t
+             WHERE (t.user_id = :p1 OR t.assigned_to = :p1)
+               AND (t.project_id IS NULL OR t.project_id != :p2)
+               AND t.status != 'done'
+             ORDER BY t.name ASC",
+            [$uid, $projectId]
+        );
+        echo json_encode(['ok' => true, 'data' => tm_fetch_all($stmt)]);
+        exit;
+    }
+
+    /**
+     * link_task_project
+     * POST: task_id, project_id
+     * Sets project_id on a task the user owns or is assigned to.
+     */
+    case 'link_task_project': {
+        $taskId    = (int)($_POST['task_id']    ?? 0);
+        $projectId = (int)($_POST['project_id'] ?? 0);
+        if (!$taskId || !$projectId) { echo json_encode(['ok' => false, 'error' => 'Missing task_id or project_id']); exit; }
+
+        // Verify user owns the task or is assigned to it
+        $chk = tm_exec(
+            "SELECT task_id FROM TM_Tasks WHERE task_id = :p1 AND (user_id = :p2 OR assigned_to = :p2)",
+            [$taskId, $uid]
+        );
+        if (!tm_fetch_one($chk)) { echo json_encode(['ok' => false, 'error' => 'Task not found or permission denied']); exit; }
+
+        tm_exec("UPDATE TM_Tasks SET project_id = :p1 WHERE task_id = :p2", [$projectId, $taskId]);
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    /**
+     * unlink_task_project
+     * POST: task_id, project_id
+     * Clears project_id from a task (sets to NULL).
+     */
+    case 'unlink_task_project': {
+        $taskId    = (int)($_POST['task_id']    ?? 0);
+        $projectId = (int)($_POST['project_id'] ?? 0);
+        if (!$taskId || !$projectId) { echo json_encode(['ok' => false, 'error' => 'Missing params']); exit; }
+
+        $chk = tm_exec(
+            "SELECT task_id FROM TM_Tasks WHERE task_id = :p1 AND project_id = :p2 AND (user_id = :p3 OR assigned_to = :p3)",
+            [$taskId, $projectId, $uid]
+        );
+        if (!tm_fetch_one($chk)) { echo json_encode(['ok' => false, 'error' => 'Task not found or permission denied']); exit; }
+
+        tm_exec("UPDATE TM_Tasks SET project_id = NULL WHERE task_id = :p1", [$taskId]);
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
     default:
         echo json_encode(['ok' => false, 'error' => "Unknown action: '{$action}'"]);
         exit;

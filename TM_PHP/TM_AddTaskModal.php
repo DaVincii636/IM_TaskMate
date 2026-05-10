@@ -48,6 +48,62 @@
                     </div>
                 </div>
                 <div class="form-group">
+                    <label class="form-label">Project</label>
+                    <select name="project_id" class="form-input" id="addProjectSelect">
+                        <option value="">— No Project —</option>
+                    </select>
+                </div>
+
+                <!-- ── Organization task checkbox (admin only) ──────── -->
+                <?php if (function_exists('tm_is_admin') && (tm_is_admin() || (function_exists('tm_is_org_admin') && tm_is_org_admin()))): ?>
+                <div class="form-group">
+                    <label class="form-label">Organization-wide Task</label>
+                    <label class="form-toggle-row">
+                        <input type="checkbox" name="is_org_task" id="addIsOrgTask" value="1" class="form-toggle-input"/>
+                        <span class="form-toggle-track">
+                            <span class="form-toggle-thumb"></span>
+                        </span>
+                        <span class="form-toggle-text">Mark as a shared task visible to all org members</span>
+                    </label>
+                </div>
+
+                <!-- ── Assign to user (admin only) ──────────── -->
+                <div class="form-group" id="addAssignGroup">
+                    <label class="form-label">Assign To</label>
+                    <select name="assigned_to" class="form-input" id="addAssignSelect">
+                        <option value="">— Unassigned —</option>
+                    </select>
+                </div>
+                <?php endif; ?>
+
+                <!-- ── Team Assignment ───────────────────────────── -->
+                <?php
+                $_add_uid = function_exists('tm_uid') ? tm_uid() : 0;
+                if ($_add_uid > 0) {
+                    $_add_teams_stmt = tm_exec(
+                        "SELECT t.team_id, t.team_name FROM TM_Teams t
+                         JOIN TM_TeamMembers m ON m.team_id = t.team_id
+                         WHERE m.user_id = :p1 ORDER BY t.team_name",
+                        [$_add_uid]
+                    );
+                    $_add_teams = tm_fetch_all($_add_teams_stmt);
+                } else {
+                    $_add_teams = [];
+                }
+                ?>
+                <?php if (!empty($_add_teams)): ?>
+                <div class="form-group">
+                    <label class="form-label">Assign to Team</label>
+                    <select name="team_id" class="form-input" id="addTeamSelect">
+                        <option value="">— No Team —</option>
+                        <?php foreach ($_add_teams as $_add_t): ?>
+                        <option value="<?= (int)$_add_t['team_id'] ?>"><?= htmlspecialchars($_add_t['team_name'] ?? '') ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php endif; ?>
+
+                <div class="form-group">
                     <label class="form-label">Category</label>
                     <div class="category-options" id="addCatOptions">
                         <button type="button" class="cat-btn active" data-cat="errands">Errands</button>
@@ -75,14 +131,6 @@
                     <div class="color-picker-row" id="addColorRow"></div>
                     <input type="hidden" name="color" id="addColorInput" value="#ef4444"/>
                 </div>
-                <div class="form-group dep-group">
-                    <label class="form-label">Must Complete First</label>
-                    <select id="addDepSelect" class="form-input dep-select">
-                        <option value="">— Pick a task —</option>
-                    </select>
-                    <div class="dep-selected" id="addDepSelected"></div>
-                    <input type="hidden" id="addDepBlockerIds" name="blocker_ids" value=""/>
-                </div>
                 <div class="form-group">
                     <label class="form-label">Recurrence</label>
                     <select name="recurrence" class="form-input" id="addRecurrence">
@@ -93,31 +141,14 @@
                         <option value="yearly">Yearly</option>
                     </select>
                 </div>
-
-                <!-- ── Organization task checkbox (admin only) ──────── -->
-                <?php if (function_exists('tm_is_admin') && (tm_is_admin() || (function_exists('tm_is_org_admin') && tm_is_org_admin()))): ?>
-                <div class="form-group">
-                    <label class="form-label">Organization-wide Task</label>
-                    <label class="form-toggle-row">
-                        <input type="checkbox" name="is_org_task" id="addIsOrgTask" value="1" class="form-toggle-input"/>
-                        <span class="form-toggle-track">
-                            <span class="form-toggle-thumb"></span>
-                        </span>
-                        <span class="form-toggle-text">Mark as a shared task visible to all org members</span>
-                    </label>
-                </div>
-
-                <!-- ── CHANGE 1: Assign to user (admin only) ──────────── -->
-                <div class="form-group" id="addAssignGroup">
-                    <label class="form-label">
-                        Assign To
-                    </label>
-                    <select name="assigned_to" class="form-input" id="addAssignSelect">
-                        <option value="">— Unassigned —</option>
+                <div class="form-group dep-group">
+                    <label class="form-label">Must Complete First</label>
+                    <select id="addDepSelect" class="form-input dep-select">
+                        <option value="">— Pick a task —</option>
                     </select>
+                    <div class="dep-selected" id="addDepSelected"></div>
+                    <input type="hidden" id="addDepBlockerIds" name="blocker_ids" value=""/>
                 </div>
-                <?php endif; ?>
-
                 <div class="form-group">
                     <label class="form-label">Notes</label>
                     <textarea name="notes" class="form-input tm-auto-expand" id="addTaskNotes"
@@ -126,33 +157,6 @@
                     <!-- @mention autocomplete suggestions -->
                     <div id="addMentionSuggestions" class="tm-mention-suggestions" style="display:none;"></div>
                 </div>
-
-                <!-- ── Team Assignment ───────────────────────────── -->
-                <?php
-                $_add_uid = function_exists('tm_uid') ? tm_uid() : 0;
-                if ($_add_uid > 0) {
-                    $_add_teams_stmt = tm_exec(
-                        "SELECT t.team_id, t.team_name FROM TM_Teams t
-                         JOIN TM_TeamMembers m ON m.team_id = t.team_id
-                         WHERE m.user_id = :p1 ORDER BY t.team_name",
-                        [$_add_uid]
-                    );
-                    $_add_teams = tm_fetch_all($_add_teams_stmt);
-                } else {
-                    $_add_teams = [];
-                }
-                ?>
-                <?php if (!empty($_add_teams)): ?>
-                <div class="form-group">
-                    <label class="form-label">Assign to Team <span style="font-size:11px;font-weight:400;color:#9ca3af">(optional)</span></label>
-                    <select name="team_id" class="form-input" id="addTeamSelect">
-                        <option value="">— No Team —</option>
-                        <?php foreach ($_add_teams as $_add_t): ?>
-                        <option value="<?= (int)$_add_t['team_id'] ?>"><?= htmlspecialchars($_add_t['team_name'] ?? '') ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <?php endif; ?>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-cancel"
@@ -196,10 +200,31 @@
                 if (m.attributeName === 'class' &&
                     overlay.classList.contains('active')) {
                     loadUsers();
+                    loadProjectsDropdown();
                 }
             });
         });
         observer.observe(overlay, { attributes: true });
+    }
+
+    // ── Populate project dropdown ─────────────────────────────────────────────
+    var _projsLoaded = false;
+    function loadProjectsDropdown() {
+        if (_projsLoaded) return;
+        fetch('TM_PHP/TM_CollabActions.php?action=list_projects')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.ok) return;
+                _projsLoaded = true;
+                var sel = document.getElementById('addProjectSelect');
+                if (!sel) return;
+                (data.data || []).forEach(function(p) {
+                    var opt = document.createElement('option');
+                    opt.value = p.project_id;
+                    opt.textContent = p.name;
+                    sel.appendChild(opt);
+                });
+            }).catch(function() {});
     }
 
     // ── Org-wide toggle hides Assign To ───────────────────────────────────────

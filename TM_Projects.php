@@ -173,39 +173,20 @@ require_once 'TM_PHP/TM_NavNotif.php';
             justify-content: space-between;
             margin-bottom: 20px;
         }
-        /* ── Modals ───────────────────────────────────────────── */
-        .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
-                         z-index:600; align-items:center; justify-content:center; }
-        .modal-overlay.active { display:flex; }
-        .modal-card { background:var(--white,#fff); border-radius:14px; width:100%;
-                      max-width:400px; box-shadow:0 16px 48px rgba(0,0,0,.16);
-                      max-height:88vh; overflow-y:auto; }
-        .modal-header { display:flex; align-items:center; justify-content:space-between;
-                        padding:16px 20px 0; }
-        .modal-title { font-size:15px; font-weight:700; color:var(--black,#111); }
-        .modal-close { background:none; border:none; font-size:17px; cursor:pointer;
-                       color:var(--gray-400,#9ca3af); line-height:1; padding:4px; }
-        .modal-close:hover { color:var(--black,#111); }
-        .modal-body { padding:16px 20px; }
-        .modal-footer { padding:0 20px 16px; display:flex; justify-content:flex-end; gap:10px; }
-        .form-group { display:flex; flex-direction:column; gap:5px; margin-bottom:13px; }
-        .form-label { font-size:11px; font-weight:600; color:var(--gray-500,#6b7280);
-                      text-transform:uppercase; letter-spacing:1.2px; }
-        .form-input { width:100%; padding:9px 12px; border:1.5px solid var(--border,#e5e7eb);
-                      border-radius:8px; font-size:13px; font-family:'Poppins',sans-serif;
-                      color:var(--black,#111); background:var(--bg,#f9fafb); box-sizing:border-box;
-                      transition:border-color .2s; }
-        .form-input:focus { border-color:var(--black,#111); background:#fff; outline:none; }
-        textarea.form-input { resize:vertical; min-height:60px; }
-        .btn-cancel-modal { padding:9px 22px; border-radius:50px; font-size:13px; font-weight:600;
-                            border:1.5px solid var(--border,#e5e7eb); background:var(--white,#fff);
-                            color:var(--gray-500,#6b7280); cursor:pointer; font-family:'Poppins',sans-serif; transition:all .2s; }
-        .btn-cancel-modal:hover { background:var(--border,#eee); }
-        .btn-save-modal { padding:9px 22px; border-radius:50px; font-size:13px; font-weight:700;
-                          background:linear-gradient(135deg,#111,#333); color:#fff; border:none;
-                          cursor:pointer; font-family:'Poppins',sans-serif; transition:all .2s; }
-        .btn-save-modal:hover { opacity:.9; transform:translateY(-1px); }
-        .btn-save-modal:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+        /* ── Unlink button inside tasks list ─────────────────── */
+        .proj-unlink-btn {
+            background: none; border: none; cursor: pointer;
+            color: #9ca3af; font-size: 13px;
+            padding: 4px 6px; border-radius: 4px; flex-shrink: 0;
+            transition: color .15s;
+        }
+        .proj-unlink-btn:hover { color: #ef4444; }
+        /* ── Project modal overrides (size only — uses global modal-card styles) ── */
+        #projFormModal .modal-card,
+        #membersModal .modal-card,
+        #projTasksModal .modal-card { width:100%; max-width:460px; height:auto; max-height:88vh; }
+        #projTasksModal .modal-card { max-width:560px; }
+        /* ── Project-page-only form tweaks ───────────────────── */
         /* ── Color picker ─────────────────────────────────────── */
         .color-picker-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
         .color-swatch {
@@ -321,8 +302,8 @@ require_once 'TM_PHP/TM_NavNotif.php';
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn-cancel-modal" onclick="closeModal('projFormModal')">Cancel</button>
-            <button class="btn-save-modal" id="projFormSaveBtn" onclick="submitProjForm()">
+            <button class="btn-cancel" onclick="closeModal('projFormModal')">Cancel</button>
+            <button class="btn-save" id="projFormSaveBtn" onclick="submitProjForm()">
                 <i class="fa-solid fa-floppy-disk"></i> Save
             </button>
         </div>
@@ -361,7 +342,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn-cancel-modal" onclick="closeModal('membersModal')">Close</button>
+            <button class="btn-cancel" onclick="closeModal('membersModal')">Close</button>
         </div>
     </div>
 </div>
@@ -416,6 +397,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
 
     // ── State ──────────────────────────────────────────────
     var _projects      = [];       // full list from server
+    window._projects = _projects;  // expose for other script blocks
     var _editProjectId = null;     // null = create mode, number = edit mode
     var _membersProjId = null;     // project being managed in members modal
     var _membersProjIsOwner = false;
@@ -456,6 +438,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 _projects = d.ok ? (d.data || []) : [];
+                window._projects = _projects; // keep exposed ref in sync
                 renderGrid();
             })
             .catch(function() {
@@ -501,6 +484,9 @@ require_once 'TM_PHP/TM_NavNotif.php';
                         '</div>',
                     '</div>',
                     '<div class="proj-card-footer">',
+                        '<button class="btn-proj btn-proj-primary" onclick="openProjectTasks(' + p.project_id + ')">',
+                            '<i class="fa-solid fa-list-check"></i> Tasks',
+                        '</button>',
                         '<button class="btn-proj" onclick="openMembersModal(' + p.project_id + ')">',
                             '<i class="fa-solid fa-users"></i> Members',
                         '</button>',
@@ -631,7 +617,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
         document.getElementById('membersModalTitle').textContent =
             'Members — ' + (p ? esc(p.name) : '');
         document.getElementById('inviteSection').style.display = _membersProjIsOwner ? '' : 'none';
-        document.getElementById('inviteUsernameInput').value = '';
+        document.getElementById('inviteEmailInput').value = '';
         document.getElementById('inviteFeedback').textContent = '';
         loadMembersList();
         openModal('membersModal');
@@ -752,6 +738,187 @@ require_once 'TM_PHP/TM_NavNotif.php';
     // ── Kick off ───────────────────────────────────────────
     loadProjects();
 
+})();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     PROJECT TASKS MODAL
+     ══════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="projTasksModal">
+    <div class="modal-card" style="max-width:580px;height:auto;max-height:88vh;">
+        <div class="modal-header" style="justify-content:space-between;">
+            <div>
+                <div class="modal-title" id="projTasksTitle">Project Tasks</div>
+                <div style="font-size:12px;color:rgba(255,255,255,.6);margin-top:2px;" id="projTasksSubtitle"></div>
+            </div>
+            <button class="modal-close" onclick="closeModal('projTasksModal')">&#x2715;</button>
+        </div>
+        <div class="modal-body" style="padding:20px 28px;">
+            <!-- Add existing task to project -->
+            <div style="margin-bottom:18px;">
+                <label class="form-label" style="display:block;margin-bottom:6px;">Add Existing Task to Project</label>
+                <div style="display:flex;gap:8px;align-items:flex-end;">
+                    <select class="form-input" id="projTaskLinkSelect" style="flex:1;">
+                        <option value="">— Select a task —</option>
+                    </select>
+                    <button class="btn-save" style="white-space:nowrap;padding:10px 16px;font-size:13px;" onclick="doLinkTask()">
+                        <i class="fa-solid fa-link"></i> Link
+                    </button>
+                </div>
+                <div id="projTaskLinkFeedback" style="font-size:12px;min-height:16px;margin-top:5px;"></div>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                <label class="form-label" style="margin:0;">Tasks in this Project</label>
+                <span style="font-size:12px;color:var(--gray-400);" id="projTasksCount"></span>
+            </div>
+            <div id="projTasksList" style="display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;">
+                <div style="color:var(--gray-400);font-size:13px;text-align:center;padding:30px;">
+                    <i class="fa-solid fa-spinner fa-spin"></i> Loading…
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-cancel" onclick="closeModal('projTasksModal')">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var _tasksProjId = null;
+    var _tasksProjName = '';
+    var _allUnlinkedTasks = [];
+
+    window.openProjectTasks = function(projId) {
+        _tasksProjId = projId;
+        var p = (window._projects || []).find(function(x) { return x.project_id === projId; });
+        _tasksProjName = p ? p.name : 'Project';
+        document.getElementById('projTasksTitle').textContent = _tasksProjName + ' — Tasks';
+        document.getElementById('projTasksSubtitle').textContent = 'View, link, or unlink tasks for this project';
+        document.getElementById('projTaskLinkFeedback').textContent = '';
+        loadProjectTasks();
+        loadUnlinkedTasks();
+        openModal('projTasksModal');
+    };
+
+    function loadProjectTasks() {
+        var list = document.getElementById('projTasksList');
+        list.innerHTML = '<div style="color:var(--gray-400);font-size:13px;text-align:center;padding:30px;"><i class="fa-solid fa-spinner fa-spin"></i> Loading…</div>';
+
+        fetch('TM_PHP/TM_CollabActions.php?action=get_project_tasks&project_id=' + encodeURIComponent(_tasksProjId))
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                var tasks = d.ok ? (d.data || []) : [];
+                document.getElementById('projTasksCount').textContent = tasks.length + ' task' + (tasks.length === 1 ? '' : 's');
+                if (tasks.length === 0) {
+                    list.innerHTML = '<div style="color:var(--gray-400);font-size:13px;text-align:center;padding:30px;">No tasks linked to this project yet.</div>';
+                    return;
+                }
+                list.innerHTML = tasks.map(function(t) {
+                    var statusColor = t.status === 'done' ? '#22c55e' : t.status === 'in_progress' ? '#3b82f6' : '#9ca3af';
+                    var statusLabel = t.status === 'done' ? 'Done' : t.status === 'in_progress' ? 'In Progress' : 'To Do';
+                    return [
+                        '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;',
+                        'background:var(--bg,#f9fafb);border:1px solid var(--border,#e5e7eb);border-radius:8px;">',
+                            '<div style="flex:1;min-width:0;">',
+                                '<div style="font-size:13px;font-weight:600;color:var(--black,#111);',
+                                (t.status === 'done' ? 'text-decoration:line-through;color:#9ca3af;' : '') + '">' + escHtml(t.name) + '</div>',
+                                '<div style="font-size:11px;color:var(--gray-400);margin-top:2px;">',
+                                    '<span style="color:' + statusColor + ';font-weight:600;">' + statusLabel + '</span>',
+                                    (t.due_date ? ' · Due ' + t.due_date : ''),
+                                '</div>',
+                            '</div>',
+                            '<button class="proj-unlink-btn" onclick="doUnlinkTask(' + t.task_id + ')" title="Remove from project">',
+                                '<i class="fa-solid fa-xmark"></i>',
+                            '</button>',
+                        '</div>',
+                    ].join('');
+                }).join('');
+            })
+            .catch(function() {
+                list.innerHTML = '<div style="color:#ef4444;font-size:13px;text-align:center;padding:20px;">Failed to load tasks.</div>';
+            });
+    }
+
+    function loadUnlinkedTasks() {
+        var sel = document.getElementById('projTaskLinkSelect');
+        sel.innerHTML = '<option value="">— Loading tasks… —</option>';
+
+        fetch('TM_PHP/TM_CollabActions.php?action=get_unlinked_tasks&project_id=' + encodeURIComponent(_tasksProjId))
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                _allUnlinkedTasks = d.ok ? (d.data || []) : [];
+                sel.innerHTML = '<option value="">— Select a task to link —</option>';
+                _allUnlinkedTasks.forEach(function(t) {
+                    var opt = document.createElement('option');
+                    opt.value = t.task_id;
+                    opt.textContent = t.name + (t.due_date ? ' (due ' + t.due_date + ')' : '');
+                    sel.appendChild(opt);
+                });
+                if (_allUnlinkedTasks.length === 0) {
+                    var opt = document.createElement('option');
+                    opt.value = ''; opt.textContent = '— All tasks already linked —';
+                    sel.appendChild(opt);
+                }
+            })
+            .catch(function() {
+                sel.innerHTML = '<option value="">— Failed to load —</option>';
+            });
+    }
+
+    window.doLinkTask = function() {
+        var sel = document.getElementById('projTaskLinkSelect');
+        var fb  = document.getElementById('projTaskLinkFeedback');
+        var taskId = sel.value;
+        if (!taskId) { fb.style.color = '#ef4444'; fb.textContent = 'Please select a task to link.'; return; }
+
+        fb.style.color = 'var(--gray-500)'; fb.textContent = 'Linking…';
+
+        var fd = new FormData();
+        fd.append('action',     'link_task_project');
+        fd.append('task_id',    taskId);
+        fd.append('project_id', _tasksProjId);
+
+        fetch('TM_PHP/TM_CollabActions.php', { method: 'POST', body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.ok) {
+                    fb.style.color = '#15803d'; fb.textContent = '✓ Task linked to project.';
+                    loadProjectTasks();
+                    loadUnlinkedTasks();
+                    loadProjects(); // refresh task_count on cards
+                } else {
+                    fb.style.color = '#ef4444'; fb.textContent = d.error || 'Failed to link task.';
+                }
+            })
+            .catch(function() { fb.style.color = '#ef4444'; fb.textContent = 'Network error.'; });
+    };
+
+    window.doUnlinkTask = function(taskId) {
+        var fb = document.getElementById('projTaskLinkFeedback');
+        var fd = new FormData();
+        fd.append('action',     'unlink_task_project');
+        fd.append('task_id',    taskId);
+        fd.append('project_id', _tasksProjId);
+
+        fetch('TM_PHP/TM_CollabActions.php', { method: 'POST', body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.ok) {
+                    loadProjectTasks();
+                    loadUnlinkedTasks();
+                    loadProjects();
+                } else {
+                    fb.style.color = '#ef4444'; fb.textContent = d.error || 'Failed to unlink.';
+                }
+            })
+            .catch(function() {});
+    };
+
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
 })();
 </script>
 

@@ -612,7 +612,7 @@ tbody td {
     inset: 0;
     background: rgba(0,0,0,0.45);
     backdrop-filter: blur(4px);
-    z-index: 200;
+    z-index: 500; /* must be above navbar (300) and notif dropdown (400) */
     display: flex;
     align-items: center;
     justify-content: center;

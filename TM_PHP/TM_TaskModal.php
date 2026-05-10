@@ -127,6 +127,65 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                     </div>
                 </div>
                 <div class="form-group">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-input" id="tmEditTaskStatus">
+                        <option value="pending">Pending</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="review">Review</option>
+                        <option value="done">Done</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+
+                <!-- ── Project selector ─────────────── -->
+                <div class="form-group" id="tmEditProjectGroup">
+                    <label class="form-label">
+                        <i class="fa-solid fa-folder" style="margin-right:4px;color:var(--gray-400)"></i>
+                        Project
+                    </label>
+                    <select name="project_id" class="form-input" id="tmEditProjectSelect">
+                        <option value="">— Personal (no project) —</option>
+                    </select>
+                    <input type="hidden" name="project_id" id="tmEditProjectInput" value=""/>
+                </div>
+
+                <!-- ── Assign to user ───────────────── -->
+                <div class="form-group" id="tmEditAssignGroup">
+                    <label class="form-label">
+                        <i class="fa-solid fa-user-plus" style="margin-right:4px;color:var(--gray-400)"></i>
+                        Assign To
+                    </label>
+                    <select name="assigned_to" class="form-input" id="tmEditAssignSelect">
+                        <option value="">— Unassigned —</option>
+                    </select>
+                </div>
+
+                <!-- ── Delegate / Reassign task (moderator+ only) ── -->
+                <div class="form-group" id="tmReassignGroup" style="display:none;">
+                    <label class="form-label" style="display:flex;align-items:center;gap:6px;">
+                        <i class="fa-solid fa-right-left" style="color:var(--gray-400)"></i>
+                        Delegate Task To
+                        <span style="font-size:10px;font-weight:600;background:#fef9c3;color:#92400e;padding:2px 8px;border-radius:50px;letter-spacing:.03em;">MODERATOR+</span>
+                    </label>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <select id="tmReassignSelect" class="form-input" style="flex:1;">
+                            <option value="">— Pick a user —</option>
+                        </select>
+                        <button type="button" id="tmReassignBtn"
+                                style="padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;
+                                       background:var(--black);color:#fff;border:none;cursor:pointer;
+                                       display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+                                       font-family:'Poppins',sans-serif;transition:opacity .15s;"
+                                onmouseover="this.style.opacity='.85'"
+                                onmouseout="this.style.opacity='1'"
+                                onclick="tmDoReassign()">
+                            <i class="fa-solid fa-right-left"></i> Delegate
+                        </button>
+                    </div>
+                    <div id="tmReassignFeedback" style="font-size:12px;margin-top:5px;color:var(--gray-500);"></div>
+                </div>
+
+                <div class="form-group">
                     <label class="form-label">Category</label>
                     <div class="category-options" id="tmEditCatOptions">
                         <button type="button" class="cat-btn" data-cat="errands">Errands</button>
@@ -155,72 +214,6 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                     <input type="hidden" name="color" id="tmEditColorInput" value="#ef4444"/>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Status</label>
-                    <select name="status" class="form-input" id="tmEditTaskStatus">
-                        <option value="pending">Pending</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="review">Review</option>
-                        <option value="done">Done</option>
-                        <option value="cancelled">Cancelled</option>
-                    </select>
-                </div>
-
-                <!-- ── CHANGE 2: Project selector ─────────────── -->
-                <div class="form-group" id="tmEditProjectGroup">
-                    <label class="form-label">
-                        <i class="fa-solid fa-folder" style="margin-right:4px;color:var(--gray-400)"></i>
-                        Project
-                    </label>
-                    <select name="project_id" class="form-input" id="tmEditProjectSelect">
-                        <option value="">— Personal (no project) —</option>
-                    </select>
-                    <input type="hidden" name="project_id" id="tmEditProjectInput" value=""/>
-                </div>
-
-                <!-- ── CHANGE 1: Assign to user ───────────────── -->
-                <div class="form-group" id="tmEditAssignGroup">
-                    <label class="form-label">
-                        <i class="fa-solid fa-user-plus" style="margin-right:4px;color:var(--gray-400)"></i>
-                        Assign To
-                    </label>
-                    <select name="assigned_to" class="form-input" id="tmEditAssignSelect">
-                        <option value="">— Unassigned —</option>
-                    </select>
-                </div>
-
-                <!-- ── FEATURE 10: Delegate / Reassign task (moderator+ only) ── -->
-                <div class="form-group" id="tmReassignGroup" style="display:none;">
-                    <label class="form-label" style="display:flex;align-items:center;gap:6px;">
-                        <i class="fa-solid fa-right-left" style="color:var(--gray-400)"></i>
-                        Delegate Task To
-                        <span style="font-size:10px;font-weight:600;background:#fef9c3;color:#92400e;padding:2px 8px;border-radius:50px;letter-spacing:.03em;">MODERATOR+</span>
-                    </label>
-                    <div style="display:flex;gap:8px;align-items:center;">
-                        <select id="tmReassignSelect" class="form-input" style="flex:1;">
-                            <option value="">— Pick a user —</option>
-                        </select>
-                        <button type="button" id="tmReassignBtn"
-                                style="padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;
-                                       background:var(--black);color:#fff;border:none;cursor:pointer;
-                                       display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
-                                       font-family:'Poppins',sans-serif;transition:opacity .15s;"
-                                onmouseover="this.style.opacity='.85'"
-                                onmouseout="this.style.opacity='1'"
-                                onclick="tmDoReassign()">
-                            <i class="fa-solid fa-right-left"></i> Delegate
-                        </button>
-                    </div>
-                    <div id="tmReassignFeedback" style="font-size:12px;margin-top:5px;color:var(--gray-500);"></div>
-                </div>
-                <div class="form-group dep-group" id="tmEditDepGroup">
-                    <label class="form-label">Must Complete First</label>
-                    <select id="tmEditDepSelect" class="form-input dep-select">
-                        <option value="">— Pick a task —</option>
-                    </select>
-                    <div class="dep-selected" id="tmEditDepSelected"></div>
-                    <input type="hidden" id="tmEditDepBlockerIds" name="blocker_ids" value=""/>
-                </div>
-                <div class="form-group">
                     <label class="form-label">Recurrence</label>
                     <select name="recurrence" class="form-input" id="tmEditRecurrence">
                         <option value="">— None (one-time) —</option>
@@ -229,6 +222,14 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                         <option value="monthly">Monthly</option>
                         <option value="yearly">Yearly</option>
                     </select>
+                </div>
+                <div class="form-group dep-group" id="tmEditDepGroup">
+                    <label class="form-label">Must Complete First</label>
+                    <select id="tmEditDepSelect" class="form-input dep-select">
+                        <option value="">— Pick a task —</option>
+                    </select>
+                    <div class="dep-selected" id="tmEditDepSelected"></div>
+                    <input type="hidden" id="tmEditDepBlockerIds" name="blocker_ids" value=""/>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Notes</label>
@@ -270,13 +271,15 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer" style="justify-content:space-between;">
                 <button type="button" class="btn-cancel" style="color:#ef4444;"
-                        onclick="tmOpenDeleteFromEdit()">Delete</button>
-                <button type="button" class="btn-cancel"
-                        onclick="closeModal('editTaskModal')">Cancel</button>
-                <button type="button" class="btn-save"
-                        onclick="tmOpenSaveConfirm()">Save Changes</button>
+                        onclick="tmOpenDeleteFromEdit()"><i class="fa-solid fa-trash" style="margin-right:4px;"></i>Delete</button>
+                <div style="display:flex;gap:8px;">
+                    <button type="button" class="btn-cancel"
+                            onclick="closeModal('editTaskModal')">Cancel</button>
+                    <button type="button" class="btn-save"
+                            onclick="tmOpenSaveConfirm()">Save Changes</button>
+                </div>
             </div>
         </form>
     </div>
