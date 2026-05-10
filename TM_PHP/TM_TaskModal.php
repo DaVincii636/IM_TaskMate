@@ -1042,10 +1042,10 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
 
     // ── Patch tmOpenEdit to load collab fields ────────────────────
     var _origOpenEdit = window.tmOpenEdit;
-    window.tmOpenEdit = function (id) {
-        _origOpenEdit(id);
 
-        // Fetch latest task data (assigned_to + project_id) from server
+    // Exposed globally so TM_Calendar.js can trigger collab side-effects
+    // without going through the TASKS dict lookup that tmOpenEdit requires.
+    window.tmLoadCollabForTask = function (id) {
         fetch('TM_PHP/TM_CollabActions.php?action=get_task_collab&task_id=' + encodeURIComponent(id))
             .then(function (r) { return r.json(); })
             .then(function (d) {
@@ -1055,19 +1055,23 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                 populateAssignSelect('tmEditAssignSelect', assignedTo);
                 populateProjectSelect('tmEditProjectSelect', projectId);
             }).catch(function () {
-                // If endpoint not yet available, still populate dropdowns
                 populateAssignSelect('tmEditAssignSelect', 0);
                 populateProjectSelect('tmEditProjectSelect', 0);
             });
+        if (typeof window.tmLoadComments === 'function') {
+            window.tmLoadComments(id);
+        }
+        if (typeof window.tmInitMentionAutocomplete === 'function') {
+            window.tmInitMentionAutocomplete(
+                document.getElementById('tmNewCommentInput'),
+                document.getElementById('commentMentionSuggestions')
+            );
+        }
+    };
 
-        // Load comments for this task
-        tmLoadComments(id);
-
-        // Init mention autocomplete on comment input
-        tmInitMentionAutocomplete(
-            document.getElementById('tmNewCommentInput'),
-            document.getElementById('commentMentionSuggestions')
-        );
+    window.tmOpenEdit = function (id) {
+        _origOpenEdit(id);
+        window.tmLoadCollabForTask(id);
     };
 
     // ── CHANGE 3: Load & render comments ─────────────────────────

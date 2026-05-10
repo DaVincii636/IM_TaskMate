@@ -38,22 +38,28 @@ $stmtWeekly = tm_exec(
      FROM (
          SELECT (TRUNC(created_at) - MOD(TRUNC(created_at) - DATE'1970-01-05', 7)) AS week_start,
                 1 AS completed, 0 AS total_due
-         FROM TM_AuditLog
-         WHERE user_id  = :p1
-           AND action   = 'status_change'
-           AND new_value LIKE '%done%'
-           AND created_at >= TRUNC(SYSDATE) - 56
+         FROM TM_AuditLog al
+         WHERE al.action   = 'status_change'
+           AND al.new_value LIKE '%done%'
+           AND al.created_at >= TRUNC(SYSDATE) - 56
+           AND (
+               al.user_id = :p1
+               OR al.entity_id IN (
+                   SELECT task_id FROM TM_Tasks
+                   WHERE is_org_task = 1 AND org_id = :p2
+               )
+           )
          UNION ALL
          SELECT (TRUNC(due_date) - MOD(TRUNC(due_date) - DATE'1970-01-05', 7)) AS week_start,
                 0 AS completed, 1 AS total_due
          FROM TM_Tasks
-         WHERE (user_id = :p2 OR (is_org_task = 1 AND org_id = :p3))
+         WHERE (user_id = :p3 OR (is_org_task = 1 AND org_id = :p4))
            AND due_date >= TRUNC(SYSDATE) - 56
            AND due_date <  TRUNC(SYSDATE) + 7
      )
      GROUP BY week_start
      ORDER BY week_start ASC",
-    [$uid, $uid, $oid]
+    [$uid, $oid, $uid, $oid]
 );
 $weeklyRaw = tm_fetch_all($stmtWeekly);
 
@@ -118,9 +124,9 @@ $stmtAvgDays = tm_exec(
            AND new_value  LIKE '%done%'
          GROUP BY entity_id
      ) d ON d.entity_id = t.task_id
-     WHERE t.user_id = :p2
-       AND t.status  = 'done'",
-    [$uid, $uid]
+     WHERE (t.user_id = :p2 OR (t.is_org_task = 1 AND t.org_id = :p3))
+       AND t.status  IN ('done', 'done_late')",
+    [$uid, $uid, $oid]
 );
 $avgDaysRow  = tm_fetch_all($stmtAvgDays);
 $avgDays     = _an_val($avgDaysRow, 'avg_days',    null);

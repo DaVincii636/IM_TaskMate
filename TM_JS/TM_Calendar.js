@@ -95,11 +95,22 @@ const CalendarApp = (() => {
         dayTasks.slice(0, 3).forEach(t => {
             const dot = document.createElement('div');
             dot.className = 'task-dot';
+            dot.setAttribute('role', 'button');
+            dot.setAttribute('tabindex', '0');
+            dot.setAttribute('title', 'Edit: ' + t.Name);
+            dot.style.cursor = 'pointer';
             dot.innerHTML = `<div class="task-dot-indicator" style="background:${t.Color}"></div>
                              <span class="task-dot-name">${t.Name}</span>`;
             dot.addEventListener('mouseenter', e => showTooltip(e, t));
             dot.addEventListener('mouseleave', hideTooltip);
-            dot.addEventListener('click', () => openEdit(t));
+            dot.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hideTooltip();
+                openEdit(t);
+            });
+            dot.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEdit(t); }
+            });
             wrap.appendChild(dot);
         });
 
@@ -107,6 +118,13 @@ const CalendarApp = (() => {
             const more = document.createElement('div');
             more.className = 'more-tasks';
             more.textContent = `+${dayTasks.length - 3} more`;
+            // Allow clicking "+N more" to open a small overflow popup listing
+            // the remaining tasks so they are also clickable.
+            more.style.cursor = 'pointer';
+            more.addEventListener('click', (e) => {
+                e.stopPropagation();
+                showOverflowPopup(e, dayTasks.slice(3));
+            });
             wrap.appendChild(more);
         }
 
@@ -189,7 +207,7 @@ const CalendarApp = (() => {
             bar.innerHTML = `<span class="gantt-bar-label">${t.Name}</span>`;
             bar.addEventListener('mouseenter', e => showTooltip(e, t));
             bar.addEventListener('mouseleave', hideTooltip);
-            bar.addEventListener('click', () => openEdit(t));
+            bar.addEventListener('click', (e) => { e.stopPropagation(); hideTooltip(); openEdit(t); });
             timeline.appendChild(bar);
 
             row.appendChild(timeline);
@@ -219,6 +237,43 @@ const CalendarApp = (() => {
     }
 
     function hideTooltip() { tooltip.classList.remove('visible'); }
+
+    // ---- Overflow popup ("+N more" tasks) ----
+    let _overflowPopup = null;
+    function removeOverflowPopup() {
+        if (_overflowPopup) { _overflowPopup.remove(); _overflowPopup = null; }
+    }
+    function showOverflowPopup(e, overflowTasks) {
+        removeOverflowPopup();
+        const popup = document.createElement('div');
+        popup.style.cssText =
+            'position:fixed;z-index:9999;background:var(--white,#fff);border:1px solid var(--border,#e5e5e5);' +
+            'border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.13);padding:10px 8px;min-width:190px;max-width:260px;';
+        overflowTasks.forEach(t => {
+            const item = document.createElement('div');
+            item.style.cssText =
+                'display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;cursor:pointer;' +
+                'font-size:12px;font-weight:600;transition:background .12s;';
+            item.innerHTML =
+                `<div style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${t.Color}"></div>` +
+                `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.Name}</span>`;
+            item.addEventListener('mouseenter', () => item.style.background = 'var(--bg,#f5f5f5)');
+            item.addEventListener('mouseleave', () => item.style.background = '');
+            item.addEventListener('click', () => { removeOverflowPopup(); openEdit(t); });
+            popup.appendChild(item);
+        });
+        // Position near the click
+        const x = Math.min(e.clientX + 8, window.innerWidth  - 275);
+        const y = Math.min(e.clientY + 8, window.innerHeight - (overflowTasks.length * 36 + 24));
+        popup.style.left = x + 'px';
+        popup.style.top  = y + 'px';
+        document.body.appendChild(popup);
+        _overflowPopup = popup;
+        // Close on outside click
+        setTimeout(() => {
+            document.addEventListener('click', removeOverflowPopup, { once: true });
+        }, 0);
+    }
 
     function posTooltip(e) {
         tooltip.style.left = Math.min(e.clientX + 14, window.innerWidth - 230) + 'px';
@@ -271,13 +326,58 @@ const CalendarApp = (() => {
         });
     }
 
-    // ---- Open Edit Modal (delegates to shared window.tmOpenEdit from TM_TaskModal.php) ----
+    // ---- Open Edit Modal ----
+    // Directly populates the edit modal from the serverTasks data already on the page.
+    // Bypasses the TASKS dict in TM_TaskModal to avoid any id-mismatch silent bail-out.
     function openEdit(t) {
-        // window.tmOpenEdit is defined by TM_TaskModal.php and handles field population,
-        // collab dropdowns (assign / project), comments, and dependency links all in one place.
-        // It keys into TASKS[id] which is now populated for owned, assigned, AND org tasks.
-        if (typeof window.tmOpenEdit === 'function') {
-            window.tmOpenEdit(t.Id);
+        const id    = parseInt(t.Id, 10) || t.Id;
+        const modal = document.getElementById('editTaskModal');
+        if (!modal) return;
+
+        function setVal(elId, v) {
+            const el = document.getElementById(elId);
+            if (el) el.value = (v !== null && v !== undefined) ? v : '';
+        }
+
+        setVal('editTaskId',          id);
+        setVal('editTaskName',        t.Name        || '');
+        setVal('editTaskStart',       t.StartDate   || '');
+        setVal('editTaskDue',         t.DueDate     || '');
+        setVal('tmEditCategoryInput', t.Category    || 'errands');
+        setVal('tmEditPriorityInput', t.Priority    || 'mid');
+        setVal('tmEditColorInput',    t.Color       || '#ef4444');
+        setVal('tmEditTaskStatus',    (t.Status     || 'pending').toLowerCase());
+        setVal('tmEditRecurrence',    t.Recurrence  || '');
+        setVal('tmEditTaskNotes',     t.Notes       || '');
+        setVal('tmEditCustomCat',     t.CustomCategory || '');
+
+        // Category buttons
+        const cat = t.Category || 'errands';
+        document.querySelectorAll('#tmEditCatOptions .cat-btn').forEach(b =>
+            b.classList.toggle('active', b.dataset.cat === cat));
+        const othersWrap = document.getElementById('tmEditOthersWrap');
+        if (othersWrap) othersWrap.style.display = cat === 'others' ? 'block' : 'none';
+
+        // Priority buttons
+        const pri = t.Priority || 'mid';
+        document.querySelectorAll('#tmEditPriorityOptions .priority-btn').forEach(b =>
+            b.classList.toggle('active', b.dataset.priority === pri));
+
+        // Color swatches
+        if (typeof buildSwatches === 'function') {
+            buildSwatches('tmEditColorRow', 'tmEditColorInput', t.Color || '#ef4444');
+        }
+
+        // Open the modal — guaranteed, no dependency on TASKS dict
+        modal.classList.add('active');
+
+        // Load collab data (assign dropdown, project, comments) as side-effects
+        if (typeof window.tmLoadCollabForTask === 'function') {
+            try { window.tmLoadCollabForTask(id); } catch (e) { /* ignore */ }
+        }
+        // Load dependency blocker chips
+        if (typeof window.tmEditDepLoad === 'function') {
+            try { window.tmEditDepLoad(id); } catch (e) { /* ignore */ }
         }
     }
 
