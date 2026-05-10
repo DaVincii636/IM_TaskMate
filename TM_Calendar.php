@@ -12,6 +12,8 @@ $filterTeam    = (int)($_GET['team']    ?? 0);
 $filterProject = (int)($_GET['project'] ?? 0);
 
 // Load projects the current user belongs to (for the project filter dropdown)
+// FIX: owner_id does not exist on TM_Projects — use created_by instead.
+// The UNION ensures both members and creators see their projects.
 $_pstmt   = tm_exec(
     "SELECT p.project_id, p.name FROM TM_Projects p
      JOIN TM_ProjectMembers pm ON pm.project_id = p.project_id
@@ -42,19 +44,18 @@ $taskParams = [$uid, $uid, $oid, $uid];
 $activeTeamName    = '';
 $activeProjectName = '';
 
-// ── Project filter (added alongside team filter) ──────────────────────────────
+// ── Project filter ────────────────────────────────────────────────────────────
 if ($filterProject > 0) {
-    // Verify user has access to this project
-    $chkP = tm_exec(
-        'SELECT COUNT(*) FROM TM_ProjectMembers WHERE project_id = :p1 AND user_id = :p2',
-        [$filterProject, $uid]
-    );
-    $chkPOwn = tm_exec(
-        'SELECT COUNT(*) FROM TM_Projects WHERE project_id = :p1 AND created_by = :p2',
-        [$filterProject, $uid]
-    );
+    // Verify user has access to this project (member OR creator)
+    // FIX: owner_id → created_by
+    $chkP    = tm_exec('SELECT COUNT(*) FROM TM_ProjectMembers WHERE project_id = :p1 AND user_id = :p2',
+                        [$filterProject, $uid]);
+    $chkPOwn = tm_exec('SELECT COUNT(*) FROM TM_Projects WHERE project_id = :p1 AND created_by = :p2',
+                        [$filterProject, $uid]);
     if ((int)tm_scalar($chkP) > 0 || (int)tm_scalar($chkPOwn) > 0) {
-        $taskWhere  = 'project_id = :p_proj';
+        // FIX: tm_exec binds positionally (:p1, :p2 …), NOT named binds like :p_proj.
+        // Using :p_proj caused ORA-01036 (illegal variable name) + ORA-01008 (not all bound).
+        $taskWhere  = 'project_id = :p1';
         $taskParams = [$filterProject];
         $pnRow = tm_fetch_one(tm_exec('SELECT name FROM TM_Projects WHERE project_id = :p1', [$filterProject]));
         $activeProjectName = $pnRow['name'] ?? '';
@@ -74,9 +75,9 @@ if ($filterTeam > 0) {
         $mStmt     = tm_exec('SELECT user_id FROM TM_TeamMembers WHERE team_id = :p1', [$filterTeam]);
         $memberIds = array_column(tm_fetch_all($mStmt), 'user_id');
         if (!empty($memberIds)) {
-            $inList     = implode(',', array_map('intval', $memberIds));
-            // Team view: members' tasks + org-wide tasks for this org
-            $taskWhere  = "(user_id IN ($inList) OR (is_org_task = 1 AND org_id = :p_oid))";
+            $inList = implode(',', array_map('intval', $memberIds));
+            // FIX: :p_oid is not a valid bind name for tm_exec — use :p1 positionally.
+            $taskWhere  = "(user_id IN ($inList) OR (is_org_task = 1 AND org_id = :p1))";
             $taskParams = [$oid];
         }
         // Get team name for the UI label
