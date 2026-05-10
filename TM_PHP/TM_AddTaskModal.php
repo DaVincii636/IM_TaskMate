@@ -218,10 +218,22 @@
     }
 
     // ── @mention autocomplete for Add modal notes ─────────────────────────────
-    tmInitMentionAutocomplete(
-        document.getElementById('addTaskNotes'),
-        document.getElementById('addMentionSuggestions')
-    );
+    if (typeof window.tmInitMentionAutocomplete === 'function') {
+        window.tmInitMentionAutocomplete(
+            document.getElementById('addTaskNotes'),
+            document.getElementById('addMentionSuggestions')
+        );
+    } else {
+        // TM_TaskModal.php may load after this script; defer until DOM is ready
+        document.addEventListener('DOMContentLoaded', function () {
+            if (typeof window.tmInitMentionAutocomplete === 'function') {
+                window.tmInitMentionAutocomplete(
+                    document.getElementById('addTaskNotes'),
+                    document.getElementById('addMentionSuggestions')
+                );
+            }
+        });
+    }
 })();
 
 // ── Add Task: custom date-error modal validation (no browser alerts) ──────────
