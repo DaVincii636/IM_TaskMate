@@ -27,6 +27,7 @@ if (!isset($allTasksForModal)) {
     // cover that case. We also pull tasks where assigned_to = uid in case a future
     // flow keeps the original owner but sets assigned_to.
     $_modal_uid = tm_uid();
+    $_modal_oid = tm_org_id();
     $_modal_stmt = tm_exec(
         "SELECT task_id, task_name,
                 TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
@@ -35,8 +36,9 @@ if (!isset($allTasksForModal)) {
          FROM TM_Tasks
          WHERE user_id = :p1
             OR assigned_to = :p2
+            OR (is_org_task = 1 AND org_id = :p3)
          ORDER BY due_date ASC",
-        [$_modal_uid, $_modal_uid]
+        [$_modal_uid, $_modal_uid, $_modal_oid]
     );
     $allTasksForModal = tm_fetch_all($_modal_stmt);
     // Resolve CLOB/LOB
@@ -574,7 +576,6 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         document.getElementById('editTaskName').value  = t.name;
         document.getElementById('editTaskStart').value = t.start;
         document.getElementById('editTaskDue').value   = t.due;
-        document.getElementById('editTaskNotes') && (document.getElementById('tmEditTaskNotes').value = t.notes);
         document.getElementById('tmEditTaskNotes').value  = t.notes;
         autoExpand(document.getElementById('tmEditTaskNotes'));
         document.getElementById('tmEditCategoryInput').value = t.cat;

@@ -451,18 +451,32 @@ table.task-table tbody tr.row-overdue td:first-child {
 <?php endif; ?>
 
 <?php
-// Count tasks for tab badges (always query all three counts)
-$_r = tm_fetch_all(tm_exec("SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1", [$uid]));
+// Count tasks for tab badges — scope mirrors the main queries:
+// owned by user  OR  assigned to user  OR  org-wide tasks in the same org.
+$_cntUid = $uid;
+$_cntOid = $oid;
+
+$_r = tm_fetch_all(tm_exec(
+    "SELECT COUNT(*) AS n FROM TM_Tasks
+     WHERE user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)",
+    [$_cntUid, $_cntUid, $_cntOid]
+));
 $cntAll = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 
 $_r = tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE user_id=:p1 AND due_date < SYSDATE AND status NOT IN ('done','cancelled')",
-    [$uid]
+     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3))
+       AND due_date < SYSDATE AND status NOT IN ('done','cancelled')",
+    [$_cntUid, $_cntUid, $_cntOid]
 ));
 $cntMissing = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 
-$_r = tm_fetch_all(tm_exec("SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 AND status IN ('done','done_late')", [$uid]));
+$_r = tm_fetch_all(tm_exec(
+    "SELECT COUNT(*) AS n FROM TM_Tasks
+     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3))
+       AND status IN ('done','done_late')",
+    [$_cntUid, $_cntUid, $_cntOid]
+));
 $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 ?>
 

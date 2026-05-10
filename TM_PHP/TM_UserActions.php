@@ -54,7 +54,7 @@ switch ($action) {
         $em   = trim($_POST['email']     ?? '');
         $ph   = trim($_POST['phone']     ?? '');
         $pw   = $_POST['password']       ?? '';
-        $role = in_array($_POST['role'] ?? '', ['user','moderator','admin'])
+        $role = in_array($_POST['role'] ?? '', ['user','moderator','org_admin','admin'])
                 ? $_POST['role'] : 'user';
 
         if (!$fn || !$ln || !$em || !$ph || !$pw) {
@@ -102,7 +102,7 @@ switch ($action) {
         $ln   = trim($_POST['lastName']  ?? '');
         $ph   = trim($_POST['phone']     ?? '');
         $pw   = $_POST['password']       ?? '';
-        $role = in_array($_POST['role'] ?? '', ['user','moderator','admin'])
+        $role = in_array($_POST['role'] ?? '', ['user','moderator','org_admin','admin'])
                 ? $_POST['role'] : 'user';
 
         if ($id <= 0 || !$fn || !$ln || !$ph) {

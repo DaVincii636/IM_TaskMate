@@ -271,63 +271,14 @@ const CalendarApp = (() => {
         });
     }
 
-    // ---- Open Edit Modal (uses shared TM_TaskModal.php with tm-prefixed IDs) ----
+    // ---- Open Edit Modal (delegates to shared window.tmOpenEdit from TM_TaskModal.php) ----
     function openEdit(t) {
-        document.getElementById('editTaskId').value          = t.Id;
-        document.getElementById('editTaskName').value        = t.Name;
-        document.getElementById('editTaskStart').value       = t.StartDate;
-        document.getElementById('editTaskDue').value         = t.DueDate;
-        var notesEl = document.getElementById('tmEditTaskNotes');
-        if (notesEl) {
-            notesEl.value = t.Notes || '';
-            notesEl.style.height = 'auto';
-            notesEl.style.height = notesEl.scrollHeight + 'px';
+        // window.tmOpenEdit is defined by TM_TaskModal.php and handles field population,
+        // collab dropdowns (assign / project), comments, and dependency links all in one place.
+        // It keys into TASKS[id] which is now populated for owned, assigned, AND org tasks.
+        if (typeof window.tmOpenEdit === 'function') {
+            window.tmOpenEdit(t.Id);
         }
-        var delId = document.getElementById('tmDeleteTaskId');
-        if (delId) delId.value = t.Id;
-        var catIn = document.getElementById('tmEditCategoryInput');
-        if (catIn) catIn.value = t.Category;
-        var priIn = document.getElementById('tmEditPriorityInput');
-        if (priIn) priIn.value = t.Priority;
-        var colIn = document.getElementById('tmEditColorInput');
-        if (colIn) colIn.value = t.Color;
-
-        // Set recurrence dropdown
-        var recEl = document.getElementById('tmEditRecurrence');
-        if (recEl) recEl.value = t.Recurrence || '';
-
-        // Set status dropdown
-        const statusEl = document.getElementById('tmEditTaskStatus');
-        if (statusEl) statusEl.value = t.Status || 'pending';
-
-        // Set active cat btn
-        document.querySelectorAll('#tmEditCatOptions .cat-btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.cat === t.Category);
-        });
-        var othersWrap = document.getElementById('tmEditOthersWrap');
-        if (othersWrap) othersWrap.style.display = t.Category === 'others' ? 'block' : 'none';
-        var customCat = document.getElementById('tmEditCustomCat');
-        if (customCat) customCat.value = t.CustomCategory || '';
-
-        // Set active priority btn
-        document.querySelectorAll('#tmEditPriorityOptions .priority-btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.priority === t.Priority);
-        });
-
-        // Build swatches using shared modal IDs
-        buildSwatches('tmEditColorRow', 'tmEditColorInput', t.Color);
-
-        // Show comments section on Calendar page
-        var commentsSection = document.getElementById('tmEditCommentsSection');
-        if (commentsSection) commentsSection.style.display = '';
-        if (typeof window.tmLoadComments === 'function') window.tmLoadComments(t.Id);
-
-        // ── Load existing dependency links for this task ──────────────────────
-        if (typeof window.tmEditDepLoad === 'function') window.tmEditDepLoad(t.Id);
-
-        openModal('editTaskModal');
-        // Rebuild blocker dropdown now that editTaskDue has its value
-        if (typeof window.depRebuildEdit === 'function') window.depRebuildEdit();
     }
 
     // ---- Init ----

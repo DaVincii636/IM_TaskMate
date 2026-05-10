@@ -859,15 +859,11 @@ require_once 'TM_PHP/TM_NavNotif.php';
                     <input type="hidden" name="phone" id="edit_phone_hidden"/>
                 </div>
                 <div class="form-group">
-                <label class="form-label">Role</label>
-                <select name="role" class="form-input" id="edit_role">
-                    <option value="user">User</option>
-                    <option value="moderator">Moderator</option>
-                    <option value="org_admin">Org Admin</option>
-                    <?php if ($is_admin): ?>
-                    <option value="admin">Admin</option>
-                    <?php endif; ?>
-                </select>
+                <label class="form-label">Role <span style="font-size:11px;font-weight:400;color:#9ca3af">(read-only — use "Set Role" button to change)</span></label>
+                <input type="text" class="form-input" id="edit_role_display"
+                       style="background:#f3f4f6;color:#6b7280;cursor:not-allowed" readonly/>
+                <!-- Pass current role through so the action always has a value -->
+                <input type="hidden" name="role" id="edit_role"/>
                 </div>
                 <div class="form-group">
                     <label class="form-label">New Password <span style="font-size:11px;font-weight:400;color:#9ca3af">(leave blank to keep current)</span></label>
@@ -1261,8 +1257,13 @@ function openEditModal(btn) {
     document.getElementById('edit_email_hidden').value   = btn.dataset.email;
     document.getElementById('edit_phone_display').value  = btn.dataset.phone;
     document.getElementById('edit_phone_hidden').value   = btn.dataset.phone;
-    var roleEl = document.getElementById('edit_role');
-    if (roleEl) roleEl.value = btn.dataset.role || 'user';
+    // Role is read-only in this modal — shown for context, changed via "Set Role" button
+    var roleVal = btn.dataset.role || 'user';
+    var roleLabels = { user: 'User', moderator: 'Moderator', org_admin: 'Org Admin', admin: 'Admin' };
+    var roleDisplay = document.getElementById('edit_role_display');
+    var roleHidden  = document.getElementById('edit_role');
+    if (roleDisplay) roleDisplay.value = roleLabels[roleVal] || roleVal;
+    if (roleHidden)  roleHidden.value  = roleVal;
     openAdminModal('editModal');
 }
 
