@@ -1290,15 +1290,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                         '<span class="vm-value">' + escHtml(d.org_name) + '</span></div>';
                 }
 
-                // Recurrence — from TASKS dict
-                var taskData = (typeof TASKS !== 'undefined') ? TASKS[parseInt(id, 10)] : null;
-                if (taskData && taskData.recurrence) {
-                    hasExtra = true;
-                    var recLabels = {daily:'Daily',weekly:'Weekly',monthly:'Monthly',yearly:'Yearly'};
-                    gridHtml += '<div class="vm-field">' +
-                        '<span class="vm-label"><i class="fa-solid fa-rotate" style="margin-right:4px;"></i>Recurrence</span>' +
-                        '<span class="vm-value">' + (recLabels[taskData.recurrence] || taskData.recurrence) + '</span></div>';
-                }
+                // (Recurrence is shown in the main info grid above, not repeated here)
 
                 gridHtml += '</div>';
 

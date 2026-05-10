@@ -109,6 +109,32 @@ if ($action === 'export') {
 
     if ($format === 'csv') {
         // ── CSV export using PHP's built-in fputcsv() ─────────────────────────
+        // Enrich rows with project, team, org, assigned-to info
+        $enrichedRows = array_map(function ($r) {
+            $taskId = (int)($r['task_id'] ?? 0);
+            $extra  = ['project_name' => '', 'team_name' => '', 'org_name' => '', 'assigned_to_name' => ''];
+            if ($taskId > 0) {
+                $infoRow = tm_fetch_one(tm_exec(
+                    "SELECT p.name AS project_name, tm.team_name, o.org_name,
+                            u.first_name || ' ' || u.last_name AS assigned_to_name
+                     FROM TM_Tasks t
+                     LEFT JOIN TM_Projects      p  ON p.project_id  = t.project_id
+                     LEFT JOIN TM_Teams         tm ON tm.team_id     = p.team_id
+                     LEFT JOIN TM_Organizations o  ON o.org_id       = t.org_id
+                     LEFT JOIN TM_Users         u  ON u.user_id      = t.assigned_to
+                     WHERE t.task_id = :p1",
+                    [$taskId]
+                ));
+                if ($infoRow) {
+                    $extra['project_name']     = $infoRow['project_name']     ?? '';
+                    $extra['team_name']        = $infoRow['team_name']        ?? '';
+                    $extra['org_name']         = $infoRow['org_name']         ?? '';
+                    $extra['assigned_to_name'] = trim($infoRow['assigned_to_name'] ?? '');
+                }
+            }
+            return array_merge($r, $extra);
+        }, $rows);
+
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . $filename . '.csv"');
         header('Cache-Control: no-cache, no-store');
@@ -121,24 +147,29 @@ if ($action === 'export') {
         fputcsv($out, [
             'Task ID', 'Task Name', 'Start Date', 'Due Date',
             'Category', 'Custom Category', 'Priority', 'Color',
-            'Notes', 'Status', 'Recurrence', 'Created At'
+            'Notes', 'Status', 'Recurrence', 'Created At',
+            'Project', 'Team', 'Organization', 'Assigned To'
         ]);
 
         // Data rows
-        foreach ($rows as $r) {
+        foreach ($enrichedRows as $r) {
             fputcsv($out, [
-                (int)($r['task_id']         ?? 0),
-                $r['task_name']             ?? '',
-                $r['start_date']            ?? '',
-                $r['due_date']              ?? '',
-                $r['category']              ?? '',
-                $r['custom_category']       ?? '',
-                $r['priority']              ?? '',
-                $r['color']                 ?? '',
-                $r['notes']                 ?? '',
-                $r['status']                ?? '',
-                $r['recurrence']            ?? '',
-                $r['created_at']            ?? '',
+                (int)($r['task_id']          ?? 0),
+                $r['task_name']              ?? '',
+                $r['start_date']             ?? '',
+                $r['due_date']               ?? '',
+                $r['category']               ?? '',
+                $r['custom_category']        ?? '',
+                $r['priority']               ?? '',
+                $r['color']                  ?? '',
+                $r['notes']                  ?? '',
+                $r['status']                 ?? '',
+                $r['recurrence']             ?? '',
+                $r['created_at']             ?? '',
+                $r['project_name']           ?? '',
+                $r['team_name']              ?? '',
+                $r['org_name']               ?? '',
+                $r['assigned_to_name']       ?? '',
             ]);
         }
         fclose($out);
@@ -215,104 +246,255 @@ if ($action === 'export') {
             }
         }
 
+        // ── Enrich rows with project / team / org / assigned-to names ──────────
+        $enrichedHtmlRows = array_map(function ($r) {
+            $taskId = (int)($r['task_id'] ?? 0);
+            $extra  = ['project_name' => '', 'team_name' => '', 'org_name' => '', 'assigned_to_name' => ''];
+            if ($taskId > 0) {
+                $infoRow = tm_fetch_one(tm_exec(
+                    "SELECT p.name AS project_name, tm.team_name, o.org_name,
+                            u.first_name || ' ' || u.last_name AS assigned_to_name
+                     FROM TM_Tasks t
+                     LEFT JOIN TM_Projects      p  ON p.project_id  = t.project_id
+                     LEFT JOIN TM_Teams         tm ON tm.team_id     = p.team_id
+                     LEFT JOIN TM_Organizations o  ON o.org_id       = t.org_id
+                     LEFT JOIN TM_Users         u  ON u.user_id      = t.assigned_to
+                     WHERE t.task_id = :p1",
+                    [$taskId]
+                ));
+                if ($infoRow) {
+                    $extra['project_name']     = $infoRow['project_name']     ?? '';
+                    $extra['team_name']        = $infoRow['team_name']        ?? '';
+                    $extra['org_name']         = $infoRow['org_name']         ?? '';
+                    $extra['assigned_to_name'] = trim($infoRow['assigned_to_name'] ?? '');
+                }
+            }
+            return array_merge($r, $extra);
+        }, $rows);
+
         header('Content-Type: text/html; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . $filename . '.html"');
         header('Cache-Control: no-cache, no-store');
 
+        $compColor  = $compRate >= 75 ? '#16a34a' : ($compRate >= 40 ? '#d97706' : '#dc2626');
+        $streakIcon = $streak >= 7 ? '🔥' : ($streak >= 3 ? '⚡' : '📅');
+
         echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>TaskMate Report — ' . date('Y-m-d') . '</title>
 <style>
-  *{box-sizing:border-box;}
-  body{font-family:system-ui,sans-serif;margin:2rem;color:#111;background:#fff;}
-  h1{font-size:1.6rem;margin-bottom:.25rem;}
-  h2{font-size:1rem;font-weight:700;margin:2rem 0 .75rem;padding-bottom:.4rem;border-bottom:2px solid #f0f0f0;}
-  .sub{color:#666;font-size:.9rem;margin-bottom:2rem;}
-  .stats{display:flex;gap:1rem;margin-bottom:.5rem;flex-wrap:wrap;}
-  .stat{background:#f5f5f5;border-radius:10px;padding:.9rem 1.25rem;min-width:110px;text-align:center;}
-  .stat-val{font-size:1.8rem;font-weight:800;line-height:1;}
-  .stat-lbl{font-size:.7rem;color:#555;margin-top:.25rem;text-transform:uppercase;letter-spacing:.04em;}
-  .insight-row{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;}
-  .insight{background:#f5f5f5;border-radius:10px;padding:.8rem 1.1rem;flex:1;min-width:160px;}
-  .insight-val{font-size:1.3rem;font-weight:700;}
-  .insight-lbl{font-size:.7rem;color:#666;margin-top:.15rem;text-transform:uppercase;letter-spacing:.04em;}
-  .missed-list{margin:.5rem 0 0;padding:0;list-style:none;}
-  .missed-list li{display:flex;justify-content:space-between;padding:5px 0;
-                  border-bottom:1px solid #eee;font-size:.85rem;}
+  @import url(\'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap\');
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:\'Inter\',system-ui,sans-serif;background:#f8fafc;color:#0f172a;line-height:1.6;}
+  .page-wrap{max-width:960px;margin:0 auto;padding:2.5rem 1.5rem 4rem;}
+
+  /* ── Header ── */
+  .report-header{background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);
+    border-radius:16px;padding:2rem 2.25rem;margin-bottom:2rem;color:#fff;
+    display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem;}
+  .report-title{font-size:1.55rem;font-weight:800;letter-spacing:-.02em;display:flex;align-items:center;gap:.5rem;}
+  .report-meta{font-size:.8rem;color:#94a3b8;margin-top:.3rem;}
+  .report-brand{background:rgba(255,255,255,.08);border-radius:10px;padding:.6rem 1rem;
+    font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    color:#94a3b8;text-align:right;}
+  .report-brand span{display:block;font-size:1.1rem;font-weight:800;color:#fff;letter-spacing:-.01em;}
+
+  /* ── Section titles ── */
+  .section-title{font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    color:#64748b;margin:2rem 0 .85rem;display:flex;align-items:center;gap:.5rem;}
+  .section-title::after{content:\'\';flex:1;height:1px;background:#e2e8f0;}
+
+  /* ── Stat cards ── */
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:.85rem;margin-bottom:.5rem;}
+  .stat-card{background:#fff;border-radius:12px;padding:1.1rem 1rem;
+    border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,.04);text-align:center;}
+  .stat-val{font-size:2rem;font-weight:800;line-height:1;letter-spacing:-.03em;}
+  .stat-lbl{font-size:.68rem;font-weight:600;color:#94a3b8;margin-top:.35rem;
+    text-transform:uppercase;letter-spacing:.06em;}
+  .stat-card.accent-green .stat-val{color:#16a34a;}
+  .stat-card.accent-red   .stat-val{color:#dc2626;}
+  .stat-card.accent-blue  .stat-val{color:#2563eb;}
+  .stat-card.accent-amber .stat-val{color:#d97706;}
+
+  /* ── Insight cards ── */
+  .insights-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.85rem;margin-bottom:.5rem;}
+  .insight-card{background:#fff;border-radius:12px;padding:1.1rem 1.25rem;
+    border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+  .insight-val{font-size:1.5rem;font-weight:800;letter-spacing:-.02em;}
+  .insight-lbl{font-size:.68rem;font-weight:600;color:#94a3b8;margin-top:.2rem;
+    text-transform:uppercase;letter-spacing:.06em;}
+  .insight-sub{font-size:.75rem;color:#94a3b8;margin-top:.15rem;}
+
+  /* ── Progress bar ── */
+  .progress-wrap{background:#fff;border-radius:12px;padding:1.1rem 1.25rem;
+    border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+  .progress-header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.6rem;}
+  .progress-label{font-size:.75rem;font-weight:600;color:#475569;}
+  .progress-pct{font-size:1.4rem;font-weight:800;color:' . $compColor . ';}
+  .progress-bar-bg{background:#f1f5f9;border-radius:50px;height:10px;overflow:hidden;}
+  .progress-bar-fill{height:100%;border-radius:50px;background:linear-gradient(90deg,' . $compColor . ',' . $compColor . 'aa);
+    width:' . $compRate . '%;}
+
+  /* ── Missed category list ── */
+  .missed-card{background:#fff;border-radius:12px;padding:1.1rem 1.25rem;
+    border:1px solid #e2e8f0;border-left:4px solid #f87171;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+  .missed-list{list-style:none;margin-top:.6rem;}
+  .missed-list li{display:flex;justify-content:space-between;align-items:center;
+    padding:.45rem 0;border-bottom:1px solid #f1f5f9;font-size:.83rem;}
   .missed-list li:last-child{border:none;}
-  .missed-count{font-weight:700;color:#b91c1c;}
-  table{width:100%;border-collapse:collapse;font-size:.82rem;margin-top:.5rem;}
-  th{background:#111;color:#fff;padding:8px 10px;text-align:left;font-size:.78rem;}
-  td{padding:7px 10px;border-bottom:1px solid #e5e5e5;vertical-align:middle;}
-  tr:hover td{background:#fafafa;}
-  .badge{display:inline-block;padding:2px 8px;border-radius:50px;font-size:.72rem;font-weight:600;}
+  .missed-cat{font-weight:600;color:#0f172a;}
+  .missed-count{background:#fee2e2;color:#b91c1c;padding:2px 10px;border-radius:50px;
+    font-size:.72rem;font-weight:700;}
+
+  /* ── Task table ── */
+  .table-wrap{background:#fff;border-radius:12px;border:1px solid #e2e8f0;
+    overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+  table{width:100%;border-collapse:collapse;font-size:.8rem;}
+  thead{background:#f8fafc;border-bottom:2px solid #e2e8f0;}
+  th{padding:10px 12px;text-align:left;font-size:.68rem;font-weight:700;
+    letter-spacing:.06em;text-transform:uppercase;color:#64748b;white-space:nowrap;}
+  td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:middle;color:#334155;}
+  tr:last-child td{border:none;}
+  tbody tr:hover td{background:#f8fafc;}
+  .task-name{font-weight:600;color:#0f172a;}
+  .meta-tag{background:#f1f5f9;color:#475569;border-radius:4px;padding:1px 6px;
+    font-size:.7rem;font-weight:500;}
+  .meta-tag.project{background:#eff6ff;color:#1d4ed8;}
+  .meta-tag.team{background:#f5f3ff;color:#6d28d9;}
+  .meta-tag.assigned{background:#f0fdf4;color:#15803d;}
+
+  /* ── Badges ── */
+  .badge{display:inline-flex;align-items:center;gap:3px;padding:2px 9px;border-radius:50px;
+    font-size:.7rem;font-weight:700;white-space:nowrap;}
   .b-done{background:#dcfce7;color:#166534;}
+  .b-done_late{background:#d1fae5;color:#065f46;}
   .b-pending{background:#fef9c3;color:#854d0e;}
   .b-in_progress{background:#dbeafe;color:#1e40af;}
   .b-overdue{background:#fee2e2;color:#991b1b;}
   .b-cancelled{background:#f3f4f6;color:#6b7280;}
   .b-review{background:#ede9fe;color:#5b21b6;}
-  @media print{body{margin:1cm;}h2{break-before:avoid;}}
-</style></head><body>
-<h1>&#x1F4CB; TaskMate — Analytics Report</h1>
-<p class="sub">Generated on ' . date('F j, Y \a\t H:i') . ' &nbsp;·&nbsp; ' . htmlspecialchars(tm_uname()) . '</p>
 
-<h2>Summary</h2>
-<div class="stats">
-  <div class="stat"><div class="stat-val">' . $total . '</div><div class="stat-lbl">Total Tasks</div></div>
-  <div class="stat"><div class="stat-val">' . $done . '</div><div class="stat-lbl">Completed</div></div>
-  <div class="stat"><div class="stat-val">' . $overdue . '</div><div class="stat-lbl">Overdue</div></div>
-  <div class="stat"><div class="stat-val">' . $pending . '</div><div class="stat-lbl">Pending</div></div>
-  <div class="stat"><div class="stat-val">' . $inProg . '</div><div class="stat-lbl">In Progress</div></div>
-  <div class="stat"><div class="stat-val">' . $compRate . '%</div><div class="stat-lbl">Completion Rate</div></div>
+  /* ── Priority dots ── */
+  .pri-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px;vertical-align:middle;}
+  .pri-high{background:#ef4444;}
+  .pri-mid{background:#f97316;}
+  .pri-low{background:#22c55e;}
+
+  /* ── Footer ── */
+  .report-footer{text-align:center;margin-top:2.5rem;font-size:.75rem;color:#94a3b8;}
+
+  @media print{
+    body{background:#fff;}
+    .page-wrap{padding:0;}
+    .report-header{border-radius:0;}
+    .table-wrap,.stat-card,.insight-card,.progress-wrap,.missed-card{box-shadow:none;}
+  }
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+<!-- Header -->
+<div class="report-header">
+  <div>
+    <div class="report-title">📋 TaskMate Report</div>
+    <div class="report-meta">Generated ' . date('F j, Y \a\t g:i A') . ' &nbsp;·&nbsp; ' . htmlspecialchars(tm_uname()) . '</div>
+  </div>
+  <div class="report-brand">Analytics Export<span>' . date('Y-m-d') . '</span></div>
 </div>
 
-<h2>Productivity Insights</h2>
-<div class="insight-row">
-  <div class="insight">
-    <div class="insight-val">' . ($avgDays !== null ? $avgDays . ' days' : '—') . '</div>
-    <div class="insight-lbl">Avg. days to complete a task' . ($sampleSize > 0 ? ' (from ' . $sampleSize . ' tasks)' : '') . '</div>
+<!-- Summary Stats -->
+<div class="section-title">Summary</div>
+<div class="stats-grid">
+  <div class="stat-card"><div class="stat-val">' . $total . '</div><div class="stat-lbl">Total Tasks</div></div>
+  <div class="stat-card accent-green"><div class="stat-val">' . $done . '</div><div class="stat-lbl">Completed</div></div>
+  <div class="stat-card accent-red"><div class="stat-val">' . $overdue . '</div><div class="stat-lbl">Overdue</div></div>
+  <div class="stat-card accent-amber"><div class="stat-val">' . $pending . '</div><div class="stat-lbl">Pending</div></div>
+  <div class="stat-card accent-blue"><div class="stat-val">' . $inProg . '</div><div class="stat-lbl">In Progress</div></div>
+</div>
+
+<!-- Completion Rate -->
+<div class="section-title" style="margin-top:1.25rem;">Completion Rate</div>
+<div class="progress-wrap">
+  <div class="progress-header">
+    <span class="progress-label">Tasks completed vs total</span>
+    <span class="progress-pct">' . $compRate . '%</span>
   </div>
-  <div class="insight">
-    <div class="insight-val">' . $streak . ' day' . ($streak !== 1 ? 's' : '') . '</div>
-    <div class="insight-lbl">Current completion streak</div>
+  <div class="progress-bar-bg"><div class="progress-bar-fill"></div></div>
+</div>
+
+<!-- Productivity Insights -->
+<div class="section-title">Productivity Insights</div>
+<div class="insights-grid">
+  <div class="insight-card">
+    <div class="insight-val">' . ($avgDays !== null ? $avgDays . 'd' : '—') . '</div>
+    <div class="insight-lbl">Avg. Completion Time</div>
+    <div class="insight-sub">' . ($sampleSize > 0 ? 'Based on ' . $sampleSize . ' completed tasks' : 'No completed tasks yet') . '</div>
+  </div>
+  <div class="insight-card">
+    <div class="insight-val">' . $streakIcon . ' ' . $streak . ' day' . ($streak !== 1 ? 's' : '') . '</div>
+    <div class="insight-lbl">Current Streak</div>
+    <div class="insight-sub">Consecutive days with completions</div>
   </div>
 </div>';
 
         if (!empty($missedCats)) {
-            echo '<h2>Most Missed Deadlines by Category</h2>
+            echo '<div class="section-title">Most Missed Deadlines by Category</div>
+<div class="missed-card">
 <ul class="missed-list">';
             foreach ($missedCats as $mc) {
                 $lbl = htmlspecialchars($mc['cat_label'] ?? $mc['CAT_LABEL'] ?? '—');
                 $cnt = (int)($mc['missed_count'] ?? $mc['MISSED_COUNT'] ?? 0);
-                echo '<li><span>' . $lbl . '</span><span class="missed-count">' . $cnt . ' overdue</span></li>';
+                echo '<li><span class="missed-cat">' . $lbl . '</span><span class="missed-count">' . $cnt . ' overdue</span></li>';
             }
-            echo '</ul>';
+            echo '</ul></div>';
         }
 
-        echo '<h2>Task List</h2>
+        echo '<div class="section-title">Task List</div>
+<div class="table-wrap">
 <table>
 <thead><tr>
-  <th>#</th><th>Task Name</th><th>Category</th><th>Priority</th>
-  <th>Start Date</th><th>Due Date</th><th>Status</th>
-</tr></thead><tbody>';
+  <th>#</th>
+  <th>Task Name</th>
+  <th>Category</th>
+  <th>Priority</th>
+  <th>Project / Team</th>
+  <th>Assigned To</th>
+  <th>Start</th>
+  <th>Due</th>
+  <th>Status</th>
+</tr></thead>
+<tbody>';
 
-        foreach ($rows as $r) {
-            $status = $r['status'] ?? 'pending';
-            $isOD   = $status !== 'done' && $status !== 'cancelled' && ($r['due_date'] ?? '') < date('Y-m-d');
-            $bClass = $isOD ? 'b-overdue' : 'b-' . $status;
-            $label  = $isOD ? 'Overdue' : ucfirst(str_replace('_', ' ', $status));
+        $rowNum = 1;
+        foreach ($enrichedHtmlRows as $r) {
+            $status  = $r['status'] ?? 'pending';
+            $isOD    = $status !== 'done' && $status !== 'done_late' && $status !== 'cancelled'
+                       && ($r['due_date'] ?? '') < date('Y-m-d');
+            $bClass  = $isOD ? 'b-overdue' : 'b-' . str_replace(' ','_',$status);
+            $label   = $isOD ? 'Overdue' : ucfirst(str_replace('_', ' ', $status));
+            $priCls  = match($r['priority'] ?? '') { 'high' => 'pri-high', 'low' => 'pri-low', default => 'pri-mid' };
+            $priLbl  = ucfirst($r['priority'] ?? 'mid');
+            $projTag = $r['project_name'] ? '<span class="meta-tag project">' . htmlspecialchars($r['project_name']) . '</span>' : '';
+            $teamTag = $r['team_name']    ? '<span class="meta-tag team">'    . htmlspecialchars($r['team_name'])    . '</span>' : '';
+            $asgn    = $r['assigned_to_name'] ? '<span class="meta-tag assigned">' . htmlspecialchars($r['assigned_to_name']) . '</span>' : '<span style="color:#cbd5e1">—</span>';
             echo '<tr>
-  <td>' . (int)($r['task_id'] ?? 0) . '</td>
-  <td>' . htmlspecialchars($r['task_name'] ?? '') . '</td>
+  <td style="color:#94a3b8;font-size:.72rem;">' . $rowNum++ . '</td>
+  <td class="task-name">' . htmlspecialchars($r['task_name'] ?? '') . '</td>
   <td>' . htmlspecialchars(ucfirst($r['category'] ?? '')) . '</td>
-  <td>' . htmlspecialchars(ucfirst($r['priority'] ?? '')) . '</td>
-  <td>' . htmlspecialchars($r['start_date'] ?? '') . '</td>
-  <td>' . htmlspecialchars($r['due_date'] ?? '') . '</td>
+  <td><span class="pri-dot ' . $priCls . '"></span>' . $priLbl . '</td>
+  <td>' . ($projTag ?: '') . ($teamTag ? ' ' . $teamTag : '') . ($projTag || $teamTag ? '' : '<span style="color:#cbd5e1">—</span>') . '</td>
+  <td>' . $asgn . '</td>
+  <td style="color:#64748b;">' . htmlspecialchars($r['start_date'] ?? '') . '</td>
+  <td style="' . ($isOD ? 'color:#dc2626;font-weight:700;' : 'color:#64748b;') . '">' . htmlspecialchars($r['due_date'] ?? '') . '</td>
   <td><span class="badge ' . $bClass . '">' . htmlspecialchars($label) . '</span></td>
 </tr>';
         }
 
-        echo '</tbody></table></body></html>';
+        echo '</tbody></table></div>
+<div class="report-footer">TaskMate Analytics Report &nbsp;·&nbsp; ' . date('Y') . '</div>
+</div>
+</body></html>';
         exit;
     }
 }

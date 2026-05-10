@@ -12,8 +12,28 @@ $firstName = tm_uname();
 $flash     = tm_get_flash();
 
 // ── Filters ───────────────────────────────────────────────────────────────────
-$filterAction = trim($_GET['action'] ?? '');
-$filterType   = trim($_GET['type']  ?? '');
+$filterAction  = trim($_GET['action']  ?? '');
+$filterType    = trim($_GET['type']    ?? '');
+$filterProject = (int)($_GET['project'] ?? 0);
+$filterTeam    = (int)($_GET['team']    ?? 0);
+
+// Load projects/teams for filter dropdowns
+$_actMyProjects = tm_fetch_all(tm_exec(
+    "SELECT p.project_id, p.name FROM TM_Projects p
+     JOIN TM_ProjectMembers pm ON pm.project_id = p.project_id
+     WHERE pm.user_id = :p1
+     UNION
+     SELECT p.project_id, p.name FROM TM_Projects p
+     WHERE p.owner_id = :p2
+     ORDER BY 2 ASC",
+    [$uid, $uid]
+));
+$_actMyTeams = tm_fetch_all(tm_exec(
+    "SELECT t.team_id, t.team_name FROM TM_Teams t
+     JOIN TM_TeamMembers tm ON tm.team_id = t.team_id
+     WHERE tm.user_id = :p1 ORDER BY t.team_name ASC",
+    [$uid]
+));
 $allowed_actions = ['create','edit','status_change','delete',''];
 if (!in_array($filterAction, $allowed_actions)) $filterAction = '';
 $sortOrder    = trim($_GET['sort']  ?? 'desc');  // 'desc' = newest first, 'asc' = oldest first
@@ -43,6 +63,18 @@ if ($filterType !== '') {
 if ($filterAction !== '') {
     $params[] = $filterAction;
     $where   .= ' AND a.action = :p' . count($params);
+}
+if ($filterProject > 0) {
+    $where .= ' AND a.entity_id IN (SELECT task_id FROM TM_Tasks WHERE project_id = :p' . (count($params)+1) . ')';
+    $params[] = $filterProject;
+}
+if ($filterTeam > 0) {
+    $tMems = tm_fetch_all(tm_exec('SELECT user_id FROM TM_TeamMembers WHERE team_id = :p1', [$filterTeam]));
+    $tIds  = array_column($tMems, 'user_id');
+    if (!empty($tIds)) {
+        $inList = implode(',', array_map('intval', $tIds));
+        $where .= " AND a.user_id IN ($inList)";
+    }
 }
 
 // ── Total count for pagination ────────────────────────────────────────────────
@@ -366,13 +398,33 @@ require_once 'TM_PHP/TM_NavNotif.php';
         </span>
     </div>
 
-    <!-- Filter bar — type filter + sort only (action dropdown removed for clarity) -->
+    <!-- Filter bar — type filter + project + team + sort -->
     <form class="filter-bar" method="get" action="TM_Activity.php">
         <select name="type" class="filter-select">
             <option value="">All Types</option>
             <option value="task" <?= $filterType === 'task' ? 'selected' : '' ?>>Tasks</option>
             <option value="user" <?= $filterType === 'user' ? 'selected' : '' ?>>Users</option>
         </select>
+        <?php if (!empty($_actMyProjects)): ?>
+        <select name="project" class="filter-select">
+            <option value="">All Projects</option>
+            <?php foreach ($_actMyProjects as $p): ?>
+            <option value="<?= (int)$p['project_id'] ?>" <?= $filterProject===(int)$p['project_id']?'selected':'' ?>>
+                <?= htmlspecialchars($p['name']) ?>
+            </option>
+            <?php endforeach; ?>
+        </select>
+        <?php endif; ?>
+        <?php if (!empty($_actMyTeams)): ?>
+        <select name="team" class="filter-select">
+            <option value="">All Teams</option>
+            <?php foreach ($_actMyTeams as $t): ?>
+            <option value="<?= (int)$t['team_id'] ?>" <?= $filterTeam===(int)$t['team_id']?'selected':'' ?>>
+                <?= htmlspecialchars($t['team_name']) ?>
+            </option>
+            <?php endforeach; ?>
+        </select>
+        <?php endif; ?>
         <select name="sort" class="filter-select">
             <option value="desc" <?= $sortOrder === 'desc' ? 'selected' : '' ?>>Newest First</option>
             <option value="asc"  <?= $sortOrder === 'asc'  ? 'selected' : '' ?>>Oldest First</option>
@@ -380,7 +432,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
         <button type="submit" class="btn-filter-apply">
             <i class="fa-solid fa-filter"></i> Apply
         </button>
-        <?php if ($filterType !== '' || $sortOrder !== 'desc'): ?>
+        <?php if ($filterType !== '' || $sortOrder !== 'desc' || $filterProject || $filterTeam): ?>
         <a href="TM_Activity.php" class="btn-filter-clear">Clear</a>
         <?php endif; ?>
     </form>

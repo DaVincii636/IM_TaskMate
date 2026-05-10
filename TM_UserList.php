@@ -268,7 +268,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
         ? tm_exec("SELECT user_id, first_name, last_name, email, phone FROM TM_Users WHERE status='pending' ORDER BY created_at ASC")
         : tm_exec("SELECT user_id, first_name, last_name, email, phone FROM TM_Users WHERE status='pending' AND org_id = :p1 ORDER BY created_at ASC", [$oid]);
     $pendingUsers = tm_fetch_all($pendingStmt);
-    if (($is_admin || $is_org_admin) && !empty($pendingUsers)):
+    if ($is_admin && !empty($pendingUsers)):
     ?>
     <div class="table-card" style="margin-bottom:24px;border:1.5px solid #fcd34d;">
         <div style="padding:14px 20px;background:#fffbeb;border-bottom:1px solid #fde68a;display:flex;align-items:center;gap:10px;">
@@ -420,6 +420,16 @@ require_once 'TM_PHP/TM_NavNotif.php';
                             <?php endif; ?>
                             <td>
                                 <?php if ($is_admin || $is_org_admin): ?>
+                                <?php
+                                // Org admins cannot approve/reject pending users —
+                                // they may only edit or delete active/suspended accounts.
+                                $userStatus = $u['status'] ?? 'active';
+                                $isPending  = $userStatus === 'pending';
+                                ?>
+                                <?php if ($is_org_admin && $isPending): ?>
+                                <!-- Org admin: no actions on pending users -->
+                                <span style="font-size:12px;color:#9ca3af">Pending</span>
+                                <?php else: ?>
                                 <div class="td-actions">
                                     <button class="btn-edit-user"
                                         data-id="<?= $u['user_id'] ?>"
@@ -429,13 +439,13 @@ require_once 'TM_PHP/TM_NavNotif.php';
                                         data-phone="<?= htmlspecialchars($u['phone']) ?>"
                                         data-role="<?= htmlspecialchars($u['role'] ?? 'user') ?>"
                                         onclick="openEditModal(this)">Edit</button>
-                                    <?php if (($u['status'] ?? 'active') !== 'suspended' && $u['user_id'] !== $uid): ?>
+                                    <?php if ($userStatus !== 'suspended' && $u['user_id'] !== $uid): ?>
                                     <form method="post" action="TM_PHP/TM_UserActions.php" style="display:inline">
                                         <input type="hidden" name="action" value="suspend"/>
                                         <input type="hidden" name="id" value="<?= $u['user_id'] ?>"/>
                                         <button type="submit" style="padding:6px 14px;font-size:12px;font-weight:600;border-radius:6px;border:1px solid #fcd34d;background:#fffbeb;color:#92400e;cursor:pointer;font-family:'Poppins',sans-serif;">Suspend</button>
                                     </form>
-                                    <?php elseif (($u['status'] ?? '') === 'suspended'): ?>
+                                    <?php elseif ($userStatus === 'suspended'): ?>
                                     <form method="post" action="TM_PHP/TM_UserActions.php" style="display:inline">
                                         <input type="hidden" name="action" value="approve"/>
                                         <input type="hidden" name="id" value="<?= $u['user_id'] ?>"/>
@@ -447,6 +457,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
                                         data-username="<?= htmlspecialchars($u['first_name'] . ' ' . $u['last_name']) ?>"
                                         onclick="openDeleteUserModal(this)">Delete</button>
                                 </div>
+                                <?php endif; ?>
                                 <?php else: ?>
                                 <span style="font-size:12px;color:#9ca3af">Read-only</span>
                                 <?php endif; ?>

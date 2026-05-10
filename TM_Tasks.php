@@ -11,11 +11,36 @@ $view = $_GET['view'] ?? 'all';
 if (!in_array($view, ['all', 'missing', 'done'])) { $view = 'all'; }
 
 // ── Search & filter params (URL-driven, so results are bookmarkable) ──────────
-$search    = trim($_GET['q']    ?? '');
-$filterCat = trim($_GET['cat']  ?? '');
-$filterPri = trim($_GET['pri']  ?? '');
-$dateFrom  = trim($_GET['from']  ?? '');
-$dateTo    = trim($_GET['to']   ?? '');
+$search        = trim($_GET['q']       ?? '');
+$filterCat     = trim($_GET['cat']     ?? '');
+$filterPri     = trim($_GET['pri']     ?? '');
+$dateFrom      = trim($_GET['from']    ?? '');
+$dateTo        = trim($_GET['to']      ?? '');
+$filterProject = (int)($_GET['project'] ?? 0);
+$filterTeam    = (int)($_GET['team']    ?? 0);
+$filterOrg     = (int)($_GET['org']     ?? 0);
+
+// Load projects/teams for filter dropdowns
+$_myProjects = tm_fetch_all(tm_exec(
+    "SELECT p.project_id, p.name FROM TM_Projects p
+     JOIN TM_ProjectMembers pm ON pm.project_id = p.project_id
+     WHERE pm.user_id = :p1
+     UNION
+     SELECT p.project_id, p.name FROM TM_Projects p
+     WHERE p.owner_id = :p2
+     ORDER BY 2 ASC",
+    [$uid, $uid]
+));
+$_myTeams = tm_fetch_all(tm_exec(
+    "SELECT t.team_id, t.team_name FROM TM_Teams t
+     JOIN TM_TeamMembers tm ON tm.team_id = t.team_id
+     WHERE tm.user_id = :p1 ORDER BY t.team_name ASC",
+    [$uid]
+));
+$_myOrgs = tm_fetch_all(tm_exec(
+    "SELECT org_id, org_name FROM TM_Organizations ORDER BY org_name ASC",
+    []
+));
 
 $extraWhere  = '';
 $oid         = tm_org_id();
@@ -35,6 +60,25 @@ if ($filterCat !== '') {
 if ($filterPri !== '') {
     $extraWhere .= " AND priority = :p" . (count($extraParams)+1);
     $extraParams[] = $filterPri;
+}
+if ($filterProject > 0) {
+    $extraWhere .= " AND project_id = :p" . (count($extraParams)+1);
+    $extraParams[] = $filterProject;
+}
+if ($filterTeam > 0) {
+    // tasks owned by members of this team
+    $tMembers = tm_fetch_all(tm_exec(
+        'SELECT user_id FROM TM_TeamMembers WHERE team_id = :p1', [$filterTeam]
+    ));
+    $tIds = array_column($tMembers, 'user_id');
+    if (!empty($tIds)) {
+        $inList = implode(',', array_map('intval', $tIds));
+        $extraWhere .= " AND user_id IN ($inList)";
+    }
+}
+if ($filterOrg > 0) {
+    $extraWhere .= " AND org_id = :p" . (count($extraParams)+1);
+    $extraParams[] = $filterOrg;
 }
 if ($dateFrom !== '') {
     $extraWhere .= " AND due_date >= TO_DATE(:p" . (count($extraParams)+1) . ",'YYYY-MM-DD')";
@@ -537,6 +581,26 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
                 <option value="mid"  <?= $filterPri==='mid' ?'selected':'' ?>>Mid</option>
                 <option value="low"  <?= $filterPri==='low' ?'selected':'' ?>>Low</option>
             </select>
+            <?php if (!empty($_myProjects)): ?>
+            <select name="project" class="filter-select">
+                <option value="">All Projects</option>
+                <?php foreach ($_myProjects as $p): ?>
+                <option value="<?= (int)$p['project_id'] ?>" <?= $filterProject===(int)$p['project_id']?'selected':'' ?>>
+                    <?= htmlspecialchars($p['name']) ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+            <?php endif; ?>
+            <?php if (!empty($_myTeams)): ?>
+            <select name="team" class="filter-select">
+                <option value="">All Teams</option>
+                <?php foreach ($_myTeams as $t): ?>
+                <option value="<?= (int)$t['team_id'] ?>" <?= $filterTeam===(int)$t['team_id']?'selected':'' ?>>
+                    <?= htmlspecialchars($t['team_name']) ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+            <?php endif; ?>
             <input type="date" name="from" class="filter-select"
                    value="<?= htmlspecialchars($dateFrom) ?>" title="Due from"/>
             <input type="date" name="to"   class="filter-select"
@@ -544,7 +608,7 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
             <button type="submit" class="btn-filter-apply" id="filterSubmitBtn" style="display:none;">
                 <i class="fa-solid fa-filter"></i> Filter
             </button>
-            <?php if ($search || $filterCat || $filterPri || $dateFrom || $dateTo): ?>
+            <?php if ($search || $filterCat || $filterPri || $dateFrom || $dateTo || $filterProject || $filterTeam || $filterOrg): ?>
             <a href="TM_Tasks.php?view=<?= $view ?>" class="btn-filter-clear">Clear</a>
             <?php endif; ?>
         </div>

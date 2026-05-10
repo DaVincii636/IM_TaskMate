@@ -657,17 +657,32 @@ switch ($action) {
         if (!$projectId) { echo json_encode(['ok' => false, 'error' => 'Missing project_id']); exit; }
 
         try {
-            // OCI8: each bind placeholder must appear exactly once
+            // FIX: Show all tasks in the project if the user is a member or owner.
+            // The old JOIN/filter hid tasks the user neither owns nor is assigned to,
+            // even though they're a project member — causing "Failed to load tasks".
+            // Now we verify membership once, then return all tasks for the project.
+            $memberChk = tm_fetch_one(tm_exec(
+                "SELECT COUNT(*) AS cnt FROM TM_ProjectMembers
+                 WHERE project_id = :p1 AND user_id = :p2",
+                [$projectId, $uid]
+            ));
+            $ownerChk = tm_fetch_one(tm_exec(
+                "SELECT COUNT(*) AS cnt FROM TM_Projects
+                 WHERE project_id = :p1 AND owner_id = :p2",
+                [$projectId, $uid]
+            ));
+            $isMember = (int)($memberChk['cnt'] ?? $memberChk['CNT'] ?? 0) > 0
+                     || (int)($ownerChk['cnt']  ?? $ownerChk['CNT']  ?? 0) > 0;
+            if (!$isMember) {
+                echo json_encode(['ok' => false, 'error' => 'Access denied']); exit;
+            }
             $stmt = tm_exec(
                 "SELECT t.task_id, t.task_name AS name, t.status,
                         TO_CHAR(t.due_date, 'YYYY-MM-DD') AS due_date
                  FROM TM_Tasks t
-                 LEFT JOIN TM_ProjectMembers pm
-                        ON pm.project_id = :p2 AND pm.user_id = :p3
                  WHERE t.project_id = :p1
-                   AND (t.user_id = :p4 OR t.assigned_to = :p5 OR pm.user_id IS NOT NULL)
                  ORDER BY t.due_date ASC, t.task_name ASC",
-                [$projectId, $projectId, $uid, $uid, $uid]
+                [$projectId]
             );
             // OCI8 returns uppercase keys — normalise to lowercase for JS
             $rows = array_map(

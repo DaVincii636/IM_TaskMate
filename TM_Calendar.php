@@ -8,7 +8,21 @@ $uid   = tm_uid();
 $oid   = tm_org_id();
 
 // ── Feature 8: Team filter ────────────────────────────────────────────────────
-$filterTeam = (int)($_GET['team'] ?? 0);
+$filterTeam    = (int)($_GET['team']    ?? 0);
+$filterProject = (int)($_GET['project'] ?? 0);
+
+// Load projects the current user belongs to (for the project filter dropdown)
+$_pstmt   = tm_exec(
+    "SELECT p.project_id, p.name FROM TM_Projects p
+     JOIN TM_ProjectMembers pm ON pm.project_id = p.project_id
+     WHERE pm.user_id = :p1
+     UNION
+     SELECT p.project_id, p.name FROM TM_Projects p
+     WHERE p.owner_id = :p2
+     ORDER BY 2 ASC",
+    [$uid, $uid]
+);
+$myProjects = tm_fetch_all($_pstmt);
 
 // Load teams the current user belongs to (for the filter dropdown)
 $_tstmt  = tm_exec(
@@ -22,10 +36,32 @@ $myTeams = tm_fetch_all($_tstmt);
 
 // Build the WHERE clause and params based on whether a team filter is active
 // Default: own tasks + assigned tasks + org-wide tasks + project member tasks
-$taskWhere  = '(user_id = :p1 OR assigned_to = :p1 OR (is_org_task = 1 AND org_id = :p2)
-                OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id = :p3))';
-$taskParams = [$uid, $oid, $uid];
-$activeTeamName = '';
+$taskWhere  = '(user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3)
+                OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id = :p4))';
+$taskParams = [$uid, $uid, $oid, $uid];
+$activeTeamName    = '';
+$activeProjectName = '';
+
+// ── Project filter (added alongside team filter) ──────────────────────────────
+if ($filterProject > 0) {
+    // Verify user has access to this project
+    $chkP = tm_exec(
+        'SELECT COUNT(*) FROM TM_ProjectMembers WHERE project_id = :p1 AND user_id = :p2',
+        [$filterProject, $uid]
+    );
+    $chkPOwn = tm_exec(
+        'SELECT COUNT(*) FROM TM_Projects WHERE project_id = :p1 AND owner_id = :p2',
+        [$filterProject, $uid]
+    );
+    if ((int)tm_scalar($chkP) > 0 || (int)tm_scalar($chkPOwn) > 0) {
+        $taskWhere  = 'project_id = :p_proj';
+        $taskParams = [$filterProject];
+        $pnRow = tm_fetch_one(tm_exec('SELECT name FROM TM_Projects WHERE project_id = :p1', [$filterProject]));
+        $activeProjectName = $pnRow['name'] ?? '';
+    } else {
+        $filterProject = 0; // reset invalid/unauthorised filter
+    }
+}
 
 if ($filterTeam > 0) {
     // Security: verify the current user actually belongs to this team
@@ -82,18 +118,26 @@ require_once 'TM_PHP/TM_NavNotif.php';
 // ── Blocker counts: how many unresolved blockers each task has ────────────────
 // Keyed by task_id → count of blocking tasks not yet done.
 // Used by JS to show the "Blocked by X" indicator on calendar dots.
-$blockerCountRows = tm_fetch_all(tm_exec(
-    "SELECT tl.task_id, COUNT(*) AS blocker_count
-     FROM TM_TaskLinks tl
-     JOIN TM_Tasks blocker ON blocker.task_id = tl.depends_on_id
-     WHERE tl.link_type = 'blocks'
-       AND blocker.status NOT IN ('done', 'cancelled')
-       AND tl.task_id IN (
-           SELECT task_id FROM TM_Tasks WHERE $taskWhere
-       )
-     GROUP BY tl.task_id",
-    $taskParams
-));
+// FIX: OCI8 requires each named placeholder (:pN) to appear exactly once per
+// statement.  Re-using $taskWhere (which already contains :p1/:p2/:p3) inside
+// a sub-query of a *different* statement causes ORA-01036 "illegal variable
+// name/number".  Instead, we derive the visible task IDs from the $tasks array
+// we already fetched and pass them as a literal IN-list — no bind clash.
+$_visibleIds = array_column($tasks, 'task_id');
+$blockerCountRows = [];
+if (!empty($_visibleIds)) {
+    $_idList = implode(',', array_map('intval', $_visibleIds));
+    $blockerCountRows = tm_fetch_all(tm_exec(
+        "SELECT tl.task_id, COUNT(*) AS blocker_count
+         FROM TM_TaskLinks tl
+         JOIN TM_Tasks blocker ON blocker.task_id = tl.depends_on_id
+         WHERE tl.link_type = 'blocks'
+           AND blocker.status NOT IN ('done', 'cancelled')
+           AND tl.task_id IN ($_idList)
+         GROUP BY tl.task_id",
+        []
+    ));
+}
 $blockerMap = [];
 foreach ($blockerCountRows as $row) {
     $tid = (int)($row['TASK_ID'] ?? $row['task_id']);
@@ -161,6 +205,25 @@ $blockerMapJson = json_encode($blockerMap);
                     ?>
                     <option value="<?= $tId ?>" <?= $filterTeam === $tId ? 'selected' : '' ?>>
                         &#127991; <?= htmlspecialchars($t['team_name'] ?? '') ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </form>
+            <?php endif; ?>
+            <?php if (!empty($myProjects)): ?>
+            <!-- Project filter -->
+            <form method="get" action="TM_Calendar.php" style="display:inline-flex;align-items:center;gap:6px;">
+                <?php if ($filterTeam): ?><input type="hidden" name="team" value="<?= $filterTeam ?>"/><?php endif; ?>
+                <select name="project" class="filter-select"
+                        title="Filter calendar by project"
+                        onchange="this.form.submit()"
+                        style="font-size:12px;padding:6px 10px;border-radius:50px;border:1.5px solid var(--border);font-family:'Poppins',sans-serif;background:var(--white);cursor:pointer;">
+                    <option value="">&#128194; All Projects</option>
+                    <?php foreach ($myProjects as $p):
+                        $pId = (int)($p['project_id'] ?? 0);
+                    ?>
+                    <option value="<?= $pId ?>" <?= $filterProject === $pId ? 'selected' : '' ?>>
+                        &#128194; <?= htmlspecialchars($p['name'] ?? '') ?>
                     </option>
                     <?php endforeach; ?>
                 </select>
