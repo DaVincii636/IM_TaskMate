@@ -119,7 +119,7 @@ if ($action === 'export') {
                             u.first_name || ' ' || u.last_name AS assigned_to_name
                      FROM TM_Tasks t
                      LEFT JOIN TM_Projects      p  ON p.project_id  = t.project_id
-                     LEFT JOIN TM_Teams         tm ON tm.team_id     = p.team_id
+                     LEFT JOIN TM_Teams         tm ON tm.team_id     = t.team_id
                      LEFT JOIN TM_Organizations o  ON o.org_id       = t.org_id
                      LEFT JOIN TM_Users         u  ON u.user_id      = t.assigned_to
                      WHERE t.task_id = :p1",
@@ -256,7 +256,7 @@ if ($action === 'export') {
                             u.first_name || ' ' || u.last_name AS assigned_to_name
                      FROM TM_Tasks t
                      LEFT JOIN TM_Projects      p  ON p.project_id  = t.project_id
-                     LEFT JOIN TM_Teams         tm ON tm.team_id     = p.team_id
+                     LEFT JOIN TM_Teams         tm ON tm.team_id     = t.team_id
                      LEFT JOIN TM_Organizations o  ON o.org_id       = t.org_id
                      LEFT JOIN TM_Users         u  ON u.user_id      = t.assigned_to
                      WHERE t.task_id = :p1",

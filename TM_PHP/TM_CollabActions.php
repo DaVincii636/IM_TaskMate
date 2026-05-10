@@ -15,6 +15,9 @@ require_once 'TM_Session.php';
 require_once 'TM_DB.php';
 
 header('Content-Type: application/json');
+// Buffer output so any stray PHP warnings/notices don't corrupt the JSON response.
+// Each response path calls ob_clean() immediately before echo json_encode(...).
+ob_start();
 tm_require_login();
 
 $uid    = tm_uid();
@@ -654,7 +657,7 @@ switch ($action) {
      */
     case 'get_project_tasks': {
         $projectId = (int)($_GET['project_id'] ?? 0);
-        if (!$projectId) { echo json_encode(['ok' => false, 'error' => 'Missing project_id']); exit; }
+        if (!$projectId) { ob_clean(); echo json_encode(['ok' => false, 'error' => 'Missing project_id']); exit; }
 
         try {
             // FIX: Show all tasks in the project if the user is a member or owner.
@@ -668,13 +671,13 @@ switch ($action) {
             ));
             $ownerChk = tm_fetch_one(tm_exec(
                 "SELECT COUNT(*) AS cnt FROM TM_Projects
-                 WHERE project_id = :p1 AND owner_id = :p2",
+                 WHERE project_id = :p1 AND created_by = :p2",
                 [$projectId, $uid]
             ));
             $isMember = (int)($memberChk['cnt'] ?? $memberChk['CNT'] ?? 0) > 0
                      || (int)($ownerChk['cnt']  ?? $ownerChk['CNT']  ?? 0) > 0;
             if (!$isMember) {
-                echo json_encode(['ok' => false, 'error' => 'Access denied']); exit;
+                ob_clean(); echo json_encode(['ok' => false, 'error' => 'Access denied']); exit;
             }
             $stmt = tm_exec(
                 "SELECT t.task_id, t.task_name AS name, t.status,
@@ -689,9 +692,9 @@ switch ($action) {
                 fn($r) => array_change_key_case($r, CASE_LOWER),
                 tm_fetch_all($stmt)
             );
-            echo json_encode(['ok' => true, 'data' => $rows]);
+            ob_clean(); echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (RuntimeException $e) {
-            echo json_encode(['ok' => false, 'error' => 'Failed to load tasks: ' . $e->getMessage()]);
+            ob_clean(); echo json_encode(['ok' => false, 'error' => 'Failed to load tasks: ' . $e->getMessage()]);
         }
         exit;
     }
@@ -703,7 +706,7 @@ switch ($action) {
      */
     case 'get_unlinked_tasks': {
         $projectId = (int)($_GET['project_id'] ?? 0);
-        if (!$projectId) { echo json_encode(['ok' => false, 'error' => 'Missing project_id']); exit; }
+        if (!$projectId) { ob_clean(); echo json_encode(['ok' => false, 'error' => 'Missing project_id']); exit; }
 
         try {
             // OCI8: each named placeholder must appear exactly once.
@@ -723,9 +726,9 @@ switch ($action) {
                 fn($r) => array_change_key_case($r, CASE_LOWER),
                 tm_fetch_all($stmt)
             );
-            echo json_encode(['ok' => true, 'data' => $rows]);
+            ob_clean(); echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (RuntimeException $e) {
-            echo json_encode(['ok' => false, 'error' => 'Failed to load tasks: ' . $e->getMessage()]);
+            ob_clean(); echo json_encode(['ok' => false, 'error' => 'Failed to load tasks: ' . $e->getMessage()]);
         }
         exit;
     }
@@ -795,15 +798,18 @@ switch ($action) {
         try {
             $row = tm_fetch_one(tm_exec(
                 "SELECT t.user_id AS owner_id, t.assigned_to, t.project_id, t.org_id,
-                        u.first_name  AS asgn_first,  u.last_name  AS asgn_last,
-                        p.name        AS project_name, p.color      AS project_color,
-                        p.team_id,
+                        t.recurrence,
+                        u.first_name   AS asgn_first,   u.last_name   AS asgn_last,
+                        ow.first_name  AS owner_first,  ow.last_name  AS owner_last,
+                        p.name         AS project_name, p.color       AS project_color,
+                        t.team_id,
                         tm.team_name,
                         o.org_name
                  FROM TM_Tasks t
-                 LEFT JOIN TM_Users        u  ON u.user_id    = t.assigned_to
-                 LEFT JOIN TM_Projects     p  ON p.project_id = t.project_id
-                 LEFT JOIN TM_Teams        tm ON tm.team_id   = p.team_id
+                 LEFT JOIN TM_Users         u  ON u.user_id    = t.assigned_to
+                 LEFT JOIN TM_Users         ow ON ow.user_id   = t.user_id
+                 LEFT JOIN TM_Projects      p  ON p.project_id = t.project_id
+                 LEFT JOIN TM_Teams         tm ON tm.team_id   = t.team_id
                  LEFT JOIN TM_Organizations o  ON o.org_id     = t.org_id
                  WHERE $taskCond",
                 $taskParams
@@ -813,7 +819,8 @@ switch ($action) {
             }
             // OCI8 returns uppercase keys — normalise
             $r = array_change_key_case($row, CASE_LOWER);
-            $fullName = trim(($r['asgn_first'] ?? '') . ' ' . ($r['asgn_last'] ?? '')) ?: null;
+            $fullName  = trim(($r['asgn_first']   ?? '') . ' ' . ($r['asgn_last']   ?? '')) ?: null;
+            $ownerName = trim(($r['owner_first']  ?? '') . ' ' . ($r['owner_last']  ?? '')) ?: null;
 
             // Fetch prerequisite/blocker tasks (tasks that must be done before this one)
             $blockerRows = tm_fetch_all(tm_exec(
@@ -837,8 +844,10 @@ switch ($action) {
             echo json_encode([
                 'ok'                 => true,
                 'owner_id'           => $r['owner_id']      ? (int)$r['owner_id']    : null,
+                'owner_name'         => $ownerName,
                 'assigned_to'        => $r['assigned_to']   ? (int)$r['assigned_to'] : null,
                 'assigned_full_name' => $fullName,
+                'recurrence'         => $r['recurrence']    ?? null,
                 'project_id'         => $r['project_id']    ? (int)$r['project_id']  : null,
                 'project_name'       => $r['project_name']  ?? null,
                 'project_color'      => $r['project_color'] ?? null,

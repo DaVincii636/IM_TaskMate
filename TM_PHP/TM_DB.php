@@ -36,10 +36,10 @@ function tm_exec(string $sql, array $params = []) {
         $bound[$i] = $val;
         oci_bind_by_name($stmt, ':p' . ($i + 1), $bound[$i], -1);
     }
-    // FIX: check oci_execute result — if it fails and we silently return $stmt,
-    // any subsequent oci_fetch_assoc() call triggers ORA-24374 (define not done
-    // before fetch) because the statement was never actually executed.
-    $ok = oci_execute($stmt);
+    // Use @ to suppress the OCI8 PHP Warning that would otherwise be printed to
+    // stdout BEFORE we can throw/catch — corrupting any JSON response in the buffer.
+    // The error detail is still available via oci_error($stmt) immediately after.
+    $ok = @oci_execute($stmt);
     if (!$ok) {
         $e = oci_error($stmt);
         oci_free_statement($stmt);

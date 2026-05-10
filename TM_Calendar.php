@@ -18,7 +18,7 @@ $_pstmt   = tm_exec(
      WHERE pm.user_id = :p1
      UNION
      SELECT p.project_id, p.name FROM TM_Projects p
-     WHERE p.owner_id = :p2
+     WHERE p.created_by = :p2
      ORDER BY 2 ASC",
     [$uid, $uid]
 );
@@ -50,7 +50,7 @@ if ($filterProject > 0) {
         [$filterProject, $uid]
     );
     $chkPOwn = tm_exec(
-        'SELECT COUNT(*) FROM TM_Projects WHERE project_id = :p1 AND owner_id = :p2',
+        'SELECT COUNT(*) FROM TM_Projects WHERE project_id = :p1 AND created_by = :p2',
         [$filterProject, $uid]
     );
     if ((int)tm_scalar($chkP) > 0 || (int)tm_scalar($chkPOwn) > 0) {

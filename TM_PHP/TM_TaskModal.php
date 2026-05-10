@@ -1235,7 +1235,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         });
     };
 
-    // ── View modal: show assigned user, project, and team ────────────
+    // ── View modal: show full task context (assigned by/to, project, team, org, recurrence, blockers) ──
     var _origOpenView = window.tmOpenView;
     window.tmOpenView = function (id) {
         _origOpenView(id);
@@ -1251,75 +1251,106 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                 extras.className = 'vm-collab-extras';
                 extras.style.cssText = 'margin-top:.85rem;';
 
-                var gridHtml = '<div style="height:1px;background:var(--gray-100);margin:0 0 .85rem;"></div><div class="vm-grid" style="margin-bottom:0;">';
                 var hasExtra = false;
+                var gridHtml = '<div style="height:1px;background:var(--gray-100);margin:0 0 .9rem;"></div>'
+                             + '<div class="vm-grid" style="margin-bottom:0;">';
 
+                // ── Assigned By (task owner / creator) ──────────────────────
+                if (d.owner_id && d.owner_name && d.owner_name.trim()) {
+                    hasExtra = true;
+                    gridHtml += '<div class="vm-field">'
+                        + '<span class="vm-label"><i class="fa-solid fa-user-pen" style="margin-right:4px;color:var(--gray-400);"></i>Assigned By</span>'
+                        + '<span class="vm-value"><span class="vm-assign-pill" style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;">'
+                        + '<i class="fa-solid fa-user-pen" style="font-size:9px;"></i>'
+                        + escHtml(d.owner_name) + '</span></span>'
+                        + '</div>';
+                }
+
+                // ── Assigned To ──────────────────────────────────────────────
                 if (d.assigned_to) {
                     hasExtra = true;
-                    var displayName = (d.assigned_full_name && d.assigned_full_name.trim())
-                        ? d.assigned_full_name
-                        : ('User #' + d.assigned_to);
-                    gridHtml += '<div class="vm-field">' +
-                        '<span class="vm-label"><i class="fa-solid fa-user" style="margin-right:4px;"></i>Assigned To</span>' +
-                        '<span class="vm-value"><span class="vm-assign-pill"><i class="fa-solid fa-user"></i>' +
-                        escHtml(displayName) + '</span></span></div>';
+                    var assigneeName = (d.assigned_full_name && d.assigned_full_name.trim())
+                        ? d.assigned_full_name : ('User #' + d.assigned_to);
+                    gridHtml += '<div class="vm-field">'
+                        + '<span class="vm-label"><i class="fa-solid fa-user-check" style="margin-right:4px;color:var(--gray-400);"></i>Assigned To</span>'
+                        + '<span class="vm-value"><span class="vm-assign-pill">'
+                        + '<i class="fa-solid fa-user" style="font-size:9px;"></i>'
+                        + escHtml(assigneeName) + '</span></span>'
+                        + '</div>';
                 }
 
+                // ── Project ──────────────────────────────────────────────────
                 if (d.project_id && d.project_name) {
                     hasExtra = true;
-                    var dotColor = d.project_color ? 'background:' + escHtml(d.project_color) + ';' : 'background:#6366f1;';
-                    gridHtml += '<div class="vm-field">' +
-                        '<span class="vm-label"><i class="fa-solid fa-folder" style="margin-right:4px;"></i>Project</span>' +
-                        '<span class="vm-value" style="display:flex;align-items:center;gap:5px;">' +
-                        '<span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;' + dotColor + 'display:inline-block;"></span>' +
-                        escHtml(d.project_name) + '</span></div>';
+                    var dotClr = d.project_color ? 'background:' + escHtml(d.project_color) + ';' : 'background:#6366f1;';
+                    gridHtml += '<div class="vm-field">'
+                        + '<span class="vm-label"><i class="fa-solid fa-folder" style="margin-right:4px;color:var(--gray-400);"></i>Project</span>'
+                        + '<span class="vm-value" style="display:flex;align-items:center;gap:6px;">'
+                        + '<span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;display:inline-block;' + dotClr + '"></span>'
+                        + escHtml(d.project_name) + '</span>'
+                        + '</div>';
                 }
 
+                // ── Team ─────────────────────────────────────────────────────
                 if (d.team_id && d.team_name) {
                     hasExtra = true;
-                    gridHtml += '<div class="vm-field">' +
-                        '<span class="vm-label"><i class="fa-solid fa-people-group" style="margin-right:4px;"></i>Team</span>' +
-                        '<span class="vm-value">' + escHtml(d.team_name) + '</span></div>';
+                    gridHtml += '<div class="vm-field">'
+                        + '<span class="vm-label"><i class="fa-solid fa-people-group" style="margin-right:4px;color:var(--gray-400);"></i>Team</span>'
+                        + '<span class="vm-value">' + escHtml(d.team_name) + '</span>'
+                        + '</div>';
                 }
 
-                // Organization
+                // ── Organization ─────────────────────────────────────────────
                 if (d.org_name) {
                     hasExtra = true;
-                    gridHtml += '<div class="vm-field">' +
-                        '<span class="vm-label"><i class="fa-solid fa-building" style="margin-right:4px;"></i>Organization</span>' +
-                        '<span class="vm-value">' + escHtml(d.org_name) + '</span></div>';
+                    gridHtml += '<div class="vm-field">'
+                        + '<span class="vm-label"><i class="fa-solid fa-building" style="margin-right:4px;color:var(--gray-400);"></i>Organization</span>'
+                        + '<span class="vm-value">' + escHtml(d.org_name) + '</span>'
+                        + '</div>';
                 }
 
-                // (Recurrence is shown in the main info grid above, not repeated here)
+                // ── Recurrence ───────────────────────────────────────────────
+                if (d.recurrence && d.recurrence !== '' && d.recurrence !== 'none') {
+                    hasExtra = true;
+                    var recLabel = {daily:'Daily', weekly:'Weekly', monthly:'Monthly'}[d.recurrence]
+                                   || (d.recurrence.charAt(0).toUpperCase() + d.recurrence.slice(1));
+                    gridHtml += '<div class="vm-field">'
+                        + '<span class="vm-label"><i class="fa-solid fa-rotate" style="margin-right:4px;color:var(--gray-400);"></i>Recurrence</span>'
+                        + '<span class="vm-value" style="display:flex;align-items:center;gap:5px;">'
+                        + '<span style="background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:600;'
+                        + 'padding:2px 9px;border-radius:50px;border:1px solid #bfdbfe;">'
+                        + escHtml(recLabel) + '</span></span>'
+                        + '</div>';
+                }
 
                 gridHtml += '</div>';
 
-                // Prerequisites (blockers) — tasks that must be completed first
+                // ── Must Complete First (blockers) ───────────────────────────
+                var blockerHtml = '';
                 if (d.blockers && d.blockers.length > 0) {
                     hasExtra = true;
                     var statusDot = function(s) {
-                        var colors = {done:'#22c55e', done_late:'#16a34a', cancelled:'#6b7280',
-                                      in_progress:'#3b82f6', review:'#f97316', pending:'#94a3b8'};
-                        return '<span style="width:8px;height:8px;border-radius:50%;display:inline-block;' +
-                               'margin-right:5px;flex-shrink:0;background:' + (colors[s]||'#94a3b8') + ';"></span>';
+                        var c = {done:'#22c55e',done_late:'#16a34a',cancelled:'#6b7280',
+                                 in_progress:'#3b82f6',review:'#f97316',pending:'#94a3b8'};
+                        return '<span style="width:8px;height:8px;border-radius:50%;display:inline-block;'
+                             + 'flex-shrink:0;background:' + (c[s]||'#94a3b8') + ';"></span>';
                     };
                     var blockerItems = d.blockers.map(function(b) {
-                        var isDone = b.status === 'done' || b.status === 'done_late';
-                        return '<li style="display:flex;align-items:center;gap:2px;padding:3px 0;' +
-                               (isDone ? 'text-decoration:line-through;color:var(--gray-400);' : 'color:var(--black);') + '">' +
-                               statusDot(b.status) + escHtml(b.name) + '</li>';
+                        var done = b.status === 'done' || b.status === 'done_late';
+                        return '<li style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;'
+                             + (done ? 'text-decoration:line-through;color:var(--gray-400);' : 'color:var(--black);') + '">'
+                             + statusDot(b.status) + escHtml(b.name) + '</li>';
                     }).join('');
-                    extras.innerHTML = gridHtml +
-                        '<div style="height:1px;background:var(--gray-100);margin:.85rem 0 .75rem;"></div>' +
-                        '<div class="vm-field">' +
-                        '<span class="vm-label" style="margin-bottom:6px;display:block;">' +
-                        '<i class="fa-solid fa-lock" style="margin-right:4px;color:#f97316;"></i>' +
-                        'Must Complete First</span>' +
-                        '<ul style="list-style:none;margin:0;padding:0;font-size:13px;">' + blockerItems + '</ul>' +
-                        '</div>';
-                } else {
-                    extras.innerHTML = gridHtml;
+                    blockerHtml = '<div style="height:1px;background:var(--gray-100);margin:.9rem 0 .75rem;"></div>'
+                        + '<div class="vm-field">'
+                        + '<span class="vm-label" style="display:flex;align-items:center;gap:5px;margin-bottom:6px;">'
+                        + '<i class="fa-solid fa-lock" style="color:#f97316;"></i>'
+                        + 'Must Complete First</span>'
+                        + '<ul style="list-style:none;margin:0;padding:0;">' + blockerItems + '</ul>'
+                        + '</div>';
                 }
+
+                extras.innerHTML = gridHtml + blockerHtml;
 
                 if (hasExtra) {
                     body.appendChild(extras);
