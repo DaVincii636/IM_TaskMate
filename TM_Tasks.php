@@ -397,18 +397,7 @@ table.task-table tbody tr.row-overdue td:first-child {
 }
 .pc-modal-confirm-green:hover { opacity: .9; transform: translateY(-1px); }
 
-/* ── Logout modal (reuse from dashboard) ─────  */
-.pc-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;align-items:center;justify-content:center;}
-.pc-modal-overlay.active{display:flex;}
-.pc-modal-box{background:var(--white);border-radius:var(--radius-lg);padding:2rem;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2);text-align:center;}
-.pc-modal-icon{width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;font-size:1.5rem;}
-.pc-modal-title{font-size:1.1rem;font-weight:700;color:var(--black);margin-bottom:.5rem;}
-.pc-modal-body{font-size:13px;color:var(--gray-500);margin-bottom:1.5rem;line-height:1.6;}
-.pc-modal-btns{display:flex;gap:10px;justify-content:center;}
-.pc-modal-cancel{padding:9px 22px;border-radius:50px;font-size:13px;font-weight:600;border:1.5px solid var(--border);background:var(--white);color:var(--gray-500);cursor:pointer;font-family:'Poppins',sans-serif;transition:all .2s;}
-.pc-modal-cancel:hover{background:var(--border);}
-.pc-modal-confirm-red{padding:9px 22px;border-radius:50px;font-size:13px;font-weight:700;background:linear-gradient(135deg,#e74c3c,#c0392b);color:#fff;border:none;cursor:pointer;font-family:'Poppins',sans-serif;transition:all .2s;display:inline-flex;align-items:center;gap:6px;}
-.pc-modal-confirm-red:hover{opacity:.9;transform:translateY(-1px);}
+/* ── pc-modal styles are defined in TM_Style.css ── */
     </style>
 </head>
 <body>

@@ -186,19 +186,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
         .empty-table-icon{font-size:2.5rem;margin-bottom:.75rem;}
         .empty-table-text{font-size:1rem;font-weight:700;color:var(--black,#111);margin-bottom:.25rem;}
         .empty-table-sub{font-size:13px;color:var(--gray-300,#9ca3af);}
-        /* Modal overlay (Add/Edit) */
-        .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:900;align-items:center;justify-content:center;}
-        .modal-overlay.active{display:flex;}
-        .modal-card{background:var(--white,#fff);border-radius:var(--radius-lg,16px);width:90%;max-width:480px;
-                    box-shadow:0 20px 60px rgba(0,0,0,.2);overflow:hidden;height:auto;max-height:90vh;}
-        .modal-body{overflow-y:auto;max-height:calc(90vh - 130px);}
-        .modal-header{display:flex;align-items:center;justify-content:space-between;
-                      padding:1.25rem 1.5rem;background:var(--black,#111);color:#fff;}
-        .modal-title{font-size:1rem;font-weight:700;}
-        .modal-close{background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;line-height:1;}
-        .modal-body{padding:1.5rem;}
-        .modal-footer{display:flex;justify-content:flex-end;gap:10px;padding:1rem 1.5rem;
-                      border-top:1px solid var(--border,#e5e7eb);}
+        /* Modal overlay (Add/Edit) — layout styles from TM_Style.css */
         .btn-cancel-modal{padding:9px 22px;border-radius:50px;font-size:13px;font-weight:600;
                           border:1.5px solid var(--border,#e5e7eb);background:var(--white,#fff);
                           color:var(--text-mid,#666);cursor:pointer;font-family:'Poppins',sans-serif;transition:all .2s;}
@@ -761,7 +749,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
 
 <!-- ── ADD USER MODAL ── -->
 <div class="modal-overlay" id="addModal">
-    <div class="modal-card">
+    <div class="modal-card modal-sm">
         <div class="modal-header">
             <div class="modal-title">Add New User</div>
             <button class="modal-close" onclick="closeAdminModal('addModal')">&#x2715;</button>
@@ -821,7 +809,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
 
 <!-- ── EDIT USER MODAL ── -->
 <div class="modal-overlay" id="editModal">
-    <div class="modal-card">
+    <div class="modal-card modal-sm">
         <div class="modal-header">
             <div class="modal-title">Edit User</div>
             <button class="modal-close" onclick="closeAdminModal('editModal')">&#x2715;</button>
@@ -930,7 +918,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
 
 <!-- ── CSV IMPORT MODAL (Feature 9) ── -->
 <div class="modal-overlay" id="csvImportModal">
-    <div class="modal-card">
+    <div class="modal-card modal-sm">
         <div class="modal-header">
             <div class="modal-title"><i class="fa-solid fa-upload" style="margin-right:6px;"></i>Bulk Import Users (CSV)</div>
             <button class="modal-close" onclick="closeAdminModal('csvImportModal')">&#x2715;</button>

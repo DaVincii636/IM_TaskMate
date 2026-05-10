@@ -69,12 +69,12 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
      TASK VIEW MODAL
      ══════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="taskViewModal">
-    <div class="modal-card" style="max-width:520px;">
-        <div class="modal-header" style="border-bottom:none;padding-bottom:.25rem;">
-            <div class="modal-title" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--gray-400);">Task Details</div>
+    <div class="modal-card modal-sm">
+        <div class="modal-header">
+            <div class="modal-title">Task Details</div>
             <button class="modal-close" onclick="closeModal('taskViewModal')">&#x2715;</button>
         </div>
-        <div class="modal-body" id="viewModalBody" style="padding-top:0;overflow-y:auto;">
+        <div class="modal-body" id="viewModalBody">
             <!-- filled by JS -->
         </div>
         <div class="modal-footer" style="justify-content:space-between;">
@@ -106,10 +106,10 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
             <div class="modal-title">Edit Task</div>
             <button class="modal-close" onclick="closeModal('editTaskModal')">&#x2715;</button>
         </div>
-        <form method="post" action="TM_PHP/TM_TaskActions.php" id="editTaskForm" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;">
+        <form method="post" action="TM_PHP/TM_TaskActions.php" id="editTaskForm">
             <input type="hidden" name="action" value="edit"/>
             <input type="hidden" name="id"     id="editTaskId"/>
-            <div class="modal-body" style="overflow-y:scroll;scrollbar-gutter:stable;flex:1;min-height:0;">
+            <div class="modal-body">
                 <div class="form-group">
                     <label class="form-label">Task Name</label>
                     <input type="text" name="name" class="form-input" id="editTaskName" required/>

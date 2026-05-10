@@ -31,7 +31,7 @@
         </div>
         <form method="post" action="TM_PHP/TM_TaskActions.php" id="addTaskForm" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;">
             <input type="hidden" name="action" value="add"/>
-            <div class="modal-body" style="overflow-y:auto;">
+            <div class="modal-body">
                 <div class="form-group">
                     <label class="form-label">Task Name</label>
                     <input type="text" name="name" class="form-input" id="addTaskName"
