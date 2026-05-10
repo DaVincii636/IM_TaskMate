@@ -283,6 +283,25 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
+     DATE ERROR pc-modal  (non-browser alert replacement)
+     ══════════════════════════════════════════════════════════ -->
+<div id="tmDateErrorModal" class="pc-modal-overlay">
+    <div class="pc-modal-box">
+        <div class="pc-modal-icon" style="background:rgba(239,68,68,.12)">
+            <i class="fa-solid fa-calendar-xmark" style="color:#ef4444"></i>
+        </div>
+        <div class="pc-modal-title">Invalid Dates</div>
+        <div class="pc-modal-body" id="tmDateErrorModalText">Due date cannot be before start date.</div>
+        <div class="pc-modal-btns">
+            <button class="pc-modal-confirm-blue"
+                    onclick="document.getElementById('tmDateErrorModal').classList.remove('active')">
+                <i class="fa-solid fa-check"></i> OK
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
      SAVE CONFIRM pc-modal
      ══════════════════════════════════════════════════════════ -->
 <div id="tmSaveTaskModal" class="pc-modal-overlay">
@@ -604,22 +623,35 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
 
     // ── Save confirm ───────────────────────────────────────
     window.tmOpenSaveConfirm = function () {
-        // Inline validation (Improvement 4)
-        if (typeof validateFields === 'function') {
-            var ok = validateFields([
-                { id: 'editTaskName',  label: 'Task name' },
-                { id: 'editTaskStart', label: 'Start date', validate: function (v) {
-                    if (!v) return 'Start date is required.';
-                }},
-                { id: 'editTaskDue',   label: 'Due date', validate: function (v) {
-                    if (!v) return 'Due date is required.';
-                    var start = document.getElementById('editTaskStart');
-                    if (start && start.value && v < start.value) return 'Due date cannot be before start date.';
-                }},
-            ]);
-            if (!ok) return;
+        var nameEl  = document.getElementById('editTaskName');
+        var startEl = document.getElementById('editTaskStart');
+        var dueEl   = document.getElementById('editTaskDue');
+
+        // Name check
+        if (!nameEl || !nameEl.value.trim()) {
+            nameEl && nameEl.focus();
+            return;
         }
-        var name = document.getElementById('editTaskName').value || 'this task';
+        // Start date check
+        if (!startEl || !startEl.value) {
+            startEl && startEl.focus();
+            return;
+        }
+        // Due date check
+        if (!dueEl || !dueEl.value) {
+            dueEl && dueEl.focus();
+            return;
+        }
+        // Date logic check — use custom modal, never browser alert/confirm
+        if (dueEl.value < startEl.value) {
+            var errModal = document.getElementById('tmDateErrorModal');
+            var errText  = document.getElementById('tmDateErrorModalText');
+            if (errText) errText.textContent = 'Due date (' + dueEl.value + ') cannot be before start date (' + startEl.value + ').';
+            if (errModal) errModal.classList.add('active');
+            return;
+        }
+
+        var name = nameEl.value || 'this task';
         document.getElementById('tmSaveTaskModalText').innerHTML =
             'Save changes to <strong>' + esc(name) + '</strong>?';
         document.getElementById('tmSaveTaskModal').classList.add('active');

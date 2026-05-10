@@ -425,12 +425,10 @@ switch ($action) {
         }
 
         if ($isApi) tm_api_ok(['task_id' => $newId, 'task_name' => $name]);
-        // Write to TM_AuditLog directly from PHP so the Activity Feed shows this.
-        // The stored procedure also writes an audit row inside Oracle, but calling
-        // tm_audit() here guarantees it is committed even if the SP's internal
-        // COMMIT behaves differently across Oracle XE versions.
-        tm_audit($uid, 'create', 'task', $newId, $name,
-                 '', "cat:{$cat}, pri:{$pri}, due:{$due}");
+        // NOTE: TM_CreateTask stored procedure already writes the 'create' audit
+        // row atomically inside Oracle (Feature 9). A second tm_audit() call here
+        // was causing every task creation to appear TWICE in the Activity Feed.
+        // The SP commit (OCI_COMMIT_ON_SUCCESS) ensures the row is always visible.
         tm_flash('success', 'Task added!');
         if ($newId > 0) {
             tm_log_task_change($newId, $uid, 'create');

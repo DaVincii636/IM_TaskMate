@@ -130,7 +130,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn-cancel"
                         onclick="closeModal('addTaskModal')">Cancel</button>
-                <button type="submit" class="btn-save">Save Task</button>
+                <button type="button" class="btn-save" onclick="tmAddTaskSubmit()">Save Task</button>
             </div>
         </form>
     </div>
@@ -196,4 +196,45 @@
         document.getElementById('addMentionSuggestions')
     );
 })();
+
+// ── Add Task: custom date-error modal validation (no browser alerts) ──────────
+function tmAddTaskSubmit() {
+    var nameEl  = document.getElementById('addTaskName');
+    var startEl = document.getElementById('addTaskStart');
+    var dueEl   = document.getElementById('addTaskDue');
+
+    if (!nameEl || !nameEl.value.trim()) { nameEl  && nameEl.focus();  return; }
+    if (!startEl || !startEl.value)      { startEl && startEl.focus(); return; }
+    if (!dueEl   || !dueEl.value)        { dueEl   && dueEl.focus();   return; }
+
+    if (dueEl.value < startEl.value) {
+        // Show the date-error modal (injected by whichever page includes this partial)
+        var errEl = document.getElementById('tmAddDateErrorModal')
+                 || document.getElementById('calDateErrorModal')
+                 || document.getElementById('tmDateErrorModal');
+        var errTx = errEl && (errEl.querySelector('[id$="DateErrorModalText"]') || errEl.querySelector('.pc-modal-body'));
+        if (errTx) errTx.textContent = 'Due date (' + dueEl.value + ') cannot be before start date (' + startEl.value + ').';
+        if (errEl) errEl.classList.add('active');
+        return;
+    }
+
+    document.getElementById('addTaskForm').submit();
+}
 </script>
+
+<!-- DATE ERROR PC-MODAL for Add Task (used when page does not include Calendar's modal) -->
+<div id="tmAddDateErrorModal" class="pc-modal-overlay">
+    <div class="pc-modal-box">
+        <div class="pc-modal-icon" style="background:rgba(239,68,68,.12)">
+            <i class="fa-solid fa-calendar-xmark" style="color:#ef4444"></i>
+        </div>
+        <div class="pc-modal-title">Invalid Dates</div>
+        <div class="pc-modal-body" id="tmAddDateErrorModalText">Due date cannot be before start date.</div>
+        <div class="pc-modal-btns">
+            <button class="pc-modal-confirm-blue"
+                    onclick="document.getElementById('tmAddDateErrorModal').classList.remove('active')">
+                <i class="fa-solid fa-check"></i> OK
+            </button>
+        </div>
+    </div>
+</div>

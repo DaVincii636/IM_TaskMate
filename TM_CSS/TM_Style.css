@@ -643,6 +643,15 @@ tbody td {
     overflow: hidden;
 }
 
+/* forms inside modal-card must also flex-column so modal-body gets the remaining space */
+.modal-card > form {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
 /* Compact variant for simple admin modals (org, team, transfer) */
 .modal-card.modal-sm {
     width: 420px;
@@ -686,11 +695,13 @@ tbody td {
 
 .modal-body {
     padding: 28px;
-    overflow-y: scroll;
+    overflow-y: auto;
     flex: 1;
     min-height: 0;
     max-height: calc(82vh - 140px); /* 140px ≈ header + footer */
     scrollbar-gutter: stable;
+    scrollbar-width: thin;            /* Firefox */
+    scrollbar-color: var(--gray-400) var(--gray-100); /* Firefox */
 }
 
 .modal-footer {
@@ -957,8 +968,9 @@ tbody td {
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--gray-100); }
-::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 10px; }
+::-webkit-scrollbar-track { background: var(--gray-100); border-radius: 10px; }
+::-webkit-scrollbar-thumb { background: var(--gray-400); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gray-500); }
 
 /* Responsive */
 @media (max-width: 900px) {

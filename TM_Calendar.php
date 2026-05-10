@@ -287,6 +287,54 @@ $blockerMapJson = json_encode($blockerMap);
                         <option value="cancelled">Cancelled</option>
                     </select>
                 </div>
+
+                <!-- ── Project selector ───────────────────────── -->
+                <div class="form-group" id="calEditProjectGroup">
+                    <label class="form-label">
+                        <i class="fa-solid fa-folder" style="margin-right:4px;color:var(--gray-400)"></i>
+                        Project
+                    </label>
+                    <select name="project_id" class="form-input" id="calEditProjectSelect">
+                        <option value="">— Personal (no project) —</option>
+                    </select>
+                </div>
+
+                <!-- ── Assign to user ─────────────────────────── -->
+                <div class="form-group" id="calEditAssignGroup">
+                    <label class="form-label">
+                        <i class="fa-solid fa-user-plus" style="margin-right:4px;color:var(--gray-400)"></i>
+                        Assign To
+                    </label>
+                    <select name="assigned_to" class="form-input" id="calEditAssignSelect">
+                        <option value="">— Unassigned —</option>
+                    </select>
+                </div>
+
+                <!-- ── Delegate (moderator+ only) ────────────── -->
+                <div class="form-group" id="calReassignGroup" style="display:none;">
+                    <label class="form-label" style="display:flex;align-items:center;gap:6px;">
+                        <i class="fa-solid fa-right-left" style="color:var(--gray-400)"></i>
+                        Delegate Task To
+                        <span style="font-size:10px;font-weight:600;background:#fef9c3;color:#92400e;padding:2px 8px;border-radius:50px;letter-spacing:.03em;">MODERATOR+</span>
+                    </label>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <select id="calReassignSelect" class="form-input" style="flex:1;">
+                            <option value="">— Pick a user —</option>
+                        </select>
+                        <button type="button" id="calReassignBtn"
+                                style="padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;
+                                       background:var(--black);color:#fff;border:none;cursor:pointer;
+                                       display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+                                       font-family:'Poppins',sans-serif;transition:opacity .15s;"
+                                onmouseover="this.style.opacity='.85'"
+                                onmouseout="this.style.opacity='1'"
+                                onclick="calDoReassign()">
+                            <i class="fa-solid fa-right-left"></i> Delegate
+                        </button>
+                    </div>
+                    <div id="calReassignFeedback" style="font-size:12px;margin-top:5px;color:var(--gray-500);"></div>
+                </div>
+
                 <div class="form-group dep-group">
                     <label class="form-label">Must Complete First</label>
 
@@ -320,6 +368,23 @@ $blockerMapJson = json_encode($blockerMap);
                 <button type="button" class="btn-save" onclick="openSaveTaskModal()">Save Changes</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- DATE ERROR PC-MODAL (non-browser alert) -->
+<div id="calDateErrorModal" class="pc-modal-overlay">
+    <div class="pc-modal-box">
+        <div class="pc-modal-icon" style="background:rgba(239,68,68,.12)">
+            <i class="fa-solid fa-calendar-xmark" style="color:#ef4444"></i>
+        </div>
+        <div class="pc-modal-title">Invalid Dates</div>
+        <div class="pc-modal-body" id="calDateErrorModalText">Due date cannot be before start date.</div>
+        <div class="pc-modal-btns">
+            <button class="pc-modal-confirm-blue"
+                    onclick="document.getElementById('calDateErrorModal').classList.remove('active')">
+                <i class="fa-solid fa-check"></i> OK
+            </button>
+        </div>
     </div>
 </div>
 
@@ -397,7 +462,24 @@ $blockerMapJson = json_encode($blockerMap);
 
     // Save: first persist links via fetch, then submit the edit form
     function openSaveTaskModal() {
-        const name = document.getElementById('editTaskName').value || 'this task';
+        var nameEl  = document.getElementById('editTaskName');
+        var startEl = document.getElementById('editTaskStart');
+        var dueEl   = document.getElementById('editTaskDue');
+
+        if (!nameEl || !nameEl.value.trim()) { nameEl && nameEl.focus(); return; }
+        if (!startEl || !startEl.value)      { startEl && startEl.focus(); return; }
+        if (!dueEl   || !dueEl.value)        { dueEl   && dueEl.focus();   return; }
+
+        // Custom date-error modal instead of browser alert
+        if (dueEl.value < startEl.value) {
+            var errEl = document.getElementById('calDateErrorModal');
+            var errTx = document.getElementById('calDateErrorModalText');
+            if (errTx) errTx.textContent = 'Due date (' + dueEl.value + ') cannot be before start date (' + startEl.value + ').';
+            if (errEl) errEl.classList.add('active');
+            return;
+        }
+
+        const name = nameEl.value || 'this task';
         document.getElementById('saveTaskModalText').innerHTML =
             'Save changes to <strong>' + name + '</strong>?';
         openPcModal('saveTaskModal');
@@ -426,47 +508,114 @@ $blockerMapJson = json_encode($blockerMap);
 <script src="TM_JS/TM_App.js"></script>
 <script src="TM_JS/TM_Calendar.js"></script>
 <script>
-// ── Inline validation: Add Task form (Improvement 4) ──────────────────────
+// ── Inline validation: Add Task form ──────────────────────────────────────
 (function () {
     var form = document.getElementById('addTaskForm');
     if (!form) return;
     form.addEventListener('submit', function (e) {
-        var ok = validateFields([
-            { id: 'addTaskName',  label: 'Task name' },
-            { id: 'addTaskStart', label: 'Start date', validate: function (v) {
-                if (!v) return 'Start date is required.';
-            }},
-            { id: 'addTaskDue',   label: 'Due date', validate: function (v) {
-                if (!v) return 'Due date is required.';
-                var start = document.getElementById('addTaskStart');
-                if (start && start.value && v < start.value) return 'Due date cannot be before start date.';
-            }},
-        ]);
-        if (!ok) e.preventDefault();
+        var nameEl  = document.getElementById('addTaskName');
+        var startEl = document.getElementById('addTaskStart');
+        var dueEl   = document.getElementById('addTaskDue');
+        if (!nameEl || !nameEl.value.trim())  { e.preventDefault(); nameEl  && nameEl.focus();  return; }
+        if (!startEl || !startEl.value)       { e.preventDefault(); startEl && startEl.focus(); return; }
+        if (!dueEl   || !dueEl.value)         { e.preventDefault(); dueEl   && dueEl.focus();   return; }
+        if (dueEl.value < startEl.value) {
+            e.preventDefault();
+            var errEl = document.getElementById('calDateErrorModal');
+            var errTx = document.getElementById('calDateErrorModalText');
+            if (errTx) errTx.textContent = 'Due date (' + dueEl.value + ') cannot be before start date (' + startEl.value + ').';
+            if (errEl) errEl.classList.add('active');
+        }
     });
 })();
 
-// ── Inline validation: Edit Task form (Improvement 4) ─────────────────────
+// ── Populate Project & Assign dropdowns in Calendar edit modal ────────────
 (function () {
-    // The edit form save goes through tmDoSave() → editTaskForm.submit()
-    // Intercept the Save Changes button click instead.
-    var origTmOpenSaveConfirm = window.tmOpenSaveConfirm;
-    window.tmOpenSaveConfirm = function () {
-        var ok = validateFields([
-            { id: 'editTaskName',  label: 'Task name' },
-            { id: 'editTaskStart', label: 'Start date', validate: function (v) {
-                if (!v) return 'Start date is required.';
-            }},
-            { id: 'editTaskDue',   label: 'Due date', validate: function (v) {
-                if (!v) return 'Due date is required.';
-                var start = document.getElementById('editTaskStart');
-                if (start && start.value && v < start.value) return 'Due date cannot be before start date.';
-            }},
-        ]);
-        if (!ok) return; // Don't open confirm modal if invalid
-        if (origTmOpenSaveConfirm) origTmOpenSaveConfirm();
-    };
+    var _loaded = false;
+    function loadCollabData(taskData) {
+        if (_loaded) return;
+        _loaded = true;
+        fetch('TM_PHP/TM_CollabActions.php?action=list_users')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.ok) return;
+                var assignSel = document.getElementById('calEditAssignSelect');
+                var reassignSel = document.getElementById('calReassignSelect');
+                (data.data || []).forEach(function (u) {
+                    var label = u.full_name ? u.full_name + ' (@' + u.username + ')' : '@' + u.username;
+                    if (assignSel) {
+                        var o = document.createElement('option'); o.value = u.user_id; o.textContent = label;
+                        assignSel.appendChild(o);
+                    }
+                    if (reassignSel) {
+                        var o2 = document.createElement('option'); o2.value = u.user_id; o2.textContent = label;
+                        reassignSel.appendChild(o2);
+                    }
+                });
+                // Restore selected assigned_to from task data
+                if (taskData && taskData.assigned_to && assignSel) assignSel.value = taskData.assigned_to;
+            }).catch(function () {});
+
+        fetch('TM_PHP/TM_CollabActions.php?action=list_projects')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.ok) return;
+                var projSel = document.getElementById('calEditProjectSelect');
+                if (!projSel) return;
+                (data.data || []).forEach(function (p) {
+                    var o = document.createElement('option'); o.value = p.project_id; o.textContent = p.project_name;
+                    projSel.appendChild(o);
+                });
+                if (taskData && taskData.project_id) projSel.value = taskData.project_id;
+            }).catch(function () {});
+    }
+
+    // Hook into the existing tmOpenEdit from TM_Calendar.js to also load collab data
+    var _origPopulateEdit = window.populateEditModal;
+    if (typeof _origPopulateEdit === 'function') {
+        window.populateEditModal = function (task) {
+            _origPopulateEdit(task);
+            loadCollabData(task);
+        };
+    } else {
+        // Fallback: load on first modal open
+        var overlay = document.getElementById('editTaskModal');
+        if (overlay) {
+            var obs = new MutationObserver(function (muts) {
+                muts.forEach(function (m) {
+                    if (m.attributeName === 'class' && overlay.classList.contains('active')) {
+                        loadCollabData(null);
+                    }
+                });
+            });
+            obs.observe(overlay, { attributes: true });
+        }
+    }
+
+    // Moderator check: show delegate group if applicable
+    <?php if (function_exists('tm_is_moderator') && tm_is_moderator()): ?>
+    var rg = document.getElementById('calReassignGroup');
+    if (rg) rg.style.display = '';
+    <?php endif; ?>
 })();
+
+// Delegate action for Calendar modal
+function calDoReassign() {
+    var taskId = document.getElementById('editTaskId').value;
+    var toUser = document.getElementById('calReassignSelect').value;
+    var fb     = document.getElementById('calReassignFeedback');
+    if (!toUser) { if (fb) fb.textContent = 'Pick a user first.'; return; }
+    var fd = new FormData();
+    fd.append('action',     'reassign');
+    fd.append('task_id',    taskId);
+    fd.append('to_user_id', toUser);
+    fetch('TM_PHP/TM_TaskActions.php', { method: 'POST', body: fd })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (fb) fb.textContent = d.ok ? 'Delegated!' : (d.error || 'Error');
+            if (d.ok) setTimeout(function () { location.reload(); }, 800);
+        }).catch(function () { if (fb) fb.textContent = 'Network error.'; });
+}
 </script>
 
 <!-- LOGOUT PC-MODAL -->

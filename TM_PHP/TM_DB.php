@@ -222,7 +222,12 @@ function tm_sp_update_status(int $taskId, int $userId, string $newStatus): void 
     oci_bind_by_name($stmt, ':p_user_id',    $userId,    10);
     oci_bind_by_name($stmt, ':p_new_status', $newStatus, 20);
 
-    $ok = @oci_execute($stmt, OCI_NO_AUTO_COMMIT);
+    // FIX: was OCI_NO_AUTO_COMMIT without a matching oci_commit(), which left
+    // the connection in an open transaction and caused the next tm_exec() call
+    // (line 42 — oci_execute with the default OCI_COMMIT_ON_SUCCESS) to raise
+    // ORA-01453 / ORA-24761 depending on the XE version.
+    // Use OCI_COMMIT_ON_SUCCESS here so the procedure's own COMMIT is honoured.
+    $ok = @oci_execute($stmt, OCI_COMMIT_ON_SUCCESS);
     if (!$ok) {
         $err = oci_error($stmt);
         oci_free_statement($stmt);
