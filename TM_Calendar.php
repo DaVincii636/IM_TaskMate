@@ -6,13 +6,55 @@ tm_require_login();
 $flash = tm_get_flash();
 $uid   = tm_uid();
 
-// Load this user's tasks from Oracle
+// ── Feature 8: Team filter ────────────────────────────────────────────────────
+$filterTeam = (int)($_GET['team'] ?? 0);
+
+// Load teams the current user belongs to (for the filter dropdown)
+$_tstmt  = tm_exec(
+    "SELECT t.team_id, t.team_name FROM TM_Teams t
+     JOIN TM_TeamMembers m ON m.team_id = t.team_id
+     WHERE m.user_id = :p1
+     ORDER BY t.team_name",
+    [$uid]
+);
+$myTeams = tm_fetch_all($_tstmt);
+
+// Build the WHERE clause and params based on whether a team filter is active
+$taskWhere  = 'user_id = :p1';
+$taskParams = [$uid];
+$activeTeamName = '';
+
+if ($filterTeam > 0) {
+    // Security: verify the current user actually belongs to this team
+    $chk = tm_exec(
+        'SELECT COUNT(*) FROM TM_TeamMembers WHERE team_id = :p1 AND user_id = :p2',
+        [$filterTeam, $uid]
+    );
+    if ((int)tm_scalar($chk) > 0) {
+        // Get all member user_ids in this team
+        $mStmt     = tm_exec('SELECT user_id FROM TM_TeamMembers WHERE team_id = :p1', [$filterTeam]);
+        $memberIds = array_column(tm_fetch_all($mStmt), 'user_id');
+        if (!empty($memberIds)) {
+            $inList     = implode(',', array_map('intval', $memberIds));
+            $taskWhere  = "user_id IN ($inList)";
+            $taskParams = [];
+        }
+        // Get team name for the UI label
+        $tnRow = tm_fetch_one(tm_exec('SELECT team_name FROM TM_Teams WHERE team_id = :p1', [$filterTeam]));
+        $activeTeamName = $tnRow['team_name'] ?? '';
+    } else {
+        $filterTeam = 0; // reset invalid/unauthorised filter
+    }
+}
+// ── End Feature 8 ─────────────────────────────────────────────────────────────
+
+// Load tasks (scoped to user or team)
 $stmt  = tm_exec(
     "SELECT task_id, task_name, TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
             TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
             category, custom_category, priority, color, notes, status, recurrence
-     FROM TM_Tasks WHERE user_id = :p1 ORDER BY start_date ASC",
-    [$uid]
+     FROM TM_Tasks WHERE $taskWhere ORDER BY start_date ASC",
+    $taskParams
 );
 $tasks = tm_fetch_all($stmt);
 // Convert any CLOB/OCILob/resource objects to plain strings before JSON encoding
@@ -43,10 +85,10 @@ $blockerCountRows = tm_fetch_all(tm_exec(
      WHERE tl.link_type = 'blocks'
        AND blocker.status NOT IN ('done', 'cancelled')
        AND tl.task_id IN (
-           SELECT task_id FROM TM_Tasks WHERE user_id = :p1
+           SELECT task_id FROM TM_Tasks WHERE $taskWhere
        )
      GROUP BY tl.task_id",
-    [$uid]
+    $taskParams
 ));
 $blockerMap = [];
 foreach ($blockerCountRows as $row) {
@@ -101,6 +143,24 @@ $blockerMapJson = json_encode($blockerMap);
             <input type="number" class="year-input" id="yearInput" min="1900" max="2100"/>
         </div>
         <div class="calendar-controls">
+            <?php if (!empty($myTeams)): ?>
+            <!-- Feature 8: Team filter -->
+            <form method="get" action="TM_Calendar.php" style="display:inline-flex;align-items:center;gap:6px;">
+                <select name="team" class="filter-select"
+                        title="Filter calendar by team"
+                        onchange="this.form.submit()"
+                        style="font-size:12px;padding:6px 10px;border-radius:50px;border:1.5px solid var(--border);font-family:'Poppins',sans-serif;background:var(--white);cursor:pointer;">
+                    <option value="">&#127991; All Teams</option>
+                    <?php foreach ($myTeams as $t):
+                        $tId = (int)($t['team_id'] ?? 0);
+                    ?>
+                    <option value="<?= $tId ?>" <?= $filterTeam === $tId ? 'selected' : '' ?>>
+                        &#127991; <?= htmlspecialchars($t['team_name'] ?? '') ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </form>
+            <?php endif; ?>
             <div class="toggle-wrap">
                 <span class="toggle-label">Gantt View</span>
                 <label class="toggle-switch">
@@ -112,6 +172,14 @@ $blockerMapJson = json_encode($blockerMap);
             <button class="btn-add-task" id="btnAddTask">+ Add Task</button>
         </div>
     </div>
+
+    <?php if ($filterTeam > 0 && $activeTeamName): ?>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:12px;font-weight:600;color:#15803d;">
+        <i class="fa-solid fa-people-group"></i>
+        Showing tasks for team: <strong><?= htmlspecialchars($activeTeamName) ?></strong>
+        <a href="TM_Calendar.php" style="margin-left:auto;color:#6b7280;font-weight:500;text-decoration:none;" title="Clear filter">&#x2715; Clear</a>
+    </div>
+    <?php endif; ?>
 
     <div class="legend-bar">
         <span class="legend-title">Categories:</span>
