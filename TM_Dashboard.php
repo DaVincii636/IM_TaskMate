@@ -7,6 +7,7 @@ $flash     = tm_get_flash();
 $firstName = tm_uname();
 $fullName  = $firstName . ' ' . ($_SESSION['tm_last_name'] ?? '');
 $uid       = tm_uid();
+$oid       = tm_org_id(); // org scope for is_org_task queries
 
 // ── Feature 11: Onboarding check (HCI101 Week 2 — Learnability) ───────────────
 // Check TM_UserPrefs to see if this user has already seen the walkthrough.
@@ -27,24 +28,24 @@ function _tm_count(array $rows): int {
 }
 
 $cntTotal = _tm_count(tm_fetch_all(tm_exec(
-    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 OR assigned_to=:p2", [$uid, $uid]
+    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)", [$uid, $uid, $oid]
 )));
 
 $cntPending = _tm_count(tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE (user_id=:p1 OR assigned_to=:p2) AND status NOT IN ('done','cancelled')",
-    [$uid, $uid]
+     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)) AND status NOT IN ('done','cancelled')",
+    [$uid, $uid, $oid]
 )));
 
 $cntDone = _tm_count(tm_fetch_all(tm_exec(
-    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE (user_id=:p1 OR assigned_to=:p2) AND status IN ('done','done_late')",
-    [$uid, $uid]
+    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)) AND status IN ('done','done_late')",
+    [$uid, $uid, $oid]
 )));
 
 $cntOverdue = _tm_count(tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE (user_id=:p1 OR assigned_to=:p2) AND TRUNC(due_date) < TRUNC(SYSDATE) AND status NOT IN ('done','cancelled')",
-    [$uid, $uid]
+     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)) AND TRUNC(due_date) < TRUNC(SYSDATE) AND status NOT IN ('done','cancelled')",
+    [$uid, $uid, $oid]
 )));
 
 // ── 5 upcoming tasks (not done/cancelled, closest due date first) ─────────────
@@ -57,13 +58,13 @@ $stmtUpcoming = tm_exec(
          SELECT task_id, task_name, start_date, due_date,
                 category, custom_category, priority, color, status, notes
          FROM TM_Tasks
-         WHERE (user_id=:p1 OR assigned_to=:p2)
+         WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3))
            AND status NOT IN ('done','cancelled')
            AND due_date >= TRUNC(SYSDATE)
          ORDER BY due_date ASC
      )
      WHERE ROWNUM <= 5",
-    [$uid, $uid]
+    [$uid, $uid, $oid]
 );
 $upcoming = tm_fetch_all($stmtUpcoming);
 // Resolve CLOB fields
@@ -81,8 +82,8 @@ $stmtAllTasks = tm_exec(
     "SELECT task_id, task_name, TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
             TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
             category, custom_category, priority, color, notes, status, recurrence
-     FROM TM_Tasks WHERE (user_id = :p1 OR assigned_to = :p2) ORDER BY due_date ASC",
-    [$uid, $uid]
+     FROM TM_Tasks WHERE (user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3)) ORDER BY due_date ASC",
+    [$uid, $uid, $oid]
 );
 $allTasks = tm_fetch_all($stmtAllTasks);
 $allTasks = array_map(function($row) {

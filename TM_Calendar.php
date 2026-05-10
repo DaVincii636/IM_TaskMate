@@ -5,6 +5,7 @@ tm_require_login();
 
 $flash = tm_get_flash();
 $uid   = tm_uid();
+$oid   = tm_org_id();
 
 // ── Feature 8: Team filter ────────────────────────────────────────────────────
 $filterTeam = (int)($_GET['team'] ?? 0);
@@ -20,8 +21,9 @@ $_tstmt  = tm_exec(
 $myTeams = tm_fetch_all($_tstmt);
 
 // Build the WHERE clause and params based on whether a team filter is active
-$taskWhere  = 'user_id = :p1';
-$taskParams = [$uid];
+// Default: own tasks + assigned tasks + org-wide tasks in this org
+$taskWhere  = '(user_id = :p1 OR assigned_to = :p1 OR (is_org_task = 1 AND org_id = :p2))';
+$taskParams = [$uid, $oid];
 $activeTeamName = '';
 
 if ($filterTeam > 0) {
@@ -36,8 +38,9 @@ if ($filterTeam > 0) {
         $memberIds = array_column(tm_fetch_all($mStmt), 'user_id');
         if (!empty($memberIds)) {
             $inList     = implode(',', array_map('intval', $memberIds));
-            $taskWhere  = "user_id IN ($inList)";
-            $taskParams = [];
+            // Team view: members' tasks + org-wide tasks for this org
+            $taskWhere  = "(user_id IN ($inList) OR (is_org_task = 1 AND org_id = :p_oid))";
+            $taskParams = [$oid];
         }
         // Get team name for the UI label
         $tnRow = tm_fetch_one(tm_exec('SELECT team_name FROM TM_Teams WHERE team_id = :p1', [$filterTeam]));

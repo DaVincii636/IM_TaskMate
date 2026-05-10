@@ -48,10 +48,10 @@ if ($action === 'list') {
                 TO_CHAR(due_date,'YYYY-MM-DD')   AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p2)
-           AND org_id  = :p3
+         WHERE (user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3))
+           AND org_id  = :p4
          ORDER BY due_date ASC",
-        [$uid, $uid, $oid]
+        [$uid, $uid, $oid, $oid]
     );
     $rows = tm_fetch_all($stmt);
     // Cast task_id to int so JSON encodes it as a number, not a string
@@ -88,10 +88,10 @@ if ($action === 'export') {
                 status, recurrence,
                 TO_CHAR(created_at,'YYYY-MM-DD HH24:MI:SS') AS created_at
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p2)
-           AND org_id  = :p3
+         WHERE (user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3))
+           AND org_id  = :p4
          ORDER BY due_date ASC",
-        [$uid, $uid, $oid]
+        [$uid, $uid, $oid, $oid]
     );
     $rows = tm_fetch_all($stmt);
 
@@ -332,6 +332,7 @@ switch ($action) {
         $recur      = trim($_POST['recurrence']     ?? '');
         $assignedTo = (int)($_POST['assigned_to']   ?? 0);
         $projectId  = (int)($_POST['project_id']    ?? 0);
+        $isOrgTask  = isset($_POST['is_org_task']) && $_POST['is_org_task'] ? 1 : 0;
         if (!in_array($recur, ['daily','weekly','monthly','yearly'])) $recur = '';
 
         if (!$name || !$start || !$due) {
@@ -349,7 +350,7 @@ switch ($action) {
         // Feature 6: pass org_id so the stored procedure stamps the new task correctly
         $newId = tm_sp_create_task(
             $uid, $name, $start, $due,
-            $cat, $ccat, $pri, $col, $notes, $recur, $oid
+            $cat, $ccat, $pri, $col, $notes, $recur, $oid, $isOrgTask
         );
         // ── End stored procedure call ─────────────────────────────────────────
 

@@ -10,6 +10,7 @@ $uid       = tm_uid();
 $firstName = tm_uname();
 $flash     = tm_get_flash();
 $filterTeam = (int)($_GET['team'] ?? 0); // Feature 8: analytics team filter
+$oid       = tm_org_id();
 
 // ── Feature 8: Load teams the current user belongs to (for filter) ───────────
 $_tstmt  = tm_exec(
@@ -24,8 +25,8 @@ $myTeams = tm_fetch_all($_tstmt);
 // If a team filter is active, override $uid context for queries:
 // We show analytics for tasks owned by all members of the selected team.
 // We keep a separate $scopeUserIds array for use in analytics queries.
-$scopeWhere = 'user_id = :uid_scope';
-$scopeParams = [$uid]; // default: self
+$scopeWhere  = '(user_id = :uid_scope OR (is_org_task = 1 AND org_id = :oid_scope))';
+$scopeParams = [$uid, $oid]; // default: self + org-wide
 if ($filterTeam > 0) {
     // Verify user belongs to this team (security: users can only filter by their own teams)
     $chk = tm_exec(
@@ -40,8 +41,9 @@ if ($filterTeam > 0) {
         $memberIds = array_column(tm_fetch_all($mStmt), 'user_id');
         if (!empty($memberIds)) {
             $inList = implode(',', array_map('intval', $memberIds));
-            $scopeWhere  = "user_id IN ($inList)";
-            $scopeParams = []; // IN list is inline, no bind params needed
+            // Team view: members' tasks + org-wide tasks
+            $scopeWhere  = "(user_id IN ($inList) OR (is_org_task = 1 AND org_id = :oid_scope))";
+            $scopeParams = [$oid];
         }
     } else {
         $filterTeam = 0; // reset invalid filter
@@ -80,13 +82,13 @@ $stmtWeekly = tm_exec(
          SELECT (TRUNC(due_date) - MOD(TRUNC(due_date) - DATE'1970-01-05', 7)) AS week_start,
                 0 AS completed, 1 AS total_due
          FROM TM_Tasks
-         WHERE user_id  = :p2
+         WHERE (user_id = :p2 OR (is_org_task = 1 AND org_id = :p3))
            AND due_date >= TRUNC(SYSDATE) - 56
            AND due_date <  TRUNC(SYSDATE) + 7
      )
      GROUP BY week_start
      ORDER BY week_start ASC",
-    [$uid, $uid]
+    [$uid, $uid, $oid]
 );
 $weeklyRaw = tm_fetch_all($stmtWeekly);
 
@@ -121,7 +123,7 @@ $stmtMissed = tm_exec(
                 END AS cat_label,
             COUNT(*) AS missed_count
      FROM TM_Tasks
-     WHERE user_id = :p1
+     WHERE (user_id = :p1 OR (is_org_task = 1 AND org_id = :p2))
        AND due_date < TRUNC(SYSDATE)
        AND status NOT IN ('done','cancelled')
      GROUP BY CASE WHEN category = 'others' AND custom_category IS NOT NULL
@@ -129,7 +131,7 @@ $stmtMissed = tm_exec(
                    ELSE INITCAP(category)
               END
      ORDER BY COUNT(*) DESC",
-    [$uid]
+    [$uid, $oid]
 );
 $missedRows = tm_fetch_all($stmtMissed);
 
@@ -208,14 +210,14 @@ foreach ($allDays as $d) {
 // QUERY 5 — Top-level summary numbers for the hero strip
 // ══════════════════════════════════════════════════════════════════════════════
 $cntDone    = (int)_an_val(tm_fetch_all(tm_exec(
-    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 AND status IN ('done','done_late')", [$uid])), 'n');
+    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE (user_id=:p1 OR (is_org_task=1 AND org_id=:p2)) AND status IN ('done','done_late')", [$uid, $oid])), 'n');
 $cntTotal   = (int)_an_val(tm_fetch_all(tm_exec(
-    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1", [$uid])), 'n');
+    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 OR (is_org_task=1 AND org_id=:p2)", [$uid, $oid])), 'n');
 $cntOverdue = (int)_an_val(tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE user_id=:p1 AND due_date < TRUNC(SYSDATE) AND status NOT IN ('done','cancelled')
-       OR (user_id=:p2 AND status = 'done_late')",
-    [$uid, $uid])), 'n');
+     WHERE (user_id=:p1 OR (is_org_task=1 AND org_id=:p2)) AND due_date < TRUNC(SYSDATE) AND status NOT IN ('done','cancelled')
+        OR (user_id=:p3 AND status = 'done_late')",
+    [$uid, $oid, $uid])), 'n');
 $completionPct = $cntTotal > 0 ? round($cntDone / $cntTotal * 100) : 0;
 
 // ── Pass data to JS for the bar chart ─────────────────────────────────────────

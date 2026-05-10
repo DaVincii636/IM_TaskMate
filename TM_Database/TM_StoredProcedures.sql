@@ -17,13 +17,15 @@ CREATE OR REPLACE PROCEDURE TM_CreateTask (
     p_notes           IN  TM_Tasks.notes%TYPE,
     p_recurrence      IN  TM_Tasks.recurrence%TYPE,
     p_new_task_id     OUT TM_Tasks.task_id%TYPE,
-    p_org_id          IN  TM_Tasks.org_id%TYPE DEFAULT 1
+    p_org_id          IN  TM_Tasks.org_id%TYPE DEFAULT 1,
+    p_is_org_task     IN  TM_Tasks.is_org_task%TYPE DEFAULT 0
 ) AS
     v_audit_new VARCHAR2(500);
 BEGIN
     INSERT INTO TM_Tasks (
         user_id, org_id, task_name, start_date, due_date,
-        category, custom_category, priority, color, notes, recurrence
+        category, custom_category, priority, color, notes, recurrence,
+        is_org_task
     ) VALUES (
         p_user_id,
         p_org_id,
@@ -35,7 +37,8 @@ BEGIN
         p_priority,
         p_color,
         p_notes,
-        NULLIF(p_recurrence, '')
+        NULLIF(p_recurrence, ''),
+        p_is_org_task
     );
 
     SELECT TM_Tasks_seq.CURRVAL INTO p_new_task_id FROM DUAL;

@@ -146,7 +146,8 @@ function tm_sp_create_task(
     string $color,
     string $notes,
     string $recurrence,
-    int    $orgId = 1  // Feature 6: tenant scope — defaults to 1 (Default Org)
+    int    $orgId = 1,    // Feature 6: tenant scope — defaults to 1 (Default Org)
+    int    $isOrgTask = 0 // Feature: org-wide task flag
 ): int {
     global $conn;
 
@@ -154,7 +155,8 @@ function tm_sp_create_task(
                   TM_CreateTask(
                       :p_user_id, :p_task_name, :p_start_date, :p_due_date,
                       :p_category, :p_custom_category, :p_priority, :p_color,
-                      :p_notes, :p_recurrence, :p_new_task_id, :p_org_id
+                      :p_notes, :p_recurrence, :p_new_task_id, :p_org_id,
+                      :p_is_org_task
                   );
               END;";
 
@@ -172,6 +174,7 @@ function tm_sp_create_task(
     oci_bind_by_name($stmt, ':p_notes',            $notes,          -1);
     oci_bind_by_name($stmt, ':p_recurrence',       $recurrence,     20);
     oci_bind_by_name($stmt, ':p_org_id',           $orgId,          10); // Feature 6
+    oci_bind_by_name($stmt, ':p_is_org_task',      $isOrgTask,       1);
 
     // OUT parameter — Oracle writes the new task_id here
     $newTaskId = 0;

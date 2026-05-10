@@ -5,6 +5,7 @@ tm_require_login();
 
 $flash = tm_get_flash();
 $uid   = tm_uid();
+$oid   = tm_org_id(); // org scope for is_org_task queries
 
 // Which tab is active: all | missing | done
 $view = $_GET['view'] ?? 'all';
@@ -19,7 +20,7 @@ $dateTo    = trim($_GET['to']   ?? '');
 $filterTeam = (int)($_GET['team'] ?? 0); // Feature 8: team filter
 
 $extraWhere  = '';
-$extraParams = [$uid, $uid]; // :p1 = user_id (owned), :p2 = user_id (assigned_to)
+$extraParams = [$uid, $uid, $oid]; // :p1 = user_id (owned), :p2 = user_id (assigned_to), :p3 = org_id (org-wide tasks)
 
 if ($search !== '') {
     $extraWhere .= " AND UPPER(task_name) LIKE UPPER(:p" . (count($extraParams)+1) . ")";
@@ -73,7 +74,8 @@ if ($view === 'done') {
                 TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p2) AND status IN ('done','done_late')
+         WHERE (user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3))
+           AND status IN ('done','done_late')
          $extraWhere
          ORDER BY $sortSql",
         $extraParams
@@ -84,7 +86,7 @@ if ($view === 'done') {
                 TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p2)
+         WHERE (user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3))
            AND due_date < SYSDATE
            AND status NOT IN ('done','cancelled')
          $extraWhere
@@ -93,12 +95,13 @@ if ($view === 'done') {
     );
 } else {
     // all — Feature 10: include tasks delegated to this user via assigned_to
+    //       + org-wide tasks shared across the organisation (is_org_task = 1)
     $stmt = tm_exec(
         "SELECT task_id, task_name, TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
                 TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p2)
+         WHERE (user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3))
          $extraWhere
          ORDER BY $sortSql",
         $extraParams
@@ -482,17 +485,17 @@ table.task-table tbody tr.row-overdue td:first-child {
 
 <?php
 // Count tasks for tab badges (always query all three counts)
-$_r = tm_fetch_all(tm_exec("SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1", [$uid]));
+$_r = tm_fetch_all(tm_exec("SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)", [$uid, $uid, $oid]));
 $cntAll = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 
 $_r = tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE user_id=:p1 AND due_date < SYSDATE AND status NOT IN ('done','cancelled')",
-    [$uid]
+     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)) AND due_date < SYSDATE AND status NOT IN ('done','cancelled')",
+    [$uid, $uid, $oid]
 ));
 $cntMissing = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 
-$_r = tm_fetch_all(tm_exec("SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 AND status IN ('done','done_late')", [$uid]));
+$_r = tm_fetch_all(tm_exec("SELECT COUNT(*) AS n FROM TM_Tasks WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)) AND status IN ('done','done_late')", [$uid, $uid, $oid]));
 $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 ?>
 

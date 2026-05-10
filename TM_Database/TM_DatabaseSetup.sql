@@ -46,12 +46,14 @@ CREATE TABLE TM_Tasks (
     notes           CLOB,
     status          VARCHAR2(20)  DEFAULT 'pending',
     recurrence      VARCHAR2(20)  DEFAULT NULL,
+    is_org_task     NUMBER(1)     DEFAULT 0 NOT NULL,
     created_at      TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_tm_tasks        PRIMARY KEY (task_id),
     CONSTRAINT fk_tm_user         FOREIGN KEY (user_id)
         REFERENCES TM_Users(user_id) ON DELETE CASCADE,
-    CONSTRAINT chk_tm_recurrence  CHECK (recurrence IS NULL OR recurrence IN ('daily','weekly','monthly'))
+    CONSTRAINT chk_tm_recurrence  CHECK (recurrence IS NULL OR recurrence IN ('daily','weekly','monthly')),
+    CONSTRAINT chk_is_org_task    CHECK (is_org_task IN (0, 1))
 );
 
 CREATE SEQUENCE TM_Tasks_seq START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
@@ -74,6 +76,7 @@ END;
 
 CREATE INDEX idx_tm_tasks_user_id  ON TM_Tasks(user_id);
 CREATE INDEX idx_tm_tasks_due_date ON TM_Tasks(due_date);
+CREATE INDEX idx_tm_tasks_org_task ON TM_Tasks(org_id, is_org_task);
 
 -- ── NOTIFICATIONS ─────────────────────────────
 CREATE TABLE TM_Notifications (
