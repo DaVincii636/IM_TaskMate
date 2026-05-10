@@ -537,6 +537,116 @@ switch ($action) {
         exit;
     }
 
+    // ──────────────────────────────────────────────────────────
+    // remove_project_member
+    // POST: project_id, user_id
+    // Only the project owner may remove members (cannot remove themselves).
+    // ──────────────────────────────────────────────────────────
+    case 'remove_project_member': {
+        $projectId = (int)($_POST['project_id'] ?? 0);
+        $targetId  = (int)($_POST['user_id']    ?? 0);
+
+        if ($projectId <= 0 || $targetId <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'project_id and user_id required']); exit;
+        }
+
+        // Caller must be owner
+        $callerRole = tm_fetch_one(tm_exec(
+            "SELECT role FROM TM_ProjectMembers WHERE project_id = :p1 AND user_id = :p2",
+            [$projectId, $uid]
+        ));
+        if (!$callerRole || $callerRole['role'] !== 'owner') {
+            echo json_encode(['ok' => false, 'error' => 'Only the project owner can remove members']); exit;
+        }
+
+        // Cannot remove yourself (owner must delete the project instead)
+        if ($targetId === $uid) {
+            echo json_encode(['ok' => false, 'error' => 'Owner cannot remove themselves. Delete the project instead.']); exit;
+        }
+
+        tm_exec(
+            "DELETE FROM TM_ProjectMembers WHERE project_id = :p1 AND user_id = :p2",
+            [$projectId, $targetId]
+        );
+
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // delete_project
+    // POST: project_id
+    // Only the project owner may delete it.
+    // Cascade: TM_ProjectMembers rows are deleted via FK ON DELETE CASCADE.
+    // Tasks that referenced this project have their project_id set to NULL
+    // via FK ON DELETE SET NULL.
+    // ──────────────────────────────────────────────────────────
+    case 'delete_project': {
+        $projectId = (int)($_POST['project_id'] ?? 0);
+
+        if ($projectId <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'project_id required']); exit;
+        }
+
+        // Caller must be owner
+        $callerRole = tm_fetch_one(tm_exec(
+            "SELECT role FROM TM_ProjectMembers WHERE project_id = :p1 AND user_id = :p2",
+            [$projectId, $uid]
+        ));
+        if (!$callerRole || $callerRole['role'] !== 'owner') {
+            echo json_encode(['ok' => false, 'error' => 'Only the project owner can delete the project']); exit;
+        }
+
+        // Nullify project_id on tasks before deleting (in case FK isn't CASCADE SET NULL in this Oracle version)
+        tm_exec(
+            "UPDATE TM_Tasks SET project_id = NULL WHERE project_id = :p1",
+            [$projectId]
+        );
+
+        // Delete members first (FK cascade should handle it, but be explicit)
+        tm_exec("DELETE FROM TM_ProjectMembers WHERE project_id = :p1", [$projectId]);
+
+        // Delete the project
+        tm_exec("DELETE FROM TM_Projects WHERE project_id = :p1", [$projectId]);
+
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // update_project
+    // POST: project_id, name, description?, color?
+    // Only the project owner may update it.
+    // ──────────────────────────────────────────────────────────
+    case 'update_project': {
+        $projectId = (int)($_POST['project_id'] ?? 0);
+        $name      = trim($_POST['name']        ?? '');
+        $desc      = trim($_POST['description'] ?? '');
+        $color     = trim($_POST['color']       ?? '#3b82f6');
+
+        if ($projectId <= 0 || !$name) {
+            echo json_encode(['ok' => false, 'error' => 'project_id and name required']); exit;
+        }
+
+        // Caller must be owner
+        $callerRole = tm_fetch_one(tm_exec(
+            "SELECT role FROM TM_ProjectMembers WHERE project_id = :p1 AND user_id = :p2",
+            [$projectId, $uid]
+        ));
+        if (!$callerRole || $callerRole['role'] !== 'owner') {
+            echo json_encode(['ok' => false, 'error' => 'Only the project owner can edit the project']); exit;
+        }
+
+        tm_exec(
+            "UPDATE TM_Projects SET name = :p1, description = :p2, color = :p3
+             WHERE project_id = :p4",
+            [$name, $desc, $color, $projectId]
+        );
+
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
     default:
         echo json_encode(['ok' => false, 'error' => "Unknown action: '{$action}'"]);
         exit;
