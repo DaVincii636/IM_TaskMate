@@ -1,32 +1,15 @@
 -- =============================================
--- TM_StoredProcedures.sql
--- PL/SQL Stored Procedures for TaskMate core operations.
---
--- Feature 9 — IM101 Week 12 (PL/SQL Procedures):
---   Benefits realised here:
---   1. Performance  — compiled once, reused from Oracle shared SQL cache
---   2. Security     — PHP never touches TM_Tasks/TM_AuditLog directly;
---                     only EXECUTE privilege on procedures is needed
---   3. Integrity    — INSERT + audit happen atomically in one call
---   4. Maintenance  — change logic once in Oracle, not across PHP files
---   5. Reuse        — any future module (cron, admin panel) calls the
---                     same procedure instead of reimplementing SQL
---
--- Run this file ONCE in Oracle SQL Developer AFTER TM_DatabaseSetup.sql.
--- Re-running is safe: CREATE OR REPLACE overwrites existing bodies.
+-- TM_StoredProcedures.sql  (Run 6th)
+-- Core PL/SQL procedures for task operations.
+-- Depends on: TM_DatabaseSetup.sql
 -- =============================================
 
-
--- ─────────────────────────────────────────────
--- PROCEDURE: TM_CreateTask
--- Inserts one task row and writes a 'create' audit entry.
--- OUT p_new_task_id returns the generated task_id.
--- ─────────────────────────────────────────────
+-- ── TM_CreateTask ─────────────────────────────
 CREATE OR REPLACE PROCEDURE TM_CreateTask (
     p_user_id         IN  TM_Tasks.user_id%TYPE,
     p_task_name       IN  TM_Tasks.task_name%TYPE,
-    p_start_date      IN  VARCHAR2,   -- 'YYYY-MM-DD'
-    p_due_date        IN  VARCHAR2,   -- 'YYYY-MM-DD'
+    p_start_date      IN  VARCHAR2,
+    p_due_date        IN  VARCHAR2,
     p_category        IN  TM_Tasks.category%TYPE,
     p_custom_category IN  TM_Tasks.custom_category%TYPE,
     p_priority        IN  TM_Tasks.priority%TYPE,
@@ -34,12 +17,10 @@ CREATE OR REPLACE PROCEDURE TM_CreateTask (
     p_notes           IN  TM_Tasks.notes%TYPE,
     p_recurrence      IN  TM_Tasks.recurrence%TYPE,
     p_new_task_id     OUT TM_Tasks.task_id%TYPE,
-    -- Feature 6: org_id required so every task is tenant-scoped from creation
     p_org_id          IN  TM_Tasks.org_id%TYPE DEFAULT 1
 ) AS
     v_audit_new VARCHAR2(500);
 BEGIN
-    -- Insert the task; trigger trg_tm_tasks_id populates task_id via sequence
     INSERT INTO TM_Tasks (
         user_id, org_id, task_name, start_date, due_date,
         category, custom_category, priority, color, notes, recurrence
@@ -57,16 +38,13 @@ BEGIN
         NULLIF(p_recurrence, '')
     );
 
-    -- Retrieve the auto-generated task_id
     SELECT TM_Tasks_seq.CURRVAL INTO p_new_task_id FROM DUAL;
 
-    -- Build audit summary
     v_audit_new := SUBSTR(
         'cat:' || p_category || ', pri:' || p_priority || ', due:' || p_due_date,
         1, 500
     );
 
-    -- Write audit log atomically with the insert
     INSERT INTO TM_AuditLog (
         user_id, action, entity_type, entity_id,
         entity_name, old_value, new_value
@@ -83,12 +61,7 @@ EXCEPTION
 END TM_CreateTask;
 /
 
-
--- ─────────────────────────────────────────────
--- PROCEDURE: TM_UpdateTaskStatus
--- Updates a task's status and writes a 'status_change' audit entry.
--- Enforces ownership: raises ORA-20001 if task not found for user.
--- ─────────────────────────────────────────────
+-- ── TM_UpdateTaskStatus ───────────────────────
 CREATE OR REPLACE PROCEDURE TM_UpdateTaskStatus (
     p_task_id    IN TM_Tasks.task_id%TYPE,
     p_user_id    IN TM_Tasks.user_id%TYPE,
@@ -97,7 +70,6 @@ CREATE OR REPLACE PROCEDURE TM_UpdateTaskStatus (
     v_old_status TM_Tasks.status%TYPE;
     v_task_name  TM_Tasks.task_name%TYPE;
 BEGIN
-    -- Fetch current state; lock the row for update
     SELECT status, task_name
       INTO v_old_status, v_task_name
       FROM TM_Tasks
@@ -105,13 +77,11 @@ BEGIN
        AND user_id = p_user_id
        FOR UPDATE;
 
-    -- Update status
     UPDATE TM_Tasks
        SET status = p_new_status
      WHERE task_id = p_task_id
        AND user_id = p_user_id;
 
-    -- Write audit entry
     INSERT INTO TM_AuditLog (
         user_id, action, entity_type, entity_id,
         entity_name, old_value, new_value
@@ -132,14 +102,7 @@ EXCEPTION
 END TM_UpdateTaskStatus;
 /
 
-
--- ─────────────────────────────────────────────
--- PROCEDURE: TM_WriteAuditLog
--- Standalone wrapper used by PHP for any other audit entries
--- (edit, delete) that don't fit the specialised procedures above.
--- Mirrors IM101 Week 13: converting the tm_audit() PHP helper into
--- a named Oracle stored procedure for better security and reuse.
--- ─────────────────────────────────────────────
+-- ── TM_WriteAuditLog ──────────────────────────
 CREATE OR REPLACE PROCEDURE TM_WriteAuditLog (
     p_user_id     IN TM_AuditLog.user_id%TYPE,
     p_action      IN TM_AuditLog.action%TYPE,
@@ -162,25 +125,51 @@ BEGIN
         SUBSTR(p_old_value,   1, 500),
         SUBSTR(p_new_value,   1, 500)
     );
-    -- No COMMIT here: caller may be inside a larger transaction
 EXCEPTION
-    WHEN OTHERS THEN NULL;  -- audit must never block the real action
+    WHEN OTHERS THEN NULL;
 END TM_WriteAuditLog;
 /
 
+-- ── USER STATUS PROCEDURES ────────────────────
+CREATE OR REPLACE PROCEDURE sp_approve_user (
+    p_user_id  IN NUMBER,
+    p_admin_id IN NUMBER
+) AS
+    v_name VARCHAR2(200);
+BEGIN
+    SELECT first_name || ' ' || last_name
+    INTO   v_name
+    FROM   TM_Users
+    WHERE  user_id = p_user_id AND status = 'pending';
 
--- ─────────────────────────────────────────────
--- GRANT execute to the PHP connection user.
--- Replace SYSTEM with the schema/user your PHP connects as
--- if it differs (e.g. TASKMATE_APP).
--- ─────────────────────────────────────────────
--- GRANT EXECUTE ON TM_CreateTask       TO SYSTEM;
--- GRANT EXECUTE ON TM_UpdateTaskStatus TO SYSTEM;
--- GRANT EXECUTE ON TM_WriteAuditLog    TO SYSTEM;
+    UPDATE TM_Users SET status = 'active' WHERE user_id = p_user_id;
 
--- Verify procedures were created
-SELECT object_name, object_type, status
-  FROM user_objects
- WHERE object_type = 'PROCEDURE'
-   AND object_name IN ('TM_CreateTask','TM_UpdateTaskStatus','TM_WriteAuditLog')
- ORDER BY object_name;
+    INSERT INTO TM_AuditLog (user_id, action, entity_type, entity_id, entity_name, old_value, new_value)
+    VALUES (p_admin_id, 'edit', 'user', p_user_id, v_name, 'status:pending', 'status:active');
+
+    COMMIT;
+END;
+/
+
+CREATE OR REPLACE PROCEDURE sp_suspend_user (
+    p_user_id  IN NUMBER,
+    p_admin_id IN NUMBER
+) AS
+    v_name   VARCHAR2(200);
+    v_status VARCHAR2(20);
+BEGIN
+    SELECT first_name || ' ' || last_name, status
+    INTO   v_name, v_status
+    FROM   TM_Users
+    WHERE  user_id = p_user_id;
+
+    UPDATE TM_Users SET status = 'suspended' WHERE user_id = p_user_id;
+
+    INSERT INTO TM_AuditLog (user_id, action, entity_type, entity_id, entity_name, old_value, new_value)
+    VALUES (p_admin_id, 'edit', 'user', p_user_id, v_name, 'status:' || v_status, 'status:suspended');
+
+    COMMIT;
+END;
+/
+
+COMMIT;

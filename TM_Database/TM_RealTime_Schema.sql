@@ -1,42 +1,15 @@
 -- =============================================
--- TM_RealTime_Schema.sql
--- COLLABORATION & MULTI-USER — Change 5
--- Real-time collaboration via polling
--- Run this AFTER TM_Collab_Schema.sql
+-- TM_RealTime_Schema.sql  (Run 4th)
+-- Real-time collaboration via polling.
+-- Depends on: TM_Collab_Schema.sql
 -- =============================================
 
--- ──────────────────────────────────────────────
--- CHANGE 5a: Add updated_at to TM_Tasks
--- Tracks the last time any field on a task changed
--- so the polling endpoint can return only deltas.
--- ──────────────────────────────────────────────
-ALTER TABLE TM_Tasks ADD updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-
--- Back-fill existing rows so the column is never NULL
-UPDATE TM_Tasks SET updated_at = created_at WHERE updated_at IS NULL;
-COMMIT;
-
--- Auto-update updated_at on every row change
-CREATE OR REPLACE TRIGGER trg_tm_tasks_updated_at
-    BEFORE UPDATE ON TM_Tasks
-    FOR EACH ROW
-BEGIN
-    :NEW.updated_at := CURRENT_TIMESTAMP;
-END;
-/
-
--- ──────────────────────────────────────────────
--- CHANGE 5b: TM_TaskChangeLog
--- Lightweight audit log written by the trigger
--- above.  The polling endpoint queries this table
--- instead of scanning TM_Tasks, keeping it fast
--- even with thousands of tasks.
--- ──────────────────────────────────────────────
+-- ── CHANGE LOG ────────────────────────────────
 CREATE TABLE TM_TaskChangeLog (
     change_id   NUMBER(10)   NOT NULL,
     task_id     NUMBER(10)   NOT NULL,
-    changed_by  NUMBER(10),              -- user who made the change (NULL = system)
-    change_type VARCHAR2(20) NOT NULL,   -- 'update' | 'delete' | 'create'
+    changed_by  NUMBER(10),
+    change_type VARCHAR2(20) NOT NULL,
     changed_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_tm_changelog PRIMARY KEY (change_id),
     CONSTRAINT fk_cl_task      FOREIGN KEY (task_id)
@@ -57,27 +30,21 @@ BEGIN
 END;
 /
 
--- Index for the polling query: "give me changes after timestamp T"
 CREATE INDEX idx_cl_changed_at ON TM_TaskChangeLog(changed_at DESC);
 CREATE INDEX idx_cl_task_id    ON TM_TaskChangeLog(task_id);
 
--- ──────────────────────────────────────────────
--- CHANGE 5c: TM_ActivePresence
--- Tracks which users are currently viewing which
--- tasks/projects.  Rows older than 60 s are stale
--- and ignored by the poller.
--- ──────────────────────────────────────────────
+-- ── ACTIVE PRESENCE ───────────────────────────
 CREATE TABLE TM_ActivePresence (
-    presence_id NUMBER(10)  NOT NULL,
-    user_id     NUMBER(10)  NOT NULL,
-    page_type   VARCHAR2(20) DEFAULT 'dashboard',  -- 'dashboard' | 'tasks' | 'task_detail'
-    task_id     NUMBER(10),                         -- NULL unless viewing a specific task
+    presence_id NUMBER(10)   NOT NULL,
+    user_id     NUMBER(10)   NOT NULL,
+    page_type   VARCHAR2(20) DEFAULT 'dashboard',
+    task_id     NUMBER(10),
     project_id  NUMBER(10),
-    last_ping   TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_tm_presence  PRIMARY KEY (presence_id),
-    CONSTRAINT fk_pres_user    FOREIGN KEY (user_id)
+    last_ping   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_tm_presence PRIMARY KEY (presence_id),
+    CONSTRAINT fk_pres_user   FOREIGN KEY (user_id)
         REFERENCES TM_Users(user_id) ON DELETE CASCADE,
-    CONSTRAINT uq_pres_user    UNIQUE (user_id)    -- one row per user, upserted
+    CONSTRAINT uq_pres_user   UNIQUE (user_id)
 );
 
 CREATE SEQUENCE TM_Presence_seq START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
@@ -91,14 +58,7 @@ BEGIN
 END;
 /
 
-CREATE INDEX idx_pres_task    ON TM_ActivePresence(task_id);
-CREATE INDEX idx_pres_ping    ON TM_ActivePresence(last_ping DESC);
-
--- ──────────────────────────────────────────────
--- VERIFICATION
--- ──────────────────────────────────────────────
-SELECT 'TM_TaskChangeLog'  AS tbl, COUNT(*) AS rows FROM TM_TaskChangeLog
-UNION ALL
-SELECT 'TM_ActivePresence', COUNT(*) FROM TM_ActivePresence;
+CREATE INDEX idx_pres_task ON TM_ActivePresence(task_id);
+CREATE INDEX idx_pres_ping ON TM_ActivePresence(last_ping DESC);
 
 COMMIT;

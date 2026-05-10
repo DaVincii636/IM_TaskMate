@@ -1,57 +1,23 @@
 -- =============================================
--- FEATURE 8 — DEPARTMENT / TEAM GROUPING
--- FIXED VERSION: safely drops and recreates tables,
--- sequences, triggers, indexes, view, and procedures.
---
--- Run this file once on your existing DB, after
--- TM_Org_Schema.sql (org_id must exist on TM_Users).
---
--- Creates:
---   TM_Teams        — one row per team/department
---   TM_TeamMembers  — junction: user <-> team (with manager flag)
---   VW_Team_Tasks   — convenience view: tasks scoped to a team
---   sp_add_team_member    — safely add a member (no dupe)
---   sp_remove_team_member — remove a member
+-- TM_Teams_Schema.sql  (Run 5th)
+-- Department / team grouping.
+-- Depends on: TM_Org_Schema.sql
 -- =============================================
 
--- ── SAFE CLEANUP (drop in dependency order) ──────────────────────────────────
-
--- Drop view first (depends on both tables)
-BEGIN EXECUTE IMMEDIATE 'DROP VIEW VW_Team_Tasks'; EXCEPTION WHEN OTHERS THEN NULL; END;
-/
-
--- Drop stored procedures
-BEGIN EXECUTE IMMEDIATE 'DROP PROCEDURE sp_add_team_member';    EXCEPTION WHEN OTHERS THEN NULL; END;
-/
-BEGIN EXECUTE IMMEDIATE 'DROP PROCEDURE sp_remove_team_member'; EXCEPTION WHEN OTHERS THEN NULL; END;
-/
-
--- Drop junction table first (foreign key references TM_Teams)
-BEGIN EXECUTE IMMEDIATE 'DROP TABLE TM_TeamMembers CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN NULL; END;
-/
-BEGIN EXECUTE IMMEDIATE 'DROP TABLE TM_Teams CASCADE CONSTRAINTS';        EXCEPTION WHEN OTHERS THEN NULL; END;
-/
-
--- Drop sequences
-BEGIN EXECUTE IMMEDIATE 'DROP SEQUENCE TM_TeamMembers_seq'; EXCEPTION WHEN OTHERS THEN NULL; END;
-/
-BEGIN EXECUTE IMMEDIATE 'DROP SEQUENCE TM_Teams_seq';       EXCEPTION WHEN OTHERS THEN NULL; END;
-/
-
--- ── 1. TEAMS TABLE ────────────────────────────────────────────────────────────
+-- ── TEAMS ─────────────────────────────────────
 CREATE TABLE TM_Teams (
-    team_id     NUMBER(10)    NOT NULL,
-    org_id      NUMBER(10)    NOT NULL,
-    team_name   VARCHAR2(100) NOT NULL,
-    team_desc   VARCHAR2(500),                          -- FIX: was missing in DB
-    created_by  NUMBER(10)    NOT NULL,
-    created_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_tm_teams       PRIMARY KEY (team_id),
-    CONSTRAINT fk_teams_org      FOREIGN KEY (org_id)
+    team_id    NUMBER(10)    NOT NULL,
+    org_id     NUMBER(10)    NOT NULL,
+    team_name  VARCHAR2(100) NOT NULL,
+    team_desc  VARCHAR2(500),
+    created_by NUMBER(10)    NOT NULL,
+    created_at TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_tm_teams      PRIMARY KEY (team_id),
+    CONSTRAINT fk_teams_org     FOREIGN KEY (org_id)
         REFERENCES TM_Organizations(org_id) ON DELETE CASCADE,
-    CONSTRAINT fk_teams_creator  FOREIGN KEY (created_by)
+    CONSTRAINT fk_teams_creator FOREIGN KEY (created_by)
         REFERENCES TM_Users(user_id),
-    CONSTRAINT uq_team_name_org  UNIQUE (org_id, team_name)
+    CONSTRAINT uq_team_name_org UNIQUE (org_id, team_name)
 );
 
 CREATE SEQUENCE TM_Teams_seq START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
@@ -67,22 +33,20 @@ END;
 
 CREATE INDEX idx_tm_teams_org ON TM_Teams(org_id);
 
--- ── 2. TEAM MEMBERS JUNCTION TABLE ───────────────────────────────────────────
--- is_manager = 1 means this member is the team lead/manager.
--- A user can belong to multiple teams.
+-- ── TEAM MEMBERS ──────────────────────────────
 CREATE TABLE TM_TeamMembers (
     member_id  NUMBER(10) NOT NULL,
     team_id    NUMBER(10) NOT NULL,
     user_id    NUMBER(10) NOT NULL,
-    is_manager NUMBER(1)  DEFAULT 0 NOT NULL,           -- FIX: was missing in DB
+    is_manager NUMBER(1)  DEFAULT 0 NOT NULL,
     joined_at  TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_tm_team_members   PRIMARY KEY (member_id),
-    CONSTRAINT fk_tm_mem_team       FOREIGN KEY (team_id)
+    CONSTRAINT pk_tm_team_members PRIMARY KEY (member_id),
+    CONSTRAINT fk_tm_mem_team     FOREIGN KEY (team_id)
         REFERENCES TM_Teams(team_id) ON DELETE CASCADE,
-    CONSTRAINT fk_tm_mem_user       FOREIGN KEY (user_id)
+    CONSTRAINT fk_tm_mem_user     FOREIGN KEY (user_id)
         REFERENCES TM_Users(user_id) ON DELETE CASCADE,
-    CONSTRAINT uq_team_member       UNIQUE (team_id, user_id),
-    CONSTRAINT chk_tm_is_manager    CHECK (is_manager IN (0, 1))
+    CONSTRAINT uq_team_member     UNIQUE (team_id, user_id),
+    CONSTRAINT chk_tm_is_manager  CHECK (is_manager IN (0, 1))
 );
 
 CREATE SEQUENCE TM_TeamMembers_seq START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
@@ -99,9 +63,7 @@ END;
 CREATE INDEX idx_tm_mem_team ON TM_TeamMembers(team_id);
 CREATE INDEX idx_tm_mem_user ON TM_TeamMembers(user_id);
 
--- ── 3. CONVENIENCE VIEW: tasks belonging to a team ───────────────────────────
--- Join pattern: task -> task owner -> team membership -> team
--- Used by TM_Tasks.php and TM_Analytics.php for the team filter.
+-- ── TEAM TASKS VIEW ───────────────────────────
 CREATE OR REPLACE VIEW VW_Team_Tasks AS
 SELECT
     t.task_id,
@@ -122,8 +84,7 @@ FROM TM_Tasks t
 JOIN TM_TeamMembers tm ON tm.user_id = t.user_id
 JOIN TM_Teams       te ON te.team_id = tm.team_id;
 
--- ── 4. STORED PROCEDURE: add a member to a team ──────────────────────────────
--- Silently skips if the user is already a member.
+-- ── STORED PROCEDURES ─────────────────────────
 CREATE OR REPLACE PROCEDURE sp_add_team_member (
     p_team_id    IN NUMBER,
     p_user_id    IN NUMBER,
@@ -156,7 +117,6 @@ BEGIN
 END;
 /
 
--- ── 5. STORED PROCEDURE: remove a member from a team ─────────────────────────
 CREATE OR REPLACE PROCEDURE sp_remove_team_member (
     p_team_id    IN NUMBER,
     p_user_id    IN NUMBER,
@@ -184,8 +144,3 @@ END;
 /
 
 COMMIT;
-
--- ── VERIFY ────────────────────────────────────────────────────────────────────
-SELECT 'TM_Teams'       AS tbl, COUNT(*) AS rows FROM TM_Teams
-UNION ALL
-SELECT 'TM_TeamMembers',         COUNT(*) FROM TM_TeamMembers;

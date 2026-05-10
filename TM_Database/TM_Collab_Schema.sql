@@ -1,13 +1,11 @@
 -- =============================================
--- TM_Collab_Schema.sql
--- COLLABORATION & MULTI-USER — Changes 1–4
--- Run this AFTER TM_DatabaseSetup.sql
+-- TM_Collab_Schema.sql  (Run 3rd)
+-- Collaboration: task assignment, projects,
+-- comments, and mention notifications.
+-- Depends on: TM_Org_Schema.sql
 -- =============================================
 
--- ──────────────────────────────────────────────
--- CHANGE 1: Task Assignment
--- Add assigned_to FK on TM_Tasks → TM_Users
--- ──────────────────────────────────────────────
+-- ── CHANGE 1: Task Assignment ─────────────────
 ALTER TABLE TM_Tasks ADD assigned_to NUMBER(10) DEFAULT NULL;
 
 ALTER TABLE TM_Tasks ADD CONSTRAINT fk_tm_task_assigned
@@ -15,20 +13,16 @@ ALTER TABLE TM_Tasks ADD CONSTRAINT fk_tm_task_assigned
 
 CREATE INDEX idx_tm_tasks_assigned ON TM_Tasks(assigned_to);
 
--- ──────────────────────────────────────────────
--- CHANGE 2: Projects / Shared Workspaces
--- ──────────────────────────────────────────────
-
--- Project master table
+-- ── CHANGE 2: Projects ────────────────────────
 CREATE TABLE TM_Projects (
-    project_id   NUMBER(10)    NOT NULL,
-    name         VARCHAR2(150) NOT NULL,
-    description  VARCHAR2(500),
-    color        VARCHAR2(20)  DEFAULT '#3b82f6',
-    created_by   NUMBER(10)    NOT NULL,
-    created_at   TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_tm_projects     PRIMARY KEY (project_id),
-    CONSTRAINT fk_proj_creator    FOREIGN KEY (created_by)
+    project_id  NUMBER(10)    NOT NULL,
+    name        VARCHAR2(150) NOT NULL,
+    description VARCHAR2(500),
+    color       VARCHAR2(20)  DEFAULT '#3b82f6',
+    created_by  NUMBER(10)    NOT NULL,
+    created_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_tm_projects  PRIMARY KEY (project_id),
+    CONSTRAINT fk_proj_creator FOREIGN KEY (created_by)
         REFERENCES TM_Users(user_id) ON DELETE CASCADE
 );
 
@@ -43,21 +37,19 @@ BEGIN
 END;
 /
 
--- Project membership (many users ↔ many projects)
--- role: 'owner' | 'member'
 CREATE TABLE TM_ProjectMembers (
-    member_id  NUMBER(10) NOT NULL,
-    project_id NUMBER(10) NOT NULL,
-    user_id    NUMBER(10) NOT NULL,
+    member_id  NUMBER(10)   NOT NULL,
+    project_id NUMBER(10)   NOT NULL,
+    user_id    NUMBER(10)   NOT NULL,
     role       VARCHAR2(20) DEFAULT 'member',
     joined_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_tm_proj_members  PRIMARY KEY (member_id),
-    CONSTRAINT fk_pm_project       FOREIGN KEY (project_id)
+    CONSTRAINT pk_tm_proj_members PRIMARY KEY (member_id),
+    CONSTRAINT fk_pm_project      FOREIGN KEY (project_id)
         REFERENCES TM_Projects(project_id) ON DELETE CASCADE,
-    CONSTRAINT fk_pm_user          FOREIGN KEY (user_id)
+    CONSTRAINT fk_pm_user         FOREIGN KEY (user_id)
         REFERENCES TM_Users(user_id) ON DELETE CASCADE,
-    CONSTRAINT uq_pm_pair          UNIQUE (project_id, user_id),
-    CONSTRAINT chk_pm_role         CHECK (role IN ('owner', 'member'))
+    CONSTRAINT uq_pm_pair         UNIQUE (project_id, user_id),
+    CONSTRAINT chk_pm_role        CHECK (role IN ('owner', 'member'))
 );
 
 CREATE SEQUENCE TM_ProjMembers_seq START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
@@ -74,7 +66,6 @@ END;
 CREATE INDEX idx_pm_project ON TM_ProjectMembers(project_id);
 CREATE INDEX idx_pm_user    ON TM_ProjectMembers(user_id);
 
--- Link tasks to projects (optional — tasks without a project are personal)
 ALTER TABLE TM_Tasks ADD project_id NUMBER(10) DEFAULT NULL;
 
 ALTER TABLE TM_Tasks ADD CONSTRAINT fk_tm_task_project
@@ -82,20 +73,18 @@ ALTER TABLE TM_Tasks ADD CONSTRAINT fk_tm_task_project
 
 CREATE INDEX idx_tm_tasks_project ON TM_Tasks(project_id);
 
--- ──────────────────────────────────────────────
--- CHANGE 3: Commenting System
--- ──────────────────────────────────────────────
+-- ── CHANGE 3: Comments ────────────────────────
 CREATE TABLE TM_Comments (
-    comment_id NUMBER(10)    NOT NULL,
-    task_id    NUMBER(10)    NOT NULL,
-    user_id    NUMBER(10)    NOT NULL,
-    content    CLOB          NOT NULL,
-    created_at TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_tm_comments    PRIMARY KEY (comment_id),
-    CONSTRAINT fk_cmt_task       FOREIGN KEY (task_id)
+    comment_id NUMBER(10) NOT NULL,
+    task_id    NUMBER(10) NOT NULL,
+    user_id    NUMBER(10) NOT NULL,
+    content    CLOB       NOT NULL,
+    created_at TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_tm_comments PRIMARY KEY (comment_id),
+    CONSTRAINT fk_cmt_task    FOREIGN KEY (task_id)
         REFERENCES TM_Tasks(task_id) ON DELETE CASCADE,
-    CONSTRAINT fk_cmt_user       FOREIGN KEY (user_id)
+    CONSTRAINT fk_cmt_user    FOREIGN KEY (user_id)
         REFERENCES TM_Users(user_id) ON DELETE CASCADE
 );
 
@@ -113,36 +102,10 @@ END;
 CREATE INDEX idx_cmt_task ON TM_Comments(task_id);
 CREATE INDEX idx_cmt_user ON TM_Comments(user_id);
 
--- ──────────────────────────────────────────────
--- CHANGE 4: @mention Notifications
--- Extend TM_Notifications to support mention type
--- and add mentioned_by column for context
--- ──────────────────────────────────────────────
-
--- Add new notification types: 'mention', 'assignment'
--- Oracle CHECK constraints can't be altered easily; we drop & re-add if needed.
--- If the existing constraint is named chk_notif_type, drop it first:
--- ALTER TABLE TM_Notifications DROP CONSTRAINT chk_notif_type;
-
--- Add columns for mention/assignment context
-ALTER TABLE TM_Notifications ADD source_type VARCHAR2(20) DEFAULT NULL;
--- source_type: 'task_comment' | 'task_note' | 'assignment'
-
-ALTER TABLE TM_Notifications ADD mentioned_by NUMBER(10) DEFAULT NULL;
-ALTER TABLE TM_Notifications ADD CONSTRAINT fk_notif_mentioned_by
-    FOREIGN KEY (mentioned_by) REFERENCES TM_Users(user_id) ON DELETE SET NULL;
-
-ALTER TABLE TM_Notifications ADD comment_id NUMBER(10) DEFAULT NULL;
+-- ── CHANGE 4: Wire comment FK into Notifications ──
+-- comment_id column was already added in TM_DatabaseSetup.sql;
+-- add the FK now that TM_Comments exists.
 ALTER TABLE TM_Notifications ADD CONSTRAINT fk_notif_comment
     FOREIGN KEY (comment_id) REFERENCES TM_Comments(comment_id) ON DELETE SET NULL;
-
--- ──────────────────────────────────────────────
--- VERIFICATION
--- ──────────────────────────────────────────────
-SELECT 'TM_Projects'       AS tbl, COUNT(*) AS rows FROM TM_Projects
-UNION ALL
-SELECT 'TM_ProjectMembers', COUNT(*) FROM TM_ProjectMembers
-UNION ALL
-SELECT 'TM_Comments',       COUNT(*) FROM TM_Comments;
 
 COMMIT;

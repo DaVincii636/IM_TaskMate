@@ -1,19 +1,17 @@
 -- =============================================
--- FEATURE 6 — ORGANIZATION / TENANT MANAGEMENT
--- Run this entire file once on your existing DB.
--- Every user and task is scoped to an org_id so
--- users from different organizations never see
--- each other's data.
+-- TM_Org_Schema.sql  (Run 2nd)
+-- Organization / tenant management.
+-- Depends on: TM_DatabaseSetup.sql
 -- =============================================
 
--- 1. Master organizations table
+-- ── ORGANIZATIONS TABLE ───────────────────────
 CREATE TABLE TM_Organizations (
-    org_id      NUMBER(10)    NOT NULL,
-    org_name    VARCHAR2(100) NOT NULL,
-    plan        VARCHAR2(20)  DEFAULT 'free'   NOT NULL,
-    created_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_tm_orgs     PRIMARY KEY (org_id),
-    CONSTRAINT uq_tm_orgname  UNIQUE (org_name),
+    org_id     NUMBER(10)    NOT NULL,
+    org_name   VARCHAR2(100) NOT NULL,
+    plan       VARCHAR2(20)  DEFAULT 'free' NOT NULL,
+    created_at TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_tm_orgs      PRIMARY KEY (org_id),
+    CONSTRAINT uq_tm_orgname   UNIQUE (org_name),
     CONSTRAINT chk_tm_org_plan CHECK (plan IN ('free','pro','enterprise'))
 );
 
@@ -28,50 +26,32 @@ BEGIN
 END;
 /
 
--- 2. Seed a default organization so existing rows get a valid FK
+-- Seed default org (org_id = 1) so FK on TM_Users is satisfiable
 INSERT INTO TM_Organizations (org_name, plan) VALUES ('Default Organization', 'free');
 COMMIT;
 
--- 3. Add org_id to TM_Users (nullable first so existing rows are valid)
-ALTER TABLE TM_Users ADD org_id NUMBER(10);
-
--- Set all existing users to the default org (org_id = 1)
-UPDATE TM_Users SET org_id = 1;
-COMMIT;
-
--- Now enforce NOT NULL and the FK
-ALTER TABLE TM_Users MODIFY org_id NUMBER(10) NOT NULL;
+-- ── ADD org_id + status TO TM_Users ──────────
+ALTER TABLE TM_Users ADD org_id NUMBER(10) DEFAULT 1 NOT NULL;
+ALTER TABLE TM_Users ADD status VARCHAR2(20) DEFAULT 'active' NOT NULL;
 
 ALTER TABLE TM_Users ADD CONSTRAINT fk_users_org
     FOREIGN KEY (org_id) REFERENCES TM_Organizations(org_id);
 
--- Extend role to include 'org_admin' (organization-level admin)
--- org_admin: can manage users within their own org
--- admin: system-wide superadmin
-ALTER TABLE TM_Users DROP CONSTRAINT chk_tm_role;
-ALTER TABLE TM_Users ADD CONSTRAINT chk_tm_role
-    CHECK (role IN ('user', 'moderator', 'org_admin', 'admin'));
+ALTER TABLE TM_Users ADD CONSTRAINT chk_tm_user_status
+    CHECK (status IN ('pending', 'active', 'suspended'));
 
--- 4. Add org_id to TM_Tasks
-ALTER TABLE TM_Tasks ADD org_id NUMBER(10);
+CREATE INDEX idx_tm_users_org    ON TM_Users(org_id);
+CREATE INDEX idx_tm_users_status ON TM_Users(status);
 
--- Backfill from the task owner's org
-UPDATE TM_Tasks t
-SET t.org_id = (
-    SELECT u.org_id FROM TM_Users u WHERE u.user_id = t.user_id
-);
-COMMIT;
-
-ALTER TABLE TM_Tasks MODIFY org_id NUMBER(10) NOT NULL;
+-- ── ADD org_id TO TM_Tasks ────────────────────
+ALTER TABLE TM_Tasks ADD org_id NUMBER(10) DEFAULT 1 NOT NULL;
 
 ALTER TABLE TM_Tasks ADD CONSTRAINT fk_tasks_org
     FOREIGN KEY (org_id) REFERENCES TM_Organizations(org_id);
 
--- 5. Index for the most common filter pattern
-CREATE INDEX idx_tm_users_org ON TM_Users(org_id);
 CREATE INDEX idx_tm_tasks_org ON TM_Tasks(org_id);
 
--- 6. Convenience view: tasks with their owner's org name
+-- ── ORG-SCOPED VIEW ───────────────────────────
 CREATE OR REPLACE VIEW VW_Tasks_OrgScoped AS
 SELECT
     t.task_id,
@@ -85,11 +65,8 @@ SELECT
 FROM TM_Tasks t
 JOIN TM_Organizations o ON o.org_id = t.org_id;
 
--- 7. Stored procedures for org management
---    TM_CreateOrg   — create a new organization and assign an initial org_admin
---    TM_TransferOrg — move a user from one org to another (system admin only)
-
-CREATE OR REPLACE PROCEDURE TM_CreateOrg(
+-- ── ORG MANAGEMENT PROCEDURES ────────────────
+CREATE OR REPLACE PROCEDURE TM_CreateOrg (
     p_org_name   IN  VARCHAR2,
     p_plan       IN  VARCHAR2 DEFAULT 'free',
     p_new_org_id OUT NUMBER
@@ -102,7 +79,7 @@ BEGIN
 END TM_CreateOrg;
 /
 
-CREATE OR REPLACE PROCEDURE TM_TransferUserOrg(
+CREATE OR REPLACE PROCEDURE TM_TransferUserOrg (
     p_user_id    IN NUMBER,
     p_new_org_id IN NUMBER,
     p_moved_by   IN NUMBER
@@ -112,8 +89,6 @@ BEGIN
     SELECT org_id INTO v_old_org FROM TM_Users WHERE user_id = p_user_id;
 
     UPDATE TM_Users SET org_id = p_new_org_id WHERE user_id = p_user_id;
-
-    -- Re-scope all tasks belonging to this user to the new org
     UPDATE TM_Tasks SET org_id = p_new_org_id WHERE user_id = p_user_id;
 
     INSERT INTO TM_AuditLog
@@ -132,10 +107,3 @@ END TM_TransferUserOrg;
 /
 
 COMMIT;
-
--- VERIFY
-SELECT 'TM_Organizations' AS tbl, COUNT(*) AS rows FROM TM_Organizations
-UNION ALL
-SELECT 'TM_Users (with org_id)', COUNT(*) FROM TM_Users WHERE org_id IS NOT NULL
-UNION ALL
-SELECT 'TM_Tasks (with org_id)', COUNT(*) FROM TM_Tasks WHERE org_id IS NOT NULL;
