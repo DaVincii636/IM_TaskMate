@@ -35,25 +35,28 @@ if ($is_admin) {
 $users     = tm_fetch_all($stmt);
 $userCount = count($users);
 
-// ── Feature 6: Load all organizations (for admin org panel & dropdowns) ───────
+// ── Feature 6: Load organizations ───────────────────────────────────────────
+// Admins see all orgs; org_admins see only their own org.
 $orgs = [];
 $orgsById = [];
-if ($is_admin) {
-    $orgStmt = tm_exec(
-        "SELECT o.org_id, o.org_name,
-                TO_CHAR(o.created_at,'YYYY-MM-DD') AS created_at,
-                (SELECT COUNT(*) FROM TM_Users u WHERE u.org_id = o.org_id) AS member_count
-         FROM TM_Organizations o
-         ORDER BY o.org_id ASC"
-    );
-    $orgs = tm_fetch_all($orgStmt);
-    foreach ($orgs as $o) {
-        $id = (int)($o['org_id'] ?? $o['ORG_ID'] ?? 0);
-        $orgs[array_search($o, $orgs)]['org_id']       = $id;
-        $orgs[array_search($o, $orgs)]['member_count'] = (int)($o['member_count'] ?? $o['MEMBER_COUNT'] ?? 0);
-        $orgsById[$id] = $o['org_name'] ?? $o['ORG_NAME'] ?? '';
-    }
-    // Re-index cleanly
+if ($is_admin || $is_org_admin) {
+    $orgStmt = $is_admin
+        ? tm_exec(
+            "SELECT o.org_id, o.org_name,
+                    TO_CHAR(o.created_at,'YYYY-MM-DD') AS created_at,
+                    (SELECT COUNT(*) FROM TM_Users u WHERE u.org_id = o.org_id) AS member_count
+             FROM TM_Organizations o
+             ORDER BY o.org_id ASC"
+          )
+        : tm_exec(
+            "SELECT o.org_id, o.org_name,
+                    TO_CHAR(o.created_at,'YYYY-MM-DD') AS created_at,
+                    (SELECT COUNT(*) FROM TM_Users u WHERE u.org_id = o.org_id) AS member_count
+             FROM TM_Organizations o
+             WHERE o.org_id = :p1",
+            [$oid]
+          );
+    $rawOrgs = tm_fetch_all($orgStmt);
     $orgs = array_values(array_map(function($o) {
         return [
             'org_id'       => (int)($o['org_id']       ?? $o['ORG_ID']       ?? 0),
@@ -61,7 +64,10 @@ if ($is_admin) {
             'created_at'   => $o['created_at']   ?? $o['CREATED_AT']   ?? '',
             'member_count' => (int)($o['member_count'] ?? $o['MEMBER_COUNT'] ?? 0),
         ];
-    }, $orgs));
+    }, $rawOrgs));
+    foreach ($orgs as $o) {
+        $orgsById[$o['org_id']] = $o['org_name'];
+    }
 }
 
 
@@ -257,11 +263,11 @@ require_once 'TM_PHP/TM_NavNotif.php';
 
     <?php
     // ── Feature 7: Approval queue ─────────────────────────────────────────────
-    $pendingStmt = tm_exec(
-        "SELECT user_id, first_name, last_name, email, phone FROM TM_Users WHERE status='pending' ORDER BY created_at ASC"
-    );
+    $pendingStmt = $is_admin
+        ? tm_exec("SELECT user_id, first_name, last_name, email, phone FROM TM_Users WHERE status='pending' ORDER BY created_at ASC")
+        : tm_exec("SELECT user_id, first_name, last_name, email, phone FROM TM_Users WHERE status='pending' AND org_id = :p1 ORDER BY created_at ASC", [$oid]);
     $pendingUsers = tm_fetch_all($pendingStmt);
-    if ($is_admin && !empty($pendingUsers)):
+    if (($is_admin || $is_org_admin) && !empty($pendingUsers)):
     ?>
     <div class="table-card" style="margin-bottom:24px;border:1.5px solid #fcd34d;">
         <div style="padding:14px 20px;background:#fffbeb;border-bottom:1px solid #fde68a;display:flex;align-items:center;gap:10px;">
@@ -333,9 +339,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
     <?php if ($is_admin || $is_org_admin): ?>
     <div class="admin-tabs">
         <button class="admin-tab active" onclick="switchTab('tab-users', this)" title="View and manage user accounts"><i class="fa-solid fa-users" style="margin-right:6px;font-size:12px;"></i>Users</button>
-        <?php if ($is_admin): ?>
-        <button class="admin-tab" onclick="switchTab('tab-orgs', this)" title="Manage organizations"><i class="fa-solid fa-building" style="margin-right:6px;font-size:12px;"></i>Organizations</button>
-        <?php endif; ?>
+        <button class="admin-tab" onclick="switchTab('tab-orgs', this)" title="<?php echo $is_admin ? 'Manage organizations' : 'View your organization'; ?>"><i class="fa-solid fa-building" style="margin-right:6px;font-size:12px;"></i>Organization<?php echo $is_admin ? 's' : ''; ?></button>
         <button class="admin-tab" onclick="switchTab('tab-teams', this)" title="Create and manage teams within organizations"><i class="fa-solid fa-people-group" style="margin-right:6px;font-size:12px;"></i>Teams</button>
     </div>
     <?php endif; ?>
@@ -459,8 +463,9 @@ require_once 'TM_PHP/TM_NavNotif.php';
          TAB: ORGANIZATIONS (Feature 6)
          Visible to system admins only.
          ══════════════════════════════════════════ -->
-    <?php if ($is_admin): ?>
+    <?php if ($is_admin || $is_org_admin): ?>
     <div class="tab-panel" id="tab-orgs">
+    <?php if ($is_admin): ?>
     <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 18px;margin-bottom:18px;font-size:13px;color:#6b7280;">
         <strong style="color:#111;">Organizations</strong> — Create and manage organizations (tenants). Each organization is an isolated workspace. You can rename orgs and delete empty ones. Users can be moved between organizations from the Users tab.
     </div>
@@ -469,12 +474,20 @@ require_once 'TM_PHP/TM_NavNotif.php';
             <span class="admin-badge">Organizations</span>
             <button class="btn-add-user" onclick="openAdminModal('addOrgModal')">+ New Organization</button>
         </div>
+    <?php else: ?>
+    <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 18px;margin-bottom:18px;font-size:13px;color:#6b7280;">
+        <strong style="color:#111;">Your Organization</strong> — View details about your organization and its members.
+    </div>
+        <div class="admin-bar">
+            <span class="admin-badge">Organization</span>
+        </div>
+    <?php endif; ?>
 
         <?php if (empty($orgs)): ?>
         <div class="org-empty">
             <div class="org-empty-icon"><i class="fa-solid fa-building"></i></div>
-            <div class="org-empty-text">No organizations yet</div>
-            <div class="org-empty-sub">Click "New Organization" to create one</div>
+            <div class="org-empty-text">No organization found</div>
+            <div class="org-empty-sub"><?php echo $is_admin ? 'Click "New Organization" to create one' : 'Contact an admin for assistance'; ?></div>
         </div>
         <?php else: ?>
         <div class="org-grid">
@@ -493,6 +506,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
                     <span style="color:#b45309;font-weight:600;"><i class="fa-solid fa-star" style="font-size:11px;margin-right:3px;"></i>Default</span>
                     <?php endif; ?>
                 </div>
+                <?php if ($is_admin): ?>
                 <div class="org-card-actions">
                     <button class="btn-org-edit"
                         data-org-id="<?= $org['org_id'] ?>"
@@ -508,12 +522,65 @@ require_once 'TM_PHP/TM_NavNotif.php';
                         <i class="fa-solid fa-trash" style="font-size:11px;margin-right:4px;"></i>Delete
                     </button>
                 </div>
+                <?php endif; ?>
             </div>
             <?php endforeach; ?>
         </div>
         <?php endif; ?>
 
         <!-- ── Users with org assignment table ── -->
+        <!-- Org Admin only: read-only table scoped to their org -->
+        <?php if ($is_org_admin && !$is_admin): ?>
+        <div style="margin-top:32px;">
+            <div class="admin-bar" style="margin-bottom:12px;">
+                <span class="admin-badge">User — Organization Assignment</span>
+            </div>
+            <?php if (true): ?>
+            <div class="table-card">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Organization</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($users as $i => $u):
+                            $uOrgName = $u['org_name'] ?? $u['ORG_NAME'] ?? '—';
+                            $uRole    = $u['role'] ?? 'user';
+                        ?>
+                        <tr>
+                            <td><?= $i + 1 ?></td>
+                            <td style="font-weight:600"><?= htmlspecialchars(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')) ?></td>
+                            <td><?= htmlspecialchars($u['email'] ?? '') ?></td>
+                            <td>
+                                <?php
+                                $roleBadge = match($uRole) {
+                                    'admin'     => '<span style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">ADMIN</span>',
+                                    'org_admin' => '<span style="background:#fce7f3;color:#9d174d;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">ORG ADMIN</span>',
+                                    'moderator' => '<span style="background:#ede9fe;color:#7c3aed;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">MOD</span>',
+                                    default     => '<span style="background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">USER</span>',
+                                };
+                                echo $roleBadge;
+                                ?>
+                            </td>
+                            <td><span class="org-badge"><?= htmlspecialchars($uOrgName) ?></span></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
+
+        <!-- Admin-only full table with actions -->
+        <?php if ($is_admin): ?>
         <div style="margin-top:32px;">
             <div class="admin-bar" style="margin-bottom:12px;">
                 <span class="admin-badge">User — Organization Assignment</span>
@@ -584,6 +651,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
     </div><!-- /tab-panel#tab-orgs -->
     <?php endif; ?>
