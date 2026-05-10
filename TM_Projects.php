@@ -412,6 +412,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
 
     function openModal(id) { document.getElementById(id).classList.add('active'); }
     function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+    window.openModal  = openModal;  // expose for other script blocks
     window.closeModal = closeModal;
 
     function buildColorSwatches(rowId, inputId, selected) {
@@ -922,5 +923,6 @@ require_once 'TM_PHP/TM_NavNotif.php';
 })();
 </script>
 
+<script src="TM_JS/TM_App.js"></script>
 </body>
 </html>

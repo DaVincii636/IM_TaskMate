@@ -656,15 +656,17 @@ switch ($action) {
         $projectId = (int)($_GET['project_id'] ?? 0);
         if (!$projectId) { echo json_encode(['ok' => false, 'error' => 'Missing project_id']); exit; }
 
+        // OCI8: each bind placeholder must appear exactly once — repeat values as :p3/:p4/:p5
         $stmt = tm_exec(
-            "SELECT t.task_id, t.name, t.status, t.due_date
+            "SELECT t.task_id, t.task_name AS name, t.status,
+                    TO_CHAR(t.due_date, 'YYYY-MM-DD') AS due_date
              FROM TM_Tasks t
+             LEFT JOIN TM_ProjectMembers pm
+                    ON pm.project_id = :p2 AND pm.user_id = :p3
              WHERE t.project_id = :p1
-               AND (t.user_id = :p2 OR t.assigned_to = :p2 OR EXISTS(
-                   SELECT 1 FROM TM_ProjectMembers pm
-                   WHERE pm.project_id = :p1 AND pm.user_id = :p2))
-             ORDER BY t.due_date ASC, t.name ASC",
-            [$projectId, $uid]
+               AND (t.user_id = :p4 OR t.assigned_to = :p5 OR pm.user_id IS NOT NULL)
+             ORDER BY t.due_date ASC, t.task_name ASC",
+            [$projectId, $projectId, $uid, $uid, $uid]
         );
         echo json_encode(['ok' => true, 'data' => tm_fetch_all($stmt)]);
         exit;
@@ -679,14 +681,16 @@ switch ($action) {
         $projectId = (int)($_GET['project_id'] ?? 0);
         if (!$projectId) { echo json_encode(['ok' => false, 'error' => 'Missing project_id']); exit; }
 
+        // OCI8: :p1 can only appear once — repeat uid as :p3
         $stmt = tm_exec(
-            "SELECT t.task_id, t.name, t.due_date
+            "SELECT t.task_id, t.task_name AS name,
+                    TO_CHAR(t.due_date, 'YYYY-MM-DD') AS due_date
              FROM TM_Tasks t
-             WHERE (t.user_id = :p1 OR t.assigned_to = :p1)
+             WHERE (t.user_id = :p1 OR t.assigned_to = :p3)
                AND (t.project_id IS NULL OR t.project_id != :p2)
                AND t.status != 'done'
-             ORDER BY t.name ASC",
-            [$uid, $projectId]
+             ORDER BY t.task_name ASC",
+            [$uid, $projectId, $uid]
         );
         echo json_encode(['ok' => true, 'data' => tm_fetch_all($stmt)]);
         exit;
@@ -704,8 +708,8 @@ switch ($action) {
 
         // Verify user owns the task or is assigned to it
         $chk = tm_exec(
-            "SELECT task_id FROM TM_Tasks WHERE task_id = :p1 AND (user_id = :p2 OR assigned_to = :p2)",
-            [$taskId, $uid]
+            "SELECT task_id FROM TM_Tasks WHERE task_id = :p1 AND (user_id = :p2 OR assigned_to = :p3)",
+            [$taskId, $uid, $uid]
         );
         if (!tm_fetch_one($chk)) { echo json_encode(['ok' => false, 'error' => 'Task not found or permission denied']); exit; }
 
@@ -725,8 +729,8 @@ switch ($action) {
         if (!$taskId || !$projectId) { echo json_encode(['ok' => false, 'error' => 'Missing params']); exit; }
 
         $chk = tm_exec(
-            "SELECT task_id FROM TM_Tasks WHERE task_id = :p1 AND project_id = :p2 AND (user_id = :p3 OR assigned_to = :p3)",
-            [$taskId, $projectId, $uid]
+            "SELECT task_id FROM TM_Tasks WHERE task_id = :p1 AND project_id = :p2 AND (user_id = :p3 OR assigned_to = :p4)",
+            [$taskId, $projectId, $uid, $uid]
         );
         if (!tm_fetch_one($chk)) { echo json_encode(['ok' => false, 'error' => 'Task not found or permission denied']); exit; }
 

@@ -1419,3 +1419,5 @@ function openManageMembersModal(btn) {
 })();
 
 </script>
+
+<script src="TM_JS/TM_App.js"></script>
