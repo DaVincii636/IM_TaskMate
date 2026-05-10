@@ -27,23 +27,23 @@ function _tm_count(array $rows): int {
 }
 
 $cntTotal = _tm_count(tm_fetch_all(tm_exec(
-    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 OR assigned_to=:p1", [$uid, $uid]
+    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 OR assigned_to=:p2", [$uid, $uid]
 )));
 
 $cntPending = _tm_count(tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE (user_id=:p1 OR assigned_to=:p1) AND status NOT IN ('done','cancelled')",
+     WHERE (user_id=:p1 OR assigned_to=:p2) AND status NOT IN ('done','cancelled')",
     [$uid, $uid]
 )));
 
 $cntDone = _tm_count(tm_fetch_all(tm_exec(
-    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE (user_id=:p1 OR assigned_to=:p1) AND status='done'",
+    "SELECT COUNT(*) AS n FROM TM_Tasks WHERE (user_id=:p1 OR assigned_to=:p2) AND status='done'",
     [$uid, $uid]
 )));
 
 $cntOverdue = _tm_count(tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE (user_id=:p1 OR assigned_to=:p1) AND TRUNC(due_date) < TRUNC(SYSDATE) AND status NOT IN ('done','cancelled')",
+     WHERE (user_id=:p1 OR assigned_to=:p2) AND TRUNC(due_date) < TRUNC(SYSDATE) AND status NOT IN ('done','cancelled')",
     [$uid, $uid]
 )));
 
@@ -57,13 +57,13 @@ $stmtUpcoming = tm_exec(
          SELECT task_id, task_name, start_date, due_date,
                 category, custom_category, priority, color, status, notes
          FROM TM_Tasks
-         WHERE (user_id=:p1 OR assigned_to=:p1)
+         WHERE (user_id=:p1 OR assigned_to=:p2)
            AND status NOT IN ('done','cancelled')
            AND due_date >= TRUNC(SYSDATE)
          ORDER BY due_date ASC
      )
      WHERE ROWNUM <= 5",
-    [$uid]
+    [$uid, $uid]
 );
 $upcoming = tm_fetch_all($stmtUpcoming);
 // Resolve CLOB fields
@@ -81,8 +81,8 @@ $stmtAllTasks = tm_exec(
     "SELECT task_id, task_name, TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
             TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
             category, custom_category, priority, color, notes, status, recurrence
-     FROM TM_Tasks WHERE (user_id = :p1 OR assigned_to = :p1) ORDER BY due_date ASC",
-    [$uid]
+     FROM TM_Tasks WHERE (user_id = :p1 OR assigned_to = :p2) ORDER BY due_date ASC",
+    [$uid, $uid]
 );
 $allTasks = tm_fetch_all($stmtAllTasks);
 $allTasks = array_map(function($row) {

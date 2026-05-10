@@ -20,6 +20,11 @@ $uid    = tm_uid();
 if ($action === 'mark_done') {
     // MERGE / UPSERT: insert a prefs row if none exists, otherwise update it.
     // Oracle does not have INSERT … ON CONFLICT; use MERGE instead.
+    //
+    // FIX: Oracle treats repeated bind variable names (e.g. :p1 used twice) as a
+    // SINGLE placeholder. Passing two params caused ORA-01036 on the second bind.
+    // Solution: use only :p1 in the USING clause and reference src.user_id in the
+    // INSERT VALUES so Oracle sees exactly one unique bind variable.
     tm_exec(
         "MERGE INTO TM_UserPrefs dst
          USING (SELECT :p1 AS user_id FROM DUAL) src
@@ -28,8 +33,8 @@ if ($action === 'mark_done') {
              UPDATE SET onboarding_done = 1, updated_at = CURRENT_TIMESTAMP
          WHEN NOT MATCHED THEN
              INSERT (user_id, onboarding_done)
-             VALUES (:p2, 1)",
-        [$uid, $uid]
+             VALUES (src.user_id, 1)",
+        [$uid]
     );
     header('Content-Type: application/json');
     echo json_encode(['ok' => true]);

@@ -19,7 +19,7 @@ $dateTo    = trim($_GET['to']   ?? '');
 $filterTeam = (int)($_GET['team'] ?? 0); // Feature 8: team filter
 
 $extraWhere  = '';
-$extraParams = [$uid]; // :p1 is always user_id
+$extraParams = [$uid, $uid]; // :p1 = user_id (owned), :p2 = user_id (assigned_to)
 
 if ($search !== '') {
     $extraWhere .= " AND UPPER(task_name) LIKE UPPER(:p" . (count($extraParams)+1) . ")";
@@ -74,7 +74,7 @@ if ($view === 'board') {
                 TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p1) AND status = 'done'
+         WHERE (user_id = :p1 OR assigned_to = :p2) AND status = 'done'
          $extraWhere
          ORDER BY $sortSql",
         $extraParams
@@ -85,7 +85,7 @@ if ($view === 'board') {
                 TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p1)
+         WHERE (user_id = :p1 OR assigned_to = :p2)
            AND due_date < SYSDATE
            AND status NOT IN ('done','cancelled')
          $extraWhere
@@ -99,7 +99,7 @@ if ($view === 'board') {
                 TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p1)
+         WHERE (user_id = :p1 OR assigned_to = :p2)
          $extraWhere
          ORDER BY $sortSql",
         $extraParams
@@ -849,10 +849,10 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
             "SELECT task_id, task_name, TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                     category, custom_category, priority, color, status
              FROM TM_Tasks
-             WHERE (user_id = :p1 OR assigned_to = :p1)
+             WHERE (user_id = :p1 OR assigned_to = :p2)
                AND status NOT IN ('cancelled')
              ORDER BY due_date ASC",
-            [$uid]
+            [$uid, $uid]
         );
         $boardTasks = tm_fetch_all($boardStmt);
 
