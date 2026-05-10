@@ -455,8 +455,9 @@ switch ($action) {
         }
 
         $oldRow = tm_fetch_one(tm_exec(
+            // Feature 10: allow editing tasks you own OR tasks delegated to you
             "SELECT task_name, status, priority FROM TM_Tasks
-             WHERE task_id=:p1 AND user_id=:p2 AND org_id=:p3",
+             WHERE task_id=:p1 AND (user_id=:p2 OR assigned_to=:p2) AND org_id=:p3",
             [$id, $uid, $oid]
         ));
         if (!$oldRow) {
@@ -515,6 +516,86 @@ switch ($action) {
         tm_log_task_change($id, $uid, 'update');
         break;
 
+    // ── FEATURE 10: Task Delegation ───────────────────────────────────────────
+    // Admin / moderator only. Reassigns a task to another user in the same org.
+    // Logs the change in TM_AuditLog and notifies the new assignee.
+    case 'reassign':
+        if (!tm_is_moderator()) {
+            if ($isApi) tm_api_err('Insufficient permissions.', 403);
+            tm_flash('error', 'Insufficient permissions.'); break;
+        }
+
+        $taskId   = (int)($_POST['task_id']   ?? 0);
+        $toUserId = (int)($_POST['to_user_id'] ?? 0);
+
+        if ($taskId <= 0 || $toUserId <= 0) {
+            if ($isApi) tm_api_err('Invalid task or user.');
+            tm_flash('error', 'Invalid task or user.'); break;
+        }
+
+        // Fetch current task (admin can see any task in the org; moderators only their own)
+        $tRow = tm_fetch_one(tm_exec(
+            $is_admin
+                ? "SELECT task_id, task_name, user_id FROM TM_Tasks WHERE task_id=:p1 AND org_id=:p2"
+                : "SELECT task_id, task_name, user_id FROM TM_Tasks WHERE task_id=:p1 AND org_id=:p2 AND user_id=:p3",
+            $is_admin ? [$taskId, $oid] : [$taskId, $oid, $uid]
+        ));
+        if (!$tRow) {
+            if ($isApi) tm_api_err('Task not found.', 404);
+            tm_flash('error', 'Task not found.'); break;
+        }
+
+        $taskName    = $tRow['task_name'] ?? $tRow['TASK_NAME'] ?? "task #{$taskId}";
+        $fromUserId  = (int)($tRow['user_id'] ?? $tRow['USER_ID'] ?? 0);
+
+        if ($fromUserId === $toUserId) {
+            if ($isApi) tm_api_err('Task is already assigned to that user.');
+            tm_flash('error', 'Task is already assigned to that user.'); break;
+        }
+
+        // Verify target user exists in the same org
+        $toRow = tm_fetch_one(tm_exec(
+            "SELECT user_id, first_name, last_name FROM TM_Users WHERE user_id=:p1 AND org_id=:p2",
+            [$toUserId, $oid]
+        ));
+        if (!$toRow) {
+            if ($isApi) tm_api_err('Target user not found in your organization.', 404);
+            tm_flash('error', 'Target user not found in your organization.'); break;
+        }
+
+        // Reassign: update user_id (and also assigned_to for display consistency)
+        tm_exec(
+            "UPDATE TM_Tasks SET user_id=:p1, assigned_to=:p2 WHERE task_id=:p3",
+            [$toUserId, $toUserId, $taskId]
+        );
+
+        // Lookup old and new user names for audit/notification
+        $fromRow  = tm_fetch_one(tm_exec(
+            "SELECT first_name, last_name FROM TM_Users WHERE user_id=:p1", [$fromUserId]
+        ));
+        $fromName = trim(($fromRow['first_name'] ?? $fromRow['FIRST_NAME'] ?? '') . ' ' .
+                         ($fromRow['last_name']  ?? $fromRow['LAST_NAME']  ?? ''));
+        $toName   = trim(($toRow['first_name']   ?? $toRow['FIRST_NAME']   ?? '') . ' ' .
+                         ($toRow['last_name']    ?? $toRow['LAST_NAME']    ?? ''));
+
+        // Notify the new assignee
+        $delegatorName = tm_get_username_inline($uid);
+        $notifMsg = "{$delegatorName} delegated the task \"{$taskName}\" to you.";
+        tm_exec(
+            "INSERT INTO TM_Notifications (user_id, task_id, type, message, is_read)
+             VALUES (:p1, :p2, 'assignment', :p3, 0)",
+            [$toUserId, $taskId, substr($notifMsg, 0, 500)]
+        );
+
+        // Audit log
+        tm_audit($uid, 'edit', 'task', $taskId, $taskName,
+                 "owner:{$fromName}", "owner:{$toName}");
+
+        if ($isApi) tm_api_ok(['task_id' => $taskId, 'to_user_id' => $toUserId]);
+        tm_flash('success', "Task \"{$taskName}\" delegated to {$toName}.");
+        break;
+    // ── END FEATURE 10 ───────────────────────────────────────────────────────
+
     case 'delete':
         $id = (int)($_POST['id'] ?? 0);
         if ($id <= 0) {
@@ -523,7 +604,8 @@ switch ($action) {
         }
 
         $delRow = tm_fetch_one(tm_exec(
-            "SELECT task_name FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2 AND org_id=:p3",
+            // Feature 10: allow deleting tasks you own OR tasks delegated to you
+            "SELECT task_name FROM TM_Tasks WHERE task_id=:p1 AND (user_id=:p2 OR assigned_to=:p2) AND org_id=:p3",
             [$id, $uid, $oid]
         ));
         if (!$delRow) {
@@ -533,7 +615,7 @@ switch ($action) {
         $delName = $delRow['task_name'] ?? "task #{$id}";
 
         tm_exec(
-            'DELETE FROM TM_Tasks WHERE task_id=:p1 AND user_id=:p2 AND org_id=:p3',
+            'DELETE FROM TM_Tasks WHERE task_id=:p1 AND (user_id=:p2 OR assigned_to=:p2) AND org_id=:p3',
             [$id, $uid, $oid]
         );
         tm_audit($uid, 'delete', 'task', $id, $delName, $delName, '');

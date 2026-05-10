@@ -537,32 +537,42 @@ switch ($action) {
     /**
      * get_task_collab
      * GET: task_id
-     * Returns assigned_to, assigned_username, project_id for a task
+     * Returns assigned_to, assigned_username, project_id, owner_id for a task
      */
     case 'get_task_collab': {
         $taskId = (int)($_GET['task_id'] ?? $_POST['task_id'] ?? 0);
         if ($taskId <= 0) {
             echo json_encode(['ok' => false, 'error' => 'task_id required']); exit;
         }
+        // Feature 10: moderators can fetch collab info for any org task
+        $isMod = tm_is_moderator();
         $row = tm_fetch_one(tm_exec(
-            "SELECT t.assigned_to, t.project_id,
-                    u.username AS assigned_username,
-                    u.first_name, u.last_name
-             FROM TM_Tasks t
-             LEFT JOIN TM_Users u ON u.user_id = t.assigned_to
-             WHERE t.task_id = :p1
-               AND (t.user_id = :p2 OR t.assigned_to = :p3
-                    OR EXISTS (
-                        SELECT 1 FROM TM_ProjectMembers pm
-                        WHERE pm.project_id = t.project_id AND pm.user_id = :p4
-                    ))",
-            [$taskId, $uid, $uid, $uid]
+            $isMod
+                ? "SELECT t.user_id AS owner_id, t.assigned_to, t.project_id,
+                          u.username AS assigned_username,
+                          u.first_name, u.last_name
+                   FROM TM_Tasks t
+                   LEFT JOIN TM_Users u ON u.user_id = t.assigned_to
+                   WHERE t.task_id = :p1 AND t.org_id = :p2"
+                : "SELECT t.user_id AS owner_id, t.assigned_to, t.project_id,
+                          u.username AS assigned_username,
+                          u.first_name, u.last_name
+                   FROM TM_Tasks t
+                   LEFT JOIN TM_Users u ON u.user_id = t.assigned_to
+                   WHERE t.task_id = :p1
+                     AND (t.user_id = :p2 OR t.assigned_to = :p3
+                          OR EXISTS (
+                              SELECT 1 FROM TM_ProjectMembers pm
+                              WHERE pm.project_id = t.project_id AND pm.user_id = :p4
+                          ))",
+            $isMod ? [$taskId, $oid] : [$taskId, $uid, $uid, $uid]
         ));
         if (!$row) {
             echo json_encode(['ok' => false, 'error' => 'Not found']); exit;
         }
         echo json_encode([
             'ok'                 => true,
+            'owner_id'           => $row['owner_id']           ? (int)$row['owner_id']    : null,
             'assigned_to'        => $row['assigned_to']        ? (int)$row['assigned_to'] : null,
             'assigned_username'  => $row['assigned_username']  ?? null,
             'assigned_full_name' => trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '')) ?: null,

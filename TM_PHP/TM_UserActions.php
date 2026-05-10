@@ -140,6 +140,24 @@ switch ($action) {
         }
         tm_audit($uid, 'edit', 'user', $id, "$fn $ln",
                  "role:{$oldRole}", "role:{$role}");
+
+        // Feature 8: if admin just edited their own account, keep session fresh
+        if ($id === $uid) {
+            $_SESSION['tm_first_name'] = $fn;
+            $teamRows = tm_fetch_all(tm_exec(
+                "SELECT t.team_id, t.team_name, tm.is_manager
+                 FROM TM_Teams t
+                 JOIN TM_TeamMembers tm ON tm.team_id = t.team_id
+                 WHERE tm.user_id = :p1",
+                [$uid]
+            ));
+            $_SESSION['tm_teams'] = array_map(fn($r) => [
+                'team_id'    => (int)($r['TEAM_ID']    ?? $r['team_id']    ?? 0),
+                'team_name'  => $r['TEAM_NAME']  ?? $r['team_name']  ?? '',
+                'is_manager' => (int)($r['IS_MANAGER'] ?? $r['is_manager'] ?? 0),
+            ], $teamRows);
+        }
+
         if ($isApi) tm_api_ok(['user_id' => $id, 'role' => $role]);
         tm_flash('success', "User '$fn $ln' updated.");
         break;
@@ -353,6 +371,22 @@ switch ($action) {
 
         // Keep session name in sync
         $_SESSION['tm_first_name'] = $fn;
+
+        // Feature 8: refresh team membership in session so it stays current
+        // (teams don't change on a profile update, but this is the right place
+        //  to keep session consistent if future code modifies org/role here too)
+        $teamRows = tm_fetch_all(tm_exec(
+            "SELECT t.team_id, t.team_name, tm.is_manager
+             FROM TM_Teams t
+             JOIN TM_TeamMembers tm ON tm.team_id = t.team_id
+             WHERE tm.user_id = :p1",
+            [$uid]
+        ));
+        $_SESSION['tm_teams'] = array_map(fn($r) => [
+            'team_id'    => (int)($r['TEAM_ID']    ?? $r['team_id']    ?? 0),
+            'team_name'  => $r['TEAM_NAME']  ?? $r['team_name']  ?? '',
+            'is_manager' => (int)($r['IS_MANAGER'] ?? $r['is_manager'] ?? 0),
+        ], $teamRows);
 
         tm_audit($uid, 'edit', 'user', $uid, "$fn $ln", '', 'self-update');
         if ($isApi) tm_api_ok(['user_id' => $uid]);

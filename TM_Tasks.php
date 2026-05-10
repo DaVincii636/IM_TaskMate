@@ -74,7 +74,7 @@ if ($view === 'board') {
                 TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE user_id = :p1 AND status = 'done'
+         WHERE (user_id = :p1 OR assigned_to = :p1) AND status = 'done'
          $extraWhere
          ORDER BY $sortSql",
         $extraParams
@@ -85,7 +85,7 @@ if ($view === 'board') {
                 TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE user_id = :p1
+         WHERE (user_id = :p1 OR assigned_to = :p1)
            AND due_date < SYSDATE
            AND status NOT IN ('done','cancelled')
          $extraWhere
@@ -93,13 +93,13 @@ if ($view === 'board') {
         $extraParams
     );
 } else {
-    // all
+    // all — Feature 10: include tasks delegated to this user via assigned_to
     $stmt = tm_exec(
         "SELECT task_id, task_name, TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
                 TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE user_id = :p1
+         WHERE (user_id = :p1 OR assigned_to = :p1)
          $extraWhere
          ORDER BY $sortSql",
         $extraParams
@@ -849,7 +849,7 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
             "SELECT task_id, task_name, TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                     category, custom_category, priority, color, status
              FROM TM_Tasks
-             WHERE user_id = :p1
+             WHERE (user_id = :p1 OR assigned_to = :p1)
                AND status NOT IN ('cancelled')
              ORDER BY due_date ASC",
             [$uid]

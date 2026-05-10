@@ -33,12 +33,15 @@ foreach ($_tm_notifs as $_n) {
 
 // Type → icon glyph map
 $_tm_notif_icons = [
-    'overdue'    => '<i class="fa-solid fa-circle-exclamation"></i>',
-    'due_today'  => '<i class="fa-solid fa-clock"></i>',
-    'due_soon'   => '<i class="fa-solid fa-calendar-days"></i>',
+    'overdue'       => '<i class="fa-solid fa-circle-exclamation"></i>',
+    'due_today'     => '<i class="fa-solid fa-clock"></i>',
+    'due_soon'      => '<i class="fa-solid fa-calendar-days"></i>',
     // CHANGE 4 — mention & assignment notification types
-    'mention'    => '<i class="fa-solid fa-at"></i>',
-    'assignment' => '<i class="fa-solid fa-user-check"></i>',
+    'mention'       => '<i class="fa-solid fa-at"></i>',
+    'assignment'    => '<i class="fa-solid fa-user-check"></i>',
+    // Feature 8 — team membership notifications
+    'team_added'    => '<i class="fa-solid fa-users"></i>',
+    'team_removed'  => '<i class="fa-solid fa-user-minus"></i>',
 ];
 
 ob_start(); ?>

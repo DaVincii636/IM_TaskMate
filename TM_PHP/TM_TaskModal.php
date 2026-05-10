@@ -22,14 +22,21 @@
  */
 
 if (!isset($allTasksForModal)) {
-    // Fetch full task data for this user so the modal can populate all fields
+    // Fetch full task data — include both tasks owned by AND delegated to this user.
+    // Feature 10: after delegation user_id changes to the new owner, so owned tasks
+    // cover that case. We also pull tasks where assigned_to = uid in case a future
+    // flow keeps the original owner but sets assigned_to.
+    $_modal_uid = tm_uid();
     $_modal_stmt = tm_exec(
         "SELECT task_id, task_name,
                 TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
                 TO_CHAR(due_date,'YYYY-MM-DD')   AS due_date,
-                category, custom_category, priority, color, notes, status
-         FROM TM_Tasks WHERE user_id = :p1 ORDER BY due_date ASC",
-        [tm_uid()]
+                category, custom_category, priority, color, notes, status, recurrence
+         FROM TM_Tasks
+         WHERE user_id = :p1
+            OR assigned_to = :p2
+         ORDER BY due_date ASC",
+        [$_modal_uid, $_modal_uid]
     );
     $allTasksForModal = tm_fetch_all($_modal_stmt);
     // Resolve CLOB/LOB
@@ -41,6 +48,15 @@ if (!isset($allTasksForModal)) {
         }
         return $row;
     }, $allTasksForModal);
+    // Deduplicate by task_id (in case user_id = assigned_to on the same row)
+    $_seen = [];
+    $allTasksForModal = array_filter($allTasksForModal, function($r) use (&$_seen) {
+        $id = $r['task_id'] ?? $r['TASK_ID'] ?? null;
+        if ($id === null || isset($_seen[$id])) return false;
+        $_seen[$id] = true;
+        return true;
+    });
+    $allTasksForModal = array_values($allTasksForModal);
 }
 
 // Encode for JS
@@ -168,6 +184,31 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                     <select name="assigned_to" class="form-input" id="tmEditAssignSelect">
                         <option value="">— Unassigned —</option>
                     </select>
+                </div>
+
+                <!-- ── FEATURE 10: Delegate / Reassign task (moderator+ only) ── -->
+                <div class="form-group" id="tmReassignGroup" style="display:none;">
+                    <label class="form-label" style="display:flex;align-items:center;gap:6px;">
+                        <i class="fa-solid fa-right-left" style="color:var(--gray-400)"></i>
+                        Delegate Task To
+                        <span style="font-size:10px;font-weight:600;background:#fef9c3;color:#92400e;padding:2px 8px;border-radius:50px;letter-spacing:.03em;">MODERATOR+</span>
+                    </label>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <select id="tmReassignSelect" class="form-input" style="flex:1;">
+                            <option value="">— Pick a user —</option>
+                        </select>
+                        <button type="button" id="tmReassignBtn"
+                                style="padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;
+                                       background:var(--black);color:#fff;border:none;cursor:pointer;
+                                       display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+                                       font-family:'Poppins',sans-serif;transition:opacity .15s;"
+                                onmouseover="this.style.opacity='.85'"
+                                onmouseout="this.style.opacity='1'"
+                                onclick="tmDoReassign()">
+                            <i class="fa-solid fa-right-left"></i> Delegate
+                        </button>
+                    </div>
+                    <div id="tmReassignFeedback" style="font-size:12px;margin-top:5px;color:var(--gray-500);"></div>
                 </div>
                 <div class="form-group dep-group" id="tmEditDepGroup">
                     <label class="form-label">Must Complete First</label>
@@ -1187,6 +1228,92 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                 }
             }).catch(function () {});
     };
+
+    // ── FEATURE 10: Reassign / Delegate ──────────────────────────
+    // Show the Delegate section only for moderators/admins.
+    // PHP embeds a flag so JS knows whether to show it.
+    var _isModerator = <?= tm_is_moderator() ? 'true' : 'false' ?>;
+    var _reassignTaskId = null;
+
+    // Populate the reassign user dropdown (reuses fetchUsers)
+    function populateReassignSelect(currentOwnerId) {
+        var sel = document.getElementById('tmReassignSelect');
+        if (!sel) return;
+        fetchUsers(function (users) {
+            sel.innerHTML = '<option value="">— Pick a user —</option>';
+            users.forEach(function (u) {
+                if (u.user_id === currentOwnerId) return; // skip current owner
+                var opt = document.createElement('option');
+                opt.value = u.user_id;
+                opt.textContent = u.full_name
+                    ? u.full_name + ' (@' + u.username + ')'
+                    : '@' + u.username;
+                sel.appendChild(opt);
+            });
+        });
+    }
+
+    // Patch tmOpenEdit to show/hide and populate the reassign panel
+    var _origOpenEditCollab = window.tmOpenEdit;
+    window.tmOpenEdit = function (id) {
+        _origOpenEditCollab(id);
+        _reassignTaskId = id;
+
+        var grp = document.getElementById('tmReassignGroup');
+        var fb  = document.getElementById('tmReassignFeedback');
+        if (fb) fb.textContent = '';
+
+        if (_isModerator && grp) {
+            grp.style.display = '';
+            // Fetch current owner to exclude from dropdown
+            fetch('TM_PHP/TM_CollabActions.php?action=get_task_collab&task_id=' + encodeURIComponent(id))
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    var ownerId = d.ok ? (d.owner_id || 0) : 0;
+                    populateReassignSelect(ownerId);
+                }).catch(function () { populateReassignSelect(0); });
+        } else if (grp) {
+            grp.style.display = 'none';
+        }
+    };
+
+    // Execute delegation via AJAX — no full page reload needed
+    window.tmDoReassign = function () {
+        var sel = document.getElementById('tmReassignSelect');
+        var fb  = document.getElementById('tmReassignFeedback');
+        var btn = document.getElementById('tmReassignBtn');
+        if (!sel || !_reassignTaskId) return;
+
+        var toUserId = parseInt(sel.value, 10);
+        if (!toUserId) {
+            if (fb) { fb.style.color = '#ef4444'; fb.textContent = 'Please select a user to delegate to.'; }
+            return;
+        }
+
+        btn && (btn.disabled = true);
+        if (fb) { fb.style.color = 'var(--gray-500)'; fb.textContent = 'Delegating…'; }
+
+        var fd = new FormData();
+        fd.append('action',      'reassign');
+        fd.append('task_id',     _reassignTaskId);
+        fd.append('to_user_id',  toUserId);
+
+        fetch('TM_PHP/TM_TaskActions.php?format=json', { method: 'POST', body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.ok) {
+                    if (fb) { fb.style.color = '#15803d'; fb.textContent = '✓ Task delegated successfully. Reloading…'; }
+                    setTimeout(function () { window.location.reload(); }, 900);
+                } else {
+                    if (fb) { fb.style.color = '#ef4444'; fb.textContent = d.error || 'Delegation failed.'; }
+                    btn && (btn.disabled = false);
+                }
+            }).catch(function () {
+                if (fb) { fb.style.color = '#ef4444'; fb.textContent = 'Network error. Please try again.'; }
+                btn && (btn.disabled = false);
+            });
+    };
+    // ── END FEATURE 10 ───────────────────────────────────────────
 
 })();
 </script>

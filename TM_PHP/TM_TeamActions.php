@@ -164,6 +164,30 @@ switch ($action) {
         $uname = trim(($uRow['first_name'] ?? '') . ' ' . ($uRow['last_name'] ?? ''));
         $tname = $tRow['team_name'] ?? '';
 
+        // Feature 8: notify the added user
+        tm_exec(
+            "INSERT INTO TM_Notifications (user_id, task_id, type, message, is_read)
+             VALUES (:p1, NULL, 'team_added', :p2, 0)",
+            [
+                $memberId,
+                "You've been added to the team \"" . $tname . "\"" . ($isManager ? ' as a manager' : '') . '.',
+            ]
+        );
+
+        // If the added user is the current session user, refresh session teams immediately
+        if ($memberId === $uid) {
+            $sRows = tm_fetch_all(tm_exec(
+                "SELECT t.team_id, t.team_name, tm.is_manager
+                 FROM TM_Teams t JOIN TM_TeamMembers tm ON tm.team_id = t.team_id
+                 WHERE tm.user_id = :p1", [$uid]
+            ));
+            $_SESSION['tm_teams'] = array_map(fn($r) => [
+                'team_id'    => (int)($r['TEAM_ID']    ?? $r['team_id']    ?? 0),
+                'team_name'  => $r['TEAM_NAME']  ?? $r['team_name']  ?? '',
+                'is_manager' => (int)($r['IS_MANAGER'] ?? $r['is_manager'] ?? 0),
+            ], $sRows);
+        }
+
         tm_audit($uid, 'edit', 'user', $memberId, $uname, '', "added_to_team:{$tname}");
         tm_flash('success', "$uname added to team.");
         break;
@@ -192,6 +216,33 @@ switch ($action) {
             'DELETE FROM TM_TeamMembers WHERE team_id = :p1 AND user_id = :p2',
             [$teamId, $memberId]
         );
+
+        // Feature 8: notify the removed user (only if they're not removing themselves)
+        if ($memberId !== $uid) {
+            tm_exec(
+                "INSERT INTO TM_Notifications (user_id, task_id, type, message, is_read)
+                 VALUES (:p1, NULL, 'team_removed', :p2, 0)",
+                [
+                    $memberId,
+                    "You've been removed from the team \"" . $tname . '".',
+                ]
+            );
+        }
+
+        // If removed user is the current session user, refresh session teams immediately
+        if ($memberId === $uid) {
+            $sRows = tm_fetch_all(tm_exec(
+                "SELECT t.team_id, t.team_name, tm.is_manager
+                 FROM TM_Teams t JOIN TM_TeamMembers tm ON tm.team_id = t.team_id
+                 WHERE tm.user_id = :p1", [$uid]
+            ));
+            $_SESSION['tm_teams'] = array_map(fn($r) => [
+                'team_id'    => (int)($r['TEAM_ID']    ?? $r['team_id']    ?? 0),
+                'team_name'  => $r['TEAM_NAME']  ?? $r['team_name']  ?? '',
+                'is_manager' => (int)($r['IS_MANAGER'] ?? $r['is_manager'] ?? 0),
+            ], $sRows);
+        }
+
         tm_audit($uid, 'edit', 'user', $memberId, $uname, "team:{$tname}", 'removed_from_team');
         tm_flash('success', "$uname removed from team.");
         break;

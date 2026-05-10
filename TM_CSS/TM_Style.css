@@ -1102,9 +1102,12 @@ tbody td {
     margin-top: 1px;
 }
 
-.notif-dot.type-overdue   { background: #fee2e2; color: #b91c1c; }
-.notif-dot.type-due_today { background: #fef9c3; color: #92400e; }
-.notif-dot.type-due_soon  { background: #dbeafe; color: #1d4ed8; }
+.notif-dot.type-overdue     { background: #fee2e2; color: #b91c1c; }
+.notif-dot.type-due_today   { background: #fef9c3; color: #92400e; }
+.notif-dot.type-due_soon    { background: #dbeafe; color: #1d4ed8; }
+/* Feature 8: team membership notification dot colours */
+.notif-dot.type-team_added   { background: #dcfce7; color: #15803d; }
+.notif-dot.type-team_removed { background: #fce7f3; color: #9d174d; }
 
 .notif-body { flex: 1; min-width: 0; }
 

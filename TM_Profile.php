@@ -37,6 +37,19 @@ $cntTotal   = _p_count("SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1", $
 $cntDone    = _p_count("SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 AND status='done'", $uid);
 $cntPending = _p_count("SELECT COUNT(*) AS n FROM TM_Tasks WHERE user_id=:p1 AND status NOT IN ('done','cancelled')", $uid);
 
+// Feature 8: My Teams — show membership info on profile
+$teamsStmt = tm_exec(
+    "SELECT t.team_id, t.team_name, t.team_desc,
+            tm.is_manager,
+            (SELECT COUNT(*) FROM TM_TeamMembers x WHERE x.team_id = t.team_id) AS member_count
+     FROM TM_Teams t
+     JOIN TM_TeamMembers tm ON tm.team_id = t.team_id
+     WHERE tm.user_id = :p1
+     ORDER BY t.team_name ASC",
+    [$uid]
+);
+$myTeams = tm_fetch_all($teamsStmt);
+
 require_once 'TM_PHP/TM_NavNotif.php';
 ?><!DOCTYPE html>
 <html lang="en">
@@ -381,6 +394,52 @@ require_once 'TM_PHP/TM_NavNotif.php';
     </div>
 
 </div><!-- /.profile-page -->
+
+<!-- ── My Teams Section ─────────────────────────────────────────────────── -->
+<?php if (!empty($myTeams)): ?>
+<div style="max-width:860px;margin:0 auto 3rem;padding:0 1.25rem;">
+    <div class="profile-card">
+        <div class="profile-card-header">
+            <i class="fa-solid fa-users" style="margin-right:8px;color:var(--gray-400)"></i>
+            My Teams
+            <span style="font-size:12px;font-weight:400;color:var(--gray-400);margin-left:8px;"><?= count($myTeams) ?> team<?= count($myTeams) !== 1 ? 's' : '' ?></span>
+        </div>
+        <div class="profile-card-body" style="padding:1rem 1.5rem;">
+            <div style="display:flex;flex-direction:column;gap:.75rem;">
+            <?php foreach ($myTeams as $t):
+                $tname   = $t['TEAM_NAME']    ?? $t['team_name']    ?? '';
+                $tdesc   = $t['TEAM_DESC']    ?? $t['team_desc']    ?? '';
+                $isMgr   = (int)($t['IS_MANAGER']  ?? $t['is_manager']  ?? 0);
+                $mcount  = (int)($t['MEMBER_COUNT'] ?? $t['member_count'] ?? 0);
+                $tid     = (int)($t['TEAM_ID']      ?? $t['team_id']      ?? 0);
+            ?>
+            <div style="display:flex;align-items:center;gap:12px;padding:.75rem 1rem;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--bg);">
+                <div style="width:38px;height:38px;border-radius:50%;background:var(--black);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i class="fa-solid fa-users" style="color:#fff;font-size:14px;"></i>
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;font-weight:700;color:var(--black);">
+                        <?= htmlspecialchars($tname) ?>
+                        <?php if ($isMgr): ?>
+                        <span style="font-size:10px;font-weight:700;background:#fef9c3;color:#92400e;padding:2px 8px;border-radius:50px;margin-left:6px;vertical-align:middle;">MANAGER</span>
+                        <?php else: ?>
+                        <span style="font-size:10px;font-weight:700;background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:50px;margin-left:6px;vertical-align:middle;">MEMBER</span>
+                        <?php endif; ?>
+                    </div>
+                    <?php if ($tdesc): ?>
+                    <div style="font-size:12px;color:var(--gray-500);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?= htmlspecialchars($tdesc) ?></div>
+                    <?php endif; ?>
+                </div>
+                <div style="text-align:right;flex-shrink:0;">
+                    <div style="font-size:11px;color:var(--gray-400);"><i class="fa-solid fa-user" style="margin-right:3px;"></i><?= $mcount ?> member<?= $mcount !== 1 ? 's' : '' ?></div>
+                </div>
+            </div>
+            <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <div class="toast" id="toast"></div>
 
