@@ -231,14 +231,12 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                 <div class="form-group">
                     <label class="form-label">Notes</label>
                     <textarea name="notes" class="form-input tm-auto-expand" id="tmEditTaskNotes"
-                              placeholder="Optional notes… use @username to notify teammates" rows="3"
+                              placeholder="Optional notes…" rows="3"
                               style="resize:none;overflow:hidden;"></textarea>
-                    <!-- @mention autocomplete suggestions -->
-                    <div id="editMentionSuggestions" class="tm-mention-suggestions" style="display:none;"></div>
                 </div>
 
-                <!-- ── CHANGE 3: Comments section ─────────────────────────── -->
-                <div class="form-group" id="tmEditCommentsSection" style="margin-top:1.25rem;">
+                <!-- Comments section — shown only on Calendar page (injected by TM_Calendar.php) -->
+                <div class="form-group" id="tmEditCommentsSection" style="margin-top:1.25rem;display:none;">
                     <label class="form-label" style="display:flex;align-items:center;gap:6px;">
                         <i class="fa-solid fa-comments" style="color:var(--gray-400)"></i>
                         Comments
@@ -256,7 +254,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                         <div style="flex:1;position:relative;">
                             <textarea id="tmNewCommentInput"
                                       class="form-input tm-auto-expand"
-                                      placeholder="Add a comment… use @username to mention someone"
+                                      placeholder="Add a comment…"
                                       rows="2"
                                       style="resize:none;overflow:hidden;font-size:13px;"></textarea>
                             <div id="commentMentionSuggestions" class="tm-mention-suggestions" style="display:none;"></div>
@@ -1063,11 +1061,6 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         // Load comments for this task
         tmLoadComments(id);
 
-        // Init mention autocomplete on notes
-        tmInitMentionAutocomplete(
-            document.getElementById('tmEditTaskNotes'),
-            document.getElementById('editMentionSuggestions')
-        );
         // Init mention autocomplete on comment input
         tmInitMentionAutocomplete(
             document.getElementById('tmNewCommentInput'),

@@ -230,24 +230,32 @@ require_once 'TM_PHP/TM_NavNotif.php';
 
     <div class="page-header">
         <div class="page-title">Admin Panel</div>
-        <div class="page-subtitle">Manage all registered users and view system stats.</div>
+        <div class="page-subtitle"><?php if ($is_admin): ?>Manage all users across every organization, configure organizations, and oversee teams.<?php else: ?>Manage users and teams within your organization.<?php endif; ?></div>
     </div>
 
     <div class="stats-grid">
         <div class="stat-card">
-            <div class="stat-label">Total Users</div>
+            <div class="stat-label"><?php echo $is_admin ? 'Total Users (All Orgs)' : 'Users in Your Org'; ?></div>
             <div class="stat-value"><?= $userCount ?></div>
-            <div class="stat-desc">Registered accounts</div>
+            <div class="stat-desc"><?php echo $is_admin ? 'All registered accounts system-wide' : 'Members of your organization'; ?></div>
         </div>
+        <?php if ($is_admin): ?>
         <div class="stat-card">
-            <div class="stat-label">System Status</div>
-            <div class="stat-value" style="font-size:28px;letter-spacing:-.5px">Active</div>
-            <div class="stat-desc">All systems running</div>
+            <div class="stat-label">Organizations</div>
+            <div class="stat-value"><?= count($orgs) ?></div>
+            <div class="stat-desc">Active organizations in the system</div>
         </div>
+        <?php else: ?>
         <div class="stat-card">
-            <div class="stat-label">Session</div>
-            <div class="stat-value" style="font-size:28px;letter-spacing:-.5px">Live</div>
-            <div class="stat-desc">Admin is logged in</div>
+            <div class="stat-label">Your Organization</div>
+            <div class="stat-value" style="font-size:22px;letter-spacing:-.5px"><?= htmlspecialchars(tm_org_name()) ?></div>
+            <div class="stat-desc">You manage users within this org</div>
+        </div>
+        <?php endif; ?>
+        <div class="stat-card">
+            <div class="stat-label">Teams</div>
+            <div class="stat-value"><?= count($teams) ?></div>
+            <div class="stat-desc"><?php echo $is_admin ? 'Teams across all organizations' : 'Teams in your organization'; ?></div>
         </div>
     </div>
 
@@ -328,11 +336,11 @@ require_once 'TM_PHP/TM_NavNotif.php';
     <!-- ── Tab navigation (Users / Organizations) ── -->
     <?php if ($is_admin || $is_org_admin): ?>
     <div class="admin-tabs">
-        <button class="admin-tab active" onclick="switchTab('tab-users', this)">Users</button>
+        <button class="admin-tab active" onclick="switchTab('tab-users', this)" title="View and manage user accounts"><i class="fa-solid fa-users" style="margin-right:6px;font-size:12px;"></i>Users</button>
         <?php if ($is_admin): ?>
-        <button class="admin-tab" onclick="switchTab('tab-orgs', this)">Organizations</button>
+        <button class="admin-tab" onclick="switchTab('tab-orgs', this)" title="Manage organizations and their plans"><i class="fa-solid fa-building" style="margin-right:6px;font-size:12px;"></i>Organizations</button>
         <?php endif; ?>
-        <button class="admin-tab" onclick="switchTab('tab-teams', this)">Teams</button>
+        <button class="admin-tab" onclick="switchTab('tab-teams', this)" title="Create and manage teams within organizations"><i class="fa-solid fa-people-group" style="margin-right:6px;font-size:12px;"></i>Teams</button>
     </div>
     <?php endif; ?>
 
@@ -340,13 +348,15 @@ require_once 'TM_PHP/TM_NavNotif.php';
          TAB: USERS (existing content wrapped)
          ══════════════════════════════════════════ -->
     <div class="tab-panel active" id="tab-users">
+    <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 18px;margin-bottom:18px;font-size:13px;color:#6b7280;">
+        <strong style="color:#111;">Users</strong> — Add, edit, suspend, or remove user accounts.
+        <?php if ($is_admin): ?>Assign roles (User, Moderator, Org Admin, Admin) and move users between organizations.<?php else: ?>Assign roles up to Org Admin within your organization.<?php endif; ?>
+    </div>
     <div class="admin-bar">
         <span class="admin-badge">User List</span>
-        <?php if ($is_admin): ?>
+        <?php if ($is_admin || $is_org_admin): ?>
         <div style="display:flex;gap:10px;align-items:center;">
             <button class="btn-add-user" onclick="openAdminModal('addModal')">Add User</button>
-            <button class="btn-add-user" style="background:#f3f4f6;color:#111;border:1.5px solid #e5e7eb;"
-                    onclick="openAdminModal('csvImportModal')"><i class="fa-solid fa-upload" style="font-size:11px;margin-right:5px;"></i>Import CSV</button>
         </div>
         <?php endif; ?>
     </div>
@@ -407,7 +417,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
                             <td><span class="org-badge"><?= htmlspecialchars($u['org_name'] ?? $u['ORG_NAME'] ?? '—') ?></span></td>
                             <?php endif; ?>
                             <td>
-                                <?php if ($is_admin): ?>
+                                <?php if ($is_admin || $is_org_admin): ?>
                                 <div class="td-actions">
                                     <button class="btn-edit-user"
                                         data-id="<?= $u['user_id'] ?>"
@@ -454,6 +464,9 @@ require_once 'TM_PHP/TM_NavNotif.php';
          ══════════════════════════════════════════ -->
     <?php if ($is_admin): ?>
     <div class="tab-panel" id="tab-orgs">
+    <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 18px;margin-bottom:18px;font-size:13px;color:#6b7280;">
+        <strong style="color:#111;">Organizations</strong> — Create and manage organizations (tenants). Each organization is an isolated workspace. You can set the plan (Free / Pro / Enterprise), rename orgs, and delete empty ones. Users can be moved between organizations from the Users tab.
+    </div>
 
         <div class="admin-bar">
             <span class="admin-badge">Organizations</span>
@@ -586,6 +599,9 @@ require_once 'TM_PHP/TM_NavNotif.php';
          ══════════════════════════════════════════ -->
     <?php if ($is_admin || $is_org_admin): ?>
     <div class="tab-panel" id="tab-teams">
+    <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 18px;margin-bottom:18px;font-size:13px;color:#6b7280;">
+        <strong style="color:#111;">Teams</strong> — Create teams to group users within an organization for collaborative task assignments. You can add or remove members from a team at any time.
+    </div>
 
         <div class="admin-bar">
             <span class="admin-badge">Teams</span>
@@ -785,7 +801,9 @@ require_once 'TM_PHP/TM_NavNotif.php';
                     <option value="user">User</option>
                     <option value="moderator">Moderator</option>
                     <option value="org_admin">Org Admin</option>
+                    <?php if ($is_admin): ?>
                     <option value="admin">Admin</option>
+                    <?php endif; ?>
                 </select>
                 </div>
                 <?php if ($is_admin && !empty($orgs)): ?>
@@ -846,7 +864,9 @@ require_once 'TM_PHP/TM_NavNotif.php';
                     <option value="user">User</option>
                     <option value="moderator">Moderator</option>
                     <option value="org_admin">Org Admin</option>
+                    <?php if ($is_admin): ?>
                     <option value="admin">Admin</option>
+                    <?php endif; ?>
                 </select>
                 </div>
                 <div class="form-group">
@@ -916,41 +936,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
     </div>
 </div>
 
-<!-- ── CSV IMPORT MODAL (Feature 9) ── -->
-<div class="modal-overlay" id="csvImportModal">
-    <div class="modal-card modal-sm">
-        <div class="modal-header">
-            <div class="modal-title"><i class="fa-solid fa-upload" style="margin-right:6px;"></i>Bulk Import Users (CSV)</div>
-            <button class="modal-close" onclick="closeAdminModal('csvImportModal')">&#x2715;</button>
-        </div>
-        <form method="post" action="TM_PHP/TM_UserActions.php" enctype="multipart/form-data">
-            <input type="hidden" name="action" value="csv_import"/>
-            <div class="modal-body">
-                <p style="font-size:13px;color:#6b7280;margin:0 0 16px">
-                    Upload a <strong>.csv</strong> file with the following columns (header row required):
-                </p>
-                <div style="background:#f3f4f6;border-radius:8px;padding:10px 14px;font-size:12px;font-family:monospace;margin-bottom:16px;color:#374151;">
-                    first_name, last_name, email, phone, password, role
-                </div>
-                <ul style="font-size:12px;color:#6b7280;margin:0 0 16px;padding-left:18px;line-height:1.8;">
-                    <li><strong>role</strong> is optional — defaults to <em>user</em> if omitted or invalid.</li>
-                    <li>Passwords must be at least 6 characters.</li>
-                    <li>Duplicate emails are skipped with a report.</li>
-                    <li>All imported accounts are set to <strong>active</strong> immediately.</li>
-                </ul>
-                <div class="form-group">
-                    <label class="form-label">Select CSV File</label>
-                    <input type="file" name="csv_file" accept=".csv,text/csv" class="form-input" required
-                           style="padding:8px 12px;cursor:pointer;"/>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn-cancel-modal" onclick="closeAdminModal('csvImportModal')">Cancel</button>
-                <button type="submit" class="btn-save-modal">Import Users</button>
-            </div>
-        </form>
-    </div>
-</div>
+
 
 <form method="post" action="TM_PHP/TM_UserActions.php" id="deleteUserForm" style="display:none">
     <input type="hidden" name="action" value="delete"/>
@@ -1366,5 +1352,20 @@ function openManageMembersModal(btn) {
     document.getElementById('manageMembersTeamName').textContent  = btn.dataset.teamName;
     openAdminModal('manageMembersModal');
 }
+
+// ── Logout confirmation ────────────────────────────────────────────────────
+(function () {
+    var btn    = document.getElementById('logoutBtn');
+    var modal  = document.getElementById('logoutModal');
+    if (btn && modal) {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            openPcModal('logoutModal');
+        });
+        modal.addEventListener('click', function (e) {
+            if (e.target === modal) closePcModal('logoutModal');
+        });
+    }
+})();
 
 </script>

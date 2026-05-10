@@ -45,7 +45,7 @@ if ($action === 'list') {
 switch ($action) {
 
     case 'add':
-        if (!$is_admin) {
+        if (!$is_admin && !$is_org_admin) {
             if ($isApi) tm_api_err('Insufficient permissions.', 403);
             tm_flash('error', 'Insufficient permissions.'); break;
         }
@@ -93,7 +93,7 @@ switch ($action) {
         break;
 
     case 'edit':
-        if (!$is_admin) {
+        if (!$is_admin && !$is_org_admin) {
             if ($isApi) tm_api_err('Insufficient permissions.', 403);
             tm_flash('error', 'Insufficient permissions.'); break;
         }
@@ -163,7 +163,7 @@ switch ($action) {
         break;
 
     case 'delete':
-        if (!$is_admin) {
+        if (!$is_admin && !$is_org_admin) {
             if ($isApi) tm_api_err('Insufficient permissions.', 403);
             tm_flash('error', 'Insufficient permissions.'); break;
         }
@@ -196,7 +196,7 @@ switch ($action) {
 
     // ── FEATURE 7: Approve a pending user ────────────────────────────────────
     case 'approve':
-        if (!$is_admin) {
+        if (!$is_admin && !$is_org_admin) {
             tm_flash('error', 'Insufficient permissions.'); break;
         }
         $id = (int)($_POST['id'] ?? 0);
@@ -219,14 +219,17 @@ switch ($action) {
 
     // ── FEATURE 7: Suspend a user ─────────────────────────────────────────────
     case 'suspend':
-        if (!$is_admin) {
+        if (!$is_admin && !$is_org_admin) {
             tm_flash('error', 'Insufficient permissions.'); break;
         }
         $id = (int)($_POST['id'] ?? 0);
         if ($id <= 0) { tm_flash('error', 'Invalid user.'); break; }
 
         $row = tm_fetch_one(tm_exec(
-            "SELECT first_name, last_name, status FROM TM_Users WHERE user_id=:p1", [$id]
+            $is_admin
+                ? "SELECT first_name, last_name, status FROM TM_Users WHERE user_id=:p1"
+                : "SELECT first_name, last_name, status FROM TM_Users WHERE user_id=:p1 AND org_id=:p2",
+            $is_admin ? [$id] : [$id, $oid]
         ));
         if (!$row) { tm_flash('error', 'User not found.'); break; }
 

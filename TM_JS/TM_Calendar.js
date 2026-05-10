@@ -271,48 +271,59 @@ const CalendarApp = (() => {
         });
     }
 
-    // ---- Open Edit Modal ----
+    // ---- Open Edit Modal (uses shared TM_TaskModal.php with tm-prefixed IDs) ----
     function openEdit(t) {
-        document.getElementById('editTaskId').value = t.Id;
-        document.getElementById('editTaskName').value = t.Name;
-        document.getElementById('editTaskStart').value = t.StartDate;
-        document.getElementById('editTaskDue').value = t.DueDate;
-        document.getElementById('editTaskNotes').value = t.Notes || '';
-        // Auto-expand notes after populating
-        (function () {
-            var ta = document.getElementById('editTaskNotes');
-            if (ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
-        })();
-        document.getElementById('deleteTaskId').value = t.Id;
-        document.getElementById('editCategoryInput').value = t.Category;
-        document.getElementById('editPriorityInput').value = t.Priority;
-        document.getElementById('editColorInput').value = t.Color;
+        document.getElementById('editTaskId').value          = t.Id;
+        document.getElementById('editTaskName').value        = t.Name;
+        document.getElementById('editTaskStart').value       = t.StartDate;
+        document.getElementById('editTaskDue').value         = t.DueDate;
+        var notesEl = document.getElementById('tmEditTaskNotes');
+        if (notesEl) {
+            notesEl.value = t.Notes || '';
+            notesEl.style.height = 'auto';
+            notesEl.style.height = notesEl.scrollHeight + 'px';
+        }
+        var delId = document.getElementById('tmDeleteTaskId');
+        if (delId) delId.value = t.Id;
+        var catIn = document.getElementById('tmEditCategoryInput');
+        if (catIn) catIn.value = t.Category;
+        var priIn = document.getElementById('tmEditPriorityInput');
+        if (priIn) priIn.value = t.Priority;
+        var colIn = document.getElementById('tmEditColorInput');
+        if (colIn) colIn.value = t.Color;
 
         // Set recurrence dropdown
-        var recEl = document.getElementById('calEditRecurrence');
+        var recEl = document.getElementById('tmEditRecurrence');
         if (recEl) recEl.value = t.Recurrence || '';
 
         // Set status dropdown
-        const statusEl = document.getElementById('editTaskStatus');
+        const statusEl = document.getElementById('tmEditTaskStatus');
         if (statusEl) statusEl.value = t.Status || 'pending';
 
         // Set active cat btn
-        document.querySelectorAll('#editCatOptions .cat-btn').forEach(b => {
+        document.querySelectorAll('#tmEditCatOptions .cat-btn').forEach(b => {
             b.classList.toggle('active', b.dataset.cat === t.Category);
         });
-        document.getElementById('editOthersWrap').style.display = t.Category === 'others' ? 'block' : 'none';
-        document.getElementById('editCustomCat').value = t.CustomCategory || '';
+        var othersWrap = document.getElementById('tmEditOthersWrap');
+        if (othersWrap) othersWrap.style.display = t.Category === 'others' ? 'block' : 'none';
+        var customCat = document.getElementById('tmEditCustomCat');
+        if (customCat) customCat.value = t.CustomCategory || '';
 
         // Set active priority btn
-        document.querySelectorAll('#editPriorityOptions .priority-btn').forEach(b => {
+        document.querySelectorAll('#tmEditPriorityOptions .priority-btn').forEach(b => {
             b.classList.toggle('active', b.dataset.priority === t.Priority);
         });
 
-        // Build swatches
-        buildSwatches('editColorRow', 'editColorInput', t.Color);
+        // Build swatches using shared modal IDs
+        buildSwatches('tmEditColorRow', 'tmEditColorInput', t.Color);
+
+        // Show comments section on Calendar page
+        var commentsSection = document.getElementById('tmEditCommentsSection');
+        if (commentsSection) commentsSection.style.display = '';
+        if (typeof window.tmLoadComments === 'function') window.tmLoadComments(t.Id);
 
         // ── Load existing dependency links for this task ──────────────────────
-        depLoadExisting(t.Id);
+        if (typeof window.tmEditDepLoad === 'function') window.tmEditDepLoad(t.Id);
 
         openModal('editTaskModal');
         // Rebuild blocker dropdown now that editTaskDue has its value
@@ -323,15 +334,15 @@ const CalendarApp = (() => {
     function init() {
         // Build add swatches
         buildSwatches('addColorRow', 'addColorInput', '#ef4444');
-        buildSwatches('editColorRow', 'editColorInput', '#ef4444');
+        buildSwatches('tmEditColorRow', 'tmEditColorInput', '#ef4444');
 
         // Bind category & priority for add modal
         bindCatBtns('#addTaskModal .category-options', 'addCategoryInput', 'addOthersWrap');
         bindPriorityBtns('#addTaskModal .priority-options', 'addPriorityInput');
 
-        // Bind category & priority for edit modal
-        bindCatBtns('#editCatOptions', 'editCategoryInput', 'editOthersWrap');
-        bindPriorityBtns('#editPriorityOptions', 'editPriorityInput');
+        // Bind category & priority for shared edit modal (tm-prefixed IDs)
+        bindCatBtns('#tmEditCatOptions', 'tmEditCategoryInput', 'tmEditOthersWrap');
+        bindPriorityBtns('#tmEditPriorityOptions', 'tmEditPriorityInput');
 
         // Nav buttons
         document.getElementById('prevMonth').addEventListener('click', () => {
@@ -515,9 +526,9 @@ document.addEventListener('DOMContentLoaded', CalendarApp.init);
         };
     }
 
-    // ── Instantiate for edit modal ────────────────────────────────────────────
+    // ── Instantiate for edit modal (using shared TM_TaskModal.php IDs) ────────
     const editDep = makeDepUI(
-        'depSelect', 'depSelected', 'depBlockerIds',
+        'tmEditDepSelect', 'tmEditDepSelected', 'tmEditDepBlockerIds',
         () => (document.getElementById('editTaskDue') || {}).value || ''
     );
     window.depLoadExisting = function (taskId) { editDep.loadExisting(taskId); };
