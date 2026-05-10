@@ -32,8 +32,6 @@ BEGIN
 END;
 /
 
-CREATE INDEX idx_tm_users_email ON TM_Users(email);
-
 -- ── TASKS ─────────────────────────────────────
 CREATE TABLE TM_Tasks (
     task_id         NUMBER(10)    NOT NULL,
@@ -198,7 +196,5 @@ BEGIN
     END IF;
 END;
 /
-
-CREATE INDEX idx_tm_userprefs_user ON TM_UserPrefs(user_id);
 
 COMMIT;
