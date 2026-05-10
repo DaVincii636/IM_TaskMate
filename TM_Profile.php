@@ -25,6 +25,7 @@ $email     = $userRow['email']      ?? $userRow['EMAIL']      ?? '';
 $phone     = $userRow['phone']      ?? $userRow['PHONE']      ?? '';
 $role      = $userRow['role']       ?? $userRow['ROLE']       ?? 'user';
 $createdAt = $userRow['created_at'] ?? $userRow['CREATED_AT'] ?? '';
+$orgName   = tm_org_name(); // Organization the user belongs to
 
 // Task summary for the profile sidebar
 function _p_count($sql, $uid) {
@@ -123,6 +124,13 @@ require_once 'TM_PHP/TM_NavNotif.php';
 }
 .profile-member-since {
     font-size: 11px; color: var(--gray-400); margin-top: 1rem;
+}
+.profile-org-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-top: 10px; padding: 4px 12px;
+    background: #e0e7ff; color: #3730a3;
+    border-radius: 50px; font-size: 11px; font-weight: 700;
+    letter-spacing: .02em;
 }
 
 /* ── Main form card ─────────────────────────────────────── */
@@ -284,6 +292,12 @@ require_once 'TM_PHP/TM_NavNotif.php';
         <div class="profile-name"><?= htmlspecialchars($firstName . ' ' . $lastName) ?></div>
         <div class="profile-role"><?= htmlspecialchars(ucfirst($role)) ?></div>
         <div class="profile-email"><?= htmlspecialchars($email) ?></div>
+        <?php if ($orgName): ?>
+        <div class="profile-org-badge">
+            <i class="fa-solid fa-building" style="font-size:10px;"></i>
+            <?= htmlspecialchars($orgName) ?>
+        </div>
+        <?php endif; ?>
         <div class="profile-stats">
             <div class="profile-stat">
                 <div class="profile-stat-num"><?= $cntTotal ?></div>

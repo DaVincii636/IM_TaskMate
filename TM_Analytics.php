@@ -9,46 +9,11 @@ tm_require_login();
 $uid       = tm_uid();
 $firstName = tm_uname();
 $flash     = tm_get_flash();
-$filterTeam = (int)($_GET['team'] ?? 0); // Feature 8: analytics team filter
 $oid       = tm_org_id();
 
-// ── Feature 8: Load teams the current user belongs to (for filter) ───────────
-$_tstmt  = tm_exec(
-    "SELECT t.team_id, t.team_name FROM TM_Teams t
-     JOIN TM_TeamMembers m ON m.team_id = t.team_id
-     WHERE m.user_id = :p1
-     ORDER BY t.team_name",
-    [$uid]
-);
-$myTeams = tm_fetch_all($_tstmt);
 
-// If a team filter is active, override $uid context for queries:
-// We show analytics for tasks owned by all members of the selected team.
-// We keep a separate $scopeUserIds array for use in analytics queries.
 $scopeWhere  = '(user_id = :uid_scope OR (is_org_task = 1 AND org_id = :oid_scope))';
-$scopeParams = [$uid, $oid]; // default: self + org-wide
-if ($filterTeam > 0) {
-    // Verify user belongs to this team (security: users can only filter by their own teams)
-    $chk = tm_exec(
-        'SELECT COUNT(*) FROM TM_TeamMembers WHERE team_id = :p1 AND user_id = :p2',
-        [$filterTeam, $uid]
-    );
-    if ((int)tm_scalar($chk) > 0) {
-        // Get all member user_ids as a comma-separated list for IN clause
-        $mStmt = tm_exec(
-            'SELECT user_id FROM TM_TeamMembers WHERE team_id = :p1', [$filterTeam]
-        );
-        $memberIds = array_column(tm_fetch_all($mStmt), 'user_id');
-        if (!empty($memberIds)) {
-            $inList = implode(',', array_map('intval', $memberIds));
-            // Team view: members' tasks + org-wide tasks
-            $scopeWhere  = "(user_id IN ($inList) OR (is_org_task = 1 AND org_id = :oid_scope))";
-            $scopeParams = [$oid];
-        }
-    } else {
-        $filterTeam = 0; // reset invalid filter
-    }
-}
+$scopeParams = [$uid, $oid]; // self + org-wide
 
 // ── Notifications (bell) ──────────────────────────────────────────────────────
 require_once 'TM_PHP/TM_NavNotif.php';
@@ -273,7 +238,7 @@ $chartDue       = array_column(array_values($weeks), 'total_due');
 .hero-card.c-blue   .hero-icon { background: #dbeafe; color: #1d4ed8; }
 .hero-card.c-green  .hero-icon { background: #dcfce7; color: #15803d; }
 .hero-card.c-red    .hero-icon { background: #fee2e2; color: #b91c1c; }
-.hero-card.c-amber  .hero-icon { background: #fef3c7; color: #92400e; }
+.hero-card.c-amber  .hero-icon { background: #e0e7ff; color: #3730a3; }
 
 /* ── Two-column grid ─────────────────────────────────── */
 .analytics-grid {
@@ -356,8 +321,6 @@ $chartDue       = array_column(array_values($weeks), 'total_due');
     </style>
 </head>
 <body>
-<!-- Feature 8 team filter injected -->
-
 <nav class="navbar">
     <div class="navbar-logo">Task<span>Mate</span></div>
     <div class="navbar-right">

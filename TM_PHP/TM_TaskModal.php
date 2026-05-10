@@ -106,10 +106,10 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
             <div class="modal-title">Edit Task</div>
             <button class="modal-close" onclick="closeModal('editTaskModal')">&#x2715;</button>
         </div>
-        <form method="post" action="TM_PHP/TM_TaskActions.php" id="editTaskForm">
+        <form method="post" action="TM_PHP/TM_TaskActions.php" id="editTaskForm" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;">
             <input type="hidden" name="action" value="edit"/>
             <input type="hidden" name="id"     id="editTaskId"/>
-            <div class="modal-body">
+            <div class="modal-body" style="overflow-y:auto;">
                 <div class="form-group">
                     <label class="form-label">Task Name</label>
                     <input type="text" name="name" class="form-input" id="editTaskName" required/>

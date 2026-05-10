@@ -98,17 +98,6 @@ $tasksJson = json_encode($allTasks, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT
 if ($tasksJson === false) { $tasksJson = '[]'; }
 
 // ── Feature 8: Teams this user belongs to ────────────────────────────────────
-$myTeamsStmt = tm_exec(
-    "SELECT t.team_id, t.team_name, t.team_desc,
-            m.is_manager,
-            (SELECT COUNT(*) FROM TM_TeamMembers x WHERE x.team_id = t.team_id) AS member_count
-     FROM TM_Teams t
-     JOIN TM_TeamMembers m ON m.team_id = t.team_id
-     WHERE m.user_id = :p1
-     ORDER BY m.is_manager DESC, t.team_name",
-    [$uid]
-);
-$myTeams = tm_fetch_all($myTeamsStmt);
 // ── End Feature 8 ─────────────────────────────────────────────────────────────
 
 // ── Notifications (shared partial: runs cron + builds bell HTML) ──────────────
@@ -276,14 +265,14 @@ function statusLabel(string $s): string {
 .status-pill { display: inline-block; border-radius: 50px; font-size: 11px; font-weight: 700; padding: 3px 10px; white-space: nowrap; }
 .status-pending     { background: #f3f4f6; color: #6b7280; }
 .status-in-progress { background: #dbeafe; color: #1d4ed8; }
-.status-review      { background: #fef9c3; color: #92400e; }
+.status-review      { background: #e0e7ff; color: #3730a3; }
 .status-done        { background: #dcfce7; color: #15803d; }
-.status-done-late   { background: #fef3c7; color: #b45309; }
+.status-done-late   { background: #f3f4f6; color: #374151; }
 .status-cancelled   { background: #fee2e2; color: #b91c1c; }
 
 .pri-pill { display: inline-block; border-radius: 50px; font-size: 11px; font-weight: 700; padding: 3px 10px; }
 .pri-high { background: #fee2e2; color: #b91c1c; }
-.pri-mid  { background: #fef9c3; color: #78350f; }
+.pri-mid  { background: #e0e7ff; color: #3730a3; }
 .pri-low  { background: #dcfce7; color: #15803d; }
 
 .empty-state { padding: 3rem 2rem; text-align: center; }
@@ -329,42 +318,7 @@ function statusLabel(string $s): string {
 .color-swatch.selected {
     border-color: var(--black); transform: scale(1.15);
     box-shadow: 0 0 0 2px var(--white), 0 0 0 4px var(--black);
-}
-/* ── Team membership panel ───────────────────────────────── */
-.teams-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: .75rem;
-    padding: 1rem 1.25rem;
-}
-.team-chip {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    border: 1px solid var(--gray-100);
-    border-radius: 10px;
-    background: var(--bg);
-    text-decoration: none;
-    color: var(--black);
-    transition: box-shadow .15s, background .15s;
-}
-.team-chip:hover { background: var(--white); box-shadow: var(--shadow-sm); }
-.team-chip-icon {
-    width: 34px; height: 34px; border-radius: 9px;
-    background: #f0fdf4; color: #15803d;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 15px; flex-shrink: 0;
-}
-.team-chip-icon.manager { background: #fef9c3; color: #92400e; }
-.team-chip-name { font-size: 13px; font-weight: 700; line-height: 1.2; }
-.team-chip-meta { font-size: 11px; color: var(--gray-500); margin-top: 1px; }
-.team-chip-badge {
-    margin-left: auto; font-size: 10px; font-weight: 700;
-    background: #fef9c3; color: #92400e;
-    border-radius: 50px; padding: 2px 8px; flex-shrink: 0;
-}
-    </style>
+}    </style>
 </head>
 <body>
 
@@ -515,38 +469,6 @@ function statusLabel(string $s): string {
         <?php endif; ?>
     </div><!-- /.panel-card (upcoming tasks) -->
 
-    <!-- Feature 8: My Teams panel -->
-    <?php if (!empty($myTeams)): ?>
-    <div class="panel-card" style="margin-top:1.5rem;">
-        <div class="panel-header">
-            <span class="panel-title"><i class="fa-solid fa-people-group" style="margin-right:6px;color:#15803d;"></i>My Teams</span>
-            <?php if (tm_is_org_admin()): ?>
-            <a href="TM_UserList.php#teams" class="panel-link">Manage →</a>
-            <?php endif; ?>
-        </div>
-        <div class="teams-grid">
-            <?php foreach ($myTeams as $tm_team):
-                $isManager   = (int)($tm_team['is_manager']   ?? $tm_team['IS_MANAGER']   ?? 0) === 1;
-                $teamId      = (int)($tm_team['team_id']      ?? $tm_team['TEAM_ID']      ?? 0);
-                $teamName    =       $tm_team['team_name']    ?? $tm_team['TEAM_NAME']    ?? '';
-                $memberCount = (int)($tm_team['member_count'] ?? $tm_team['MEMBER_COUNT'] ?? 0);
-            ?>
-            <a href="TM_Tasks.php?team=<?= $teamId ?>" class="team-chip" title="View <?= htmlspecialchars($teamName) ?> tasks">
-                <div class="team-chip-icon <?= $isManager ? 'manager' : '' ?>">
-                    <i class="fa-solid <?= $isManager ? 'fa-star' : 'fa-people-group' ?>"></i>
-                </div>
-                <div style="min-width:0;">
-                    <div class="team-chip-name"><?= htmlspecialchars($teamName) ?></div>
-                    <div class="team-chip-meta"><?= $memberCount ?> member<?= $memberCount !== 1 ? 's' : '' ?></div>
-                </div>
-                <?php if ($isManager): ?>
-                <span class="team-chip-badge">Manager</span>
-                <?php endif; ?>
-            </a>
-            <?php endforeach; ?>
-        </div>
-    </div>
-    <?php endif; ?>
 
 </div><!-- /.dash-page -->
 

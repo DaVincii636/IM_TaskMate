@@ -16,10 +16,10 @@ $filterCat = trim($_GET['cat']  ?? '');
 $filterPri = trim($_GET['pri']  ?? '');
 $dateFrom  = trim($_GET['from']  ?? '');
 $dateTo    = trim($_GET['to']   ?? '');
-$filterTeam = (int)($_GET['team'] ?? 0); // Feature 8: team filter
 
 $extraWhere  = '';
-$extraParams = [$uid, $uid]; // :p1 = user_id (owned), :p2 = user_id (assigned_to)
+$oid         = tm_org_id();
+$extraParams = [$uid, $uid, $oid]; // :p1 = user_id (owned), :p2 = user_id (assigned_to), :p3 = org_id (org-wide)
 
 if ($search !== '') {
     $extraWhere .= " AND UPPER(task_name) LIKE UPPER(:p" . (count($extraParams)+1) . ")";
@@ -40,14 +40,6 @@ if ($dateFrom !== '') {
 if ($dateTo !== '') {
     $extraWhere .= " AND due_date <= TO_DATE(:p" . (count($extraParams)+1) . ",'YYYY-MM-DD')";
     $extraParams[] = $dateTo;
-}
-// Feature 8: team filter — restrict to tasks owned by OR assigned to members of the selected team
-if ($filterTeam > 0) {
-    $pIdx = count($extraParams) + 1;
-    $extraWhere .= " AND (user_id IN (SELECT user_id FROM TM_TeamMembers WHERE team_id = :p{$pIdx})"
-                 . " OR assigned_to IN (SELECT user_id FROM TM_TeamMembers WHERE team_id = :p" . ($pIdx + 1) . "))";
-    $extraParams[] = $filterTeam;
-    $extraParams[] = $filterTeam;
 }
 
 // ── Sort params ────────────────────────────────────────────────────────────────
@@ -73,7 +65,7 @@ if ($view === 'done') {
                 TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p2) AND status IN ('done','done_late')
+         WHERE (user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3)) AND status IN ('done','done_late')
          $extraWhere
          ORDER BY $sortSql",
         $extraParams
@@ -84,7 +76,7 @@ if ($view === 'done') {
                 TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p2)
+         WHERE (user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3))
            AND due_date < SYSDATE
            AND status NOT IN ('done','cancelled')
          $extraWhere
@@ -92,13 +84,13 @@ if ($view === 'done') {
         $extraParams
     );
 } else {
-    // all — Feature 10: include tasks delegated to this user via assigned_to
+    // all — include org-wide tasks + tasks delegated to this user via assigned_to
     $stmt = tm_exec(
         "SELECT task_id, task_name, TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
                 TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
                 category, custom_category, priority, color, notes, status
          FROM TM_Tasks
-         WHERE (user_id = :p1 OR assigned_to = :p2)
+         WHERE (user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3))
          $extraWhere
          ORDER BY $sortSql",
         $extraParams
@@ -152,7 +144,7 @@ function priorityClass(string $p): string {
     return match($p) { 'high'=>'pri-high','mid'=>'pri-mid','low'=>'pri-low', default=>'pri-mid' };
 }
 function buildUrl(array $overrides = []): string {
-    global $view, $search, $filterCat, $filterPri, $dateFrom, $dateTo, $filterTeam, $sortCol, $sortDir;
+    global $view, $search, $filterCat, $filterPri, $dateFrom, $dateTo, $sortCol, $sortDir;
     $params = array_filter([
         'view' => $overrides['view'] ?? $view,
         'q'    => $overrides['q']    ?? $search,
@@ -160,7 +152,6 @@ function buildUrl(array $overrides = []): string {
         'pri'  => $overrides['pri']  ?? $filterPri,
         'from' => $overrides['from'] ?? $dateFrom,
         'to'   => $overrides['to']   ?? $dateTo,
-        'team' => $overrides['team'] ?? ($filterTeam > 0 ? $filterTeam : ''),
         'sort' => $overrides['sort'] ?? $sortCol,
         'dir'  => $overrides['dir']  ?? $sortDir,
     ], fn($v) => $v !== '' && $v !== 'due_date' || isset($overrides['sort']));
@@ -176,7 +167,6 @@ function buildUrl(array $overrides = []): string {
         'pri'  => $overrides['pri']  ?? $filterPri,
         'from' => $overrides['from'] ?? $dateFrom,
         'to'   => $overrides['to']   ?? $dateTo,
-        'team' => $overrides['team'] ?? ($filterTeam > 0 ? $filterTeam : ''),
         'sort' => $overrides['sort'] ?? ($sortCol !== 'due_date' ? $sortCol : ''),
         'dir'  => $overrides['dir']  ?? ($sortDir !== 'asc'     ? $sortDir : ''),
     ], fn($v) => $v !== '');
@@ -192,15 +182,6 @@ function isOverdue(string $dueDate, string $status): bool {
     return $dueDate < date('Y-m-d') && !in_array($status, ['done','done_late','cancelled']);
 }
 
-// ── Feature 8: Load teams for the filter dropdown ────────────────────────────
-$_teamStmt = tm_exec(
-    "SELECT t.team_id, t.team_name FROM TM_Teams t
-     JOIN TM_TeamMembers m ON m.team_id = t.team_id
-     WHERE m.user_id = :p1
-     ORDER BY t.team_name",
-    [$uid]
-);
-$myTeams = tm_fetch_all($_teamStmt);
 
 // ── Notifications ─────────────────────────────────────────────────────────────
 require_once 'TM_PHP/TM_NavNotif.php';
@@ -289,9 +270,9 @@ table.task-table tbody tr.row-overdue td:first-child {
 }
 .status-pending     { background: #f3f4f6; color: #6b7280; }
 .status-in-progress { background: #dbeafe; color: #1d4ed8; }
-.status-review      { background: #fef9c3; color: #92400e; }
+.status-review      { background: #e0e7ff; color: #3730a3; }
 .status-done        { background: #dcfce7; color: #15803d; }
-.status-done-late   { background: #fef3c7; color: #b45309; }
+.status-done-late   { background: #f3f4f6; color: #374151; }
 .status-cancelled   { background: #fee2e2; color: #b91c1c; }
 
 /* ── Priority pills ──────────────────────────  */
@@ -300,7 +281,7 @@ table.task-table tbody tr.row-overdue td:first-child {
     font-size: 11px; font-weight: 700; padding: 3px 10px;
 }
 .pri-high { background: #fee2e2; color: #b91c1c; }
-.pri-mid  { background: #fef9c3; color: #78350f; }
+.pri-mid  { background: #e0e7ff; color: #3730a3; }
 .pri-low  { background: #dcfce7; color: #15803d; }
 
 /* ── Color dot ───────────────────────────────  */
@@ -549,18 +530,6 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
                 <option value="mid"  <?= $filterPri==='mid' ?'selected':'' ?>>Mid</option>
                 <option value="low"  <?= $filterPri==='low' ?'selected':'' ?>>Low</option>
             </select>
-            <?php if (!empty($myTeams)): ?>
-            <select name="team" class="filter-select" title="Filter by team">
-                <option value="">All Teams</option>
-                <?php foreach ($myTeams as $t):
-                    $tId = (int)($t['team_id'] ?? 0);
-                ?>
-                <option value="<?= $tId ?>" <?= $filterTeam===$tId?'selected':'' ?>>
-                    &#127991; <?= htmlspecialchars($t['team_name'] ?? '') ?>
-                </option>
-                <?php endforeach; ?>
-            </select>
-            <?php endif; ?>
             <input type="date" name="from" class="filter-select"
                    value="<?= htmlspecialchars($dateFrom) ?>" title="Due from"/>
             <input type="date" name="to"   class="filter-select"
@@ -568,7 +537,7 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
             <button type="submit" class="btn-filter-apply" id="filterSubmitBtn" style="display:none;">
                 <i class="fa-solid fa-filter"></i> Filter
             </button>
-            <?php if ($search || $filterCat || $filterPri || $dateFrom || $dateTo || $filterTeam): ?>
+            <?php if ($search || $filterCat || $filterPri || $dateFrom || $dateTo): ?>
             <a href="TM_Tasks.php?view=<?= $view ?>" class="btn-filter-clear">Clear</a>
             <?php endif; ?>
         </div>
@@ -850,11 +819,15 @@ function showUndoToast(msg, taskId, taskName) {
     });
 
     // Auto-dismiss after 8 seconds (longer than normal to allow undo)
+    // After undo window closes, reload so the done task is removed from the list
     var timer = setTimeout(function() {
         if (!dismissed) {
             dismissed = true;
             toast.classList.remove('show');
-            setTimeout(function(){ if(toast.parentNode) toast.remove(); }, 400);
+            setTimeout(function(){
+                if(toast.parentNode) toast.remove();
+                location.reload();
+            }, 400);
         }
     }, 8000);
 

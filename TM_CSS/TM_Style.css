@@ -631,16 +631,20 @@ tbody td {
 .modal-card {
     background: var(--white);
     border-radius: var(--radius-lg);
-    width: 460px;
+    width: 420px;
     max-width: 95vw;
-    max-height: 90vh;
-    height: 90vh;
+    max-height: 85vh;
     display: flex;
     flex-direction: column;
     box-shadow: var(--shadow-xl);
     transform: translateY(24px) scale(0.97);
     transition: transform 0.25s ease;
     overflow: hidden;
+}
+
+/* Compact variant for simple admin modals (org, team, transfer) */
+.modal-card.modal-sm {
+    width: 360px;
 }
 
 .modal-overlay.active .modal-card {

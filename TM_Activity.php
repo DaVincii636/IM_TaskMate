@@ -7,13 +7,13 @@ require_once 'TM_PHP/TM_DB.php';
 tm_require_login();
 
 $uid       = tm_uid();
+$oid       = tm_org_id();
 $firstName = tm_uname();
 $flash     = tm_get_flash();
 
 // ── Filters ───────────────────────────────────────────────────────────────────
 $filterAction = '';                              // action dropdown removed
 $filterType   = trim($_GET['type']  ?? '');
-$filterTeam   = (int)($_GET['team'] ?? 0);       // Feature 8: team filter
 $sortOrder    = trim($_GET['sort']  ?? 'desc');  // 'desc' = newest first, 'asc' = oldest first
 $page         = max(1, (int)($_GET['page'] ?? 1));
 $perPage      = 25;
@@ -22,35 +22,19 @@ $allowed_types = ['task', 'user'];
 $sortOrder     = in_array($sortOrder, ['asc', 'desc']) ? $sortOrder : 'desc';
 if (!in_array($filterType, $allowed_types)) $filterType = '';
 
-// ── Feature 8: Fetch user's teams for the filter dropdown ────────────────────
-$myTeamsStmt = tm_exec(
-    "SELECT t.team_id, t.team_name FROM TM_Teams t
-     JOIN TM_TeamMembers tm ON tm.team_id = t.team_id
-     WHERE tm.user_id = :p1 ORDER BY t.team_name ASC",
-    [$uid]
-);
-$myTeamsForFilter = tm_fetch_all($myTeamsStmt);
 
 // ── Build WHERE clause ────────────────────────────────────────────────────────
-$where  = 'WHERE user_id = :p1';
-$params = [$uid];
+// Show own activity + activity on org-wide tasks created by any org member
+$where  = 'WHERE (a.user_id = :p1 OR a.entity_id IN (SELECT task_id FROM TM_Tasks WHERE is_org_task = 1 AND org_id = :p2))';
+$params = [$uid, $oid];
 
 if ($filterType !== '') {
     $params[] = $filterType;
-    $where   .= ' AND entity_type = :p' . count($params);
-}
-
-// Feature 8: filter to activity involving tasks in a specific team
-if ($filterTeam > 0) {
-    $params[] = $filterTeam;
-    $where   .= " AND entity_id IN (
-        SELECT task_id FROM TM_Tasks
-        WHERE team_id = :p" . count($params) . "
-    )";
+    $where   .= ' AND a.entity_type = :p' . count($params);
 }
 
 // ── Total count for pagination ────────────────────────────────────────────────
-$cntRow    = tm_fetch_one(tm_exec("SELECT COUNT(*) AS n FROM TM_AuditLog $where", $params));
+$cntRow    = tm_fetch_one(tm_exec("SELECT COUNT(*) AS n FROM TM_AuditLog a $where", $params));
 $totalRows = (int)($cntRow['N'] ?? $cntRow['n'] ?? 0);
 $totalPages = max(1, (int)ceil($totalRows / $perPage));
 $page       = min($page, $totalPages);
@@ -98,14 +82,12 @@ foreach ($statsRows as $s) {
 
 // ── URL builder ───────────────────────────────────────────────────────────────
 function buildActivityUrl(array $ov = []): string {
-    global $filterType, $filterTeam, $sortOrder, $page;
+    global $filterType, $sortOrder, $page;
     $pg   = (int)(array_key_exists('page', $ov) ? $ov['page'] : $page);
     $type = array_key_exists('type', $ov) ? $ov['type'] : $filterType;
-    $team = (int)(array_key_exists('team', $ov) ? $ov['team'] : $filterTeam);
     $sort = array_key_exists('sort', $ov) ? $ov['sort'] : $sortOrder;
     $p = array_filter([
         'type' => $type,
-        'team' => $team > 0 ? $team : '',
         'sort' => ($sort !== 'desc' ? $sort : ''), // omit default
         'page' => $pg,
     ], fn($v) => $v !== '' && $v !== 0 && $v !== 1);
@@ -221,7 +203,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
 .ic-create { background: #dcfce7; color: #15803d; }
 .ic-edit   { background: #dbeafe; color: #1d4ed8; }
 .ic-delete { background: #fee2e2; color: #b91c1c; }
-.ic-status { background: #fef9c3; color: #92400e; }
+.ic-status { background: #e0e7ff; color: #3730a3; }
 
 /* ── Feed body ───────────────────────────────── */
 .feed-body   { flex: 1; min-width: 0; }
@@ -376,17 +358,6 @@ require_once 'TM_PHP/TM_NavNotif.php';
             <option value="task" <?= $filterType === 'task' ? 'selected' : '' ?>>Tasks</option>
             <option value="user" <?= $filterType === 'user' ? 'selected' : '' ?>>Users</option>
         </select>
-        <?php if (!empty($myTeamsForFilter)): ?>
-        <select name="team" class="filter-select">
-            <option value="">All Teams</option>
-            <?php foreach ($myTeamsForFilter as $tf):
-                $tfId   = (int)($tf['TEAM_ID']   ?? $tf['team_id']   ?? 0);
-                $tfName = $tf['TEAM_NAME'] ?? $tf['team_name'] ?? '';
-            ?>
-            <option value="<?= $tfId ?>" <?= $filterTeam === $tfId ? 'selected' : '' ?>><?= htmlspecialchars($tfName) ?></option>
-            <?php endforeach; ?>
-        </select>
-        <?php endif; ?>
         <select name="sort" class="filter-select">
             <option value="desc" <?= $sortOrder === 'desc' ? 'selected' : '' ?>>Newest First</option>
             <option value="asc"  <?= $sortOrder === 'asc'  ? 'selected' : '' ?>>Oldest First</option>
@@ -394,7 +365,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
         <button type="submit" class="btn-filter-apply">
             <i class="fa-solid fa-filter"></i> Apply
         </button>
-        <?php if ($filterType !== '' || $filterTeam > 0 || $sortOrder !== 'desc'): ?>
+        <?php if ($filterType !== '' || $sortOrder !== 'desc'): ?>
         <a href="TM_Activity.php" class="btn-filter-clear">Clear</a>
         <?php endif; ?>
     </form>
