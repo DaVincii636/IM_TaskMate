@@ -1,0 +1,225 @@
+<?php
+// =============================================
+// TM_TeamActions.php — Feature 8: Team CRUD
+// Handles: create_team, edit_team, delete_team,
+//          add_member, remove_member, set_manager
+// Access: admin or org_admin only.
+// =============================================
+require_once 'TM_Session.php';
+require_once 'TM_DB.php';
+
+tm_require_role('moderator'); // blocks plain users; admins/org_admins pass
+
+$action   = $_POST['action'] ?? $_GET['action'] ?? '';
+$uid      = tm_uid();
+$oid      = tm_org_id();
+$is_admin = tm_is_admin();
+$is_org_admin = tm_is_org_admin(); // true for both admin and org_admin
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function team_org_check(int $teamId, int $orgId, bool $isAdmin): bool {
+    // Returns true if the team belongs to the given org (or caller is system admin).
+    if ($isAdmin) return true;
+    $row = tm_fetch_one(tm_exec(
+        'SELECT org_id FROM TM_Teams WHERE team_id = :p1', [$teamId]
+    ));
+    return $row && (int)$row['org_id'] === $orgId;
+}
+
+switch ($action) {
+
+    // ── CREATE TEAM ───────────────────────────────────────────────────────────
+    case 'create_team':
+        if (!$is_org_admin) {
+            tm_flash('error', 'Insufficient permissions.'); break;
+        }
+        $name = trim($_POST['team_name'] ?? '');
+        $desc = trim($_POST['description'] ?? '');
+        if (!$name) {
+            tm_flash('error', 'Team name is required.'); break;
+        }
+
+        // Check uniqueness within org
+        $chk = tm_exec(
+            'SELECT COUNT(*) FROM TM_Teams WHERE org_id = :p1 AND UPPER(team_name) = UPPER(:p2)',
+            [$oid, $name]
+        );
+        if ((int)tm_scalar($chk) > 0) {
+            tm_flash('error', "A team named \"$name\" already exists in your organization."); break;
+        }
+
+        tm_exec(
+            'INSERT INTO TM_Teams (org_id, team_name, team_desc, created_by)
+             VALUES (:p1, :p2, :p3, :p4)',
+            [$oid, $name, $desc ?: null, $uid]
+        );
+
+        // Get new team_id
+        $newRow = tm_fetch_one(tm_exec(
+            'SELECT TM_Teams_seq.CURRVAL AS new_id FROM DUAL'
+        ));
+        $newId = (int)($newRow['new_id'] ?? 0);
+
+        // Auto-add creator as manager
+        if ($newId > 0) {
+            tm_exec(
+                'INSERT INTO TM_TeamMembers (team_id, user_id, is_manager)
+                 VALUES (:p1, :p2, 1)',
+                [$newId, $uid]
+            );
+        }
+
+        tm_audit($uid, 'create', 'user', $newId, $name, '', "team_created:org_id:{$oid}");
+        tm_flash('success', "Team \"$name\" created.");
+        break;
+
+    // ── EDIT TEAM ─────────────────────────────────────────────────────────────
+    case 'edit_team':
+        if (!$is_org_admin) {
+            tm_flash('error', 'Insufficient permissions.'); break;
+        }
+        $teamId = (int)($_POST['team_id'] ?? 0);
+        $name   = trim($_POST['team_name'] ?? '');
+        $desc   = trim($_POST['description'] ?? '');
+
+        if ($teamId <= 0 || !$name) {
+            tm_flash('error', 'Team name is required.'); break;
+        }
+        if (!team_org_check($teamId, $oid, $is_admin)) {
+            tm_flash('error', 'Team not found.'); break;
+        }
+
+        tm_exec(
+            'UPDATE TM_Teams SET team_name = :p1, team_desc = :p2 WHERE team_id = :p3',
+            [$name, $desc ?: null, $teamId]
+        );
+        tm_audit($uid, 'edit', 'user', $teamId, $name, '', 'team_updated');
+        tm_flash('success', "Team \"$name\" updated.");
+        break;
+
+    // ── DELETE TEAM ───────────────────────────────────────────────────────────
+    case 'delete_team':
+        if (!$is_org_admin) {
+            tm_flash('error', 'Insufficient permissions.'); break;
+        }
+        $teamId = (int)($_POST['team_id'] ?? 0);
+        if ($teamId <= 0 || !team_org_check($teamId, $oid, $is_admin)) {
+            tm_flash('error', 'Team not found.'); break;
+        }
+
+        $row = tm_fetch_one(tm_exec(
+            'SELECT team_name FROM TM_Teams WHERE team_id = :p1', [$teamId]
+        ));
+        $tname = $row['team_name'] ?? "team #{$teamId}";
+
+        // CASCADE on TM_TeamMembers handles member rows automatically.
+        tm_exec('DELETE FROM TM_Teams WHERE team_id = :p1', [$teamId]);
+        tm_audit($uid, 'delete', 'user', $teamId, $tname, '', 'team_deleted');
+        tm_flash('success', "Team \"$tname\" deleted.");
+        break;
+
+    // ── ADD MEMBER ────────────────────────────────────────────────────────────
+    case 'add_member':
+        if (!$is_org_admin) {
+            tm_flash('error', 'Insufficient permissions.'); break;
+        }
+        $teamId    = (int)($_POST['team_id']    ?? 0);
+        $memberId  = (int)($_POST['member_user_id'] ?? 0);
+        $isManager = (int)($_POST['is_manager'] ?? 0);
+
+        if ($teamId <= 0 || $memberId <= 0) {
+            tm_flash('error', 'Invalid team or user.'); break;
+        }
+        if (!team_org_check($teamId, $oid, $is_admin)) {
+            tm_flash('error', 'Team not found.'); break;
+        }
+
+        // Verify the target user is in the same org (org_admins cannot add cross-org users)
+        if (!$is_admin) {
+            $uRow = tm_fetch_one(tm_exec(
+                'SELECT org_id FROM TM_Users WHERE user_id = :p1', [$memberId]
+            ));
+            if (!$uRow || (int)$uRow['org_id'] !== $oid) {
+                tm_flash('error', 'User does not belong to your organization.'); break;
+            }
+        }
+
+        // Check for existing membership
+        $chk = tm_exec(
+            'SELECT COUNT(*) FROM TM_TeamMembers WHERE team_id = :p1 AND user_id = :p2',
+            [$teamId, $memberId]
+        );
+        if ((int)tm_scalar($chk) > 0) {
+            tm_flash('error', 'User is already a member of this team.'); break;
+        }
+
+        tm_exec(
+            'INSERT INTO TM_TeamMembers (team_id, user_id, is_manager)
+             VALUES (:p1, :p2, :p3)',
+            [$teamId, $memberId, $isManager ? 1 : 0]
+        );
+
+        $uRow  = tm_fetch_one(tm_exec('SELECT first_name, last_name FROM TM_Users WHERE user_id = :p1', [$memberId]));
+        $tRow  = tm_fetch_one(tm_exec('SELECT team_name FROM TM_Teams WHERE team_id = :p1', [$teamId]));
+        $uname = trim(($uRow['first_name'] ?? '') . ' ' . ($uRow['last_name'] ?? ''));
+        $tname = $tRow['team_name'] ?? '';
+
+        tm_audit($uid, 'edit', 'user', $memberId, $uname, '', "added_to_team:{$tname}");
+        tm_flash('success', "$uname added to team.");
+        break;
+
+    // ── REMOVE MEMBER ─────────────────────────────────────────────────────────
+    case 'remove_member':
+        if (!$is_org_admin) {
+            tm_flash('error', 'Insufficient permissions.'); break;
+        }
+        $teamId   = (int)($_POST['team_id']   ?? 0);
+        $memberId = (int)($_POST['user_id']   ?? 0);
+
+        if ($teamId <= 0 || $memberId <= 0) {
+            tm_flash('error', 'Invalid team or user.'); break;
+        }
+        if (!team_org_check($teamId, $oid, $is_admin)) {
+            tm_flash('error', 'Team not found.'); break;
+        }
+
+        $uRow  = tm_fetch_one(tm_exec('SELECT first_name, last_name FROM TM_Users WHERE user_id = :p1', [$memberId]));
+        $tRow  = tm_fetch_one(tm_exec('SELECT team_name FROM TM_Teams WHERE team_id = :p1', [$teamId]));
+        $uname = trim(($uRow['first_name'] ?? '') . ' ' . ($uRow['last_name'] ?? ''));
+        $tname = $tRow['team_name'] ?? '';
+
+        tm_exec(
+            'DELETE FROM TM_TeamMembers WHERE team_id = :p1 AND user_id = :p2',
+            [$teamId, $memberId]
+        );
+        tm_audit($uid, 'edit', 'user', $memberId, $uname, "team:{$tname}", 'removed_from_team');
+        tm_flash('success', "$uname removed from team.");
+        break;
+
+    // ── TOGGLE MANAGER FLAG ───────────────────────────────────────────────────
+    case 'set_manager':
+        if (!$is_org_admin) {
+            tm_flash('error', 'Insufficient permissions.'); break;
+        }
+        $teamId    = (int)($_POST['team_id']    ?? 0);
+        $memberId  = (int)($_POST['user_id']    ?? 0);
+        $isManager = (int)($_POST['is_manager'] ?? 0);
+
+        if ($teamId <= 0 || $memberId <= 0) {
+            tm_flash('error', 'Invalid team or user.'); break;
+        }
+
+        tm_exec(
+            'UPDATE TM_TeamMembers SET is_manager = :p1
+             WHERE team_id = :p2 AND user_id = :p3',
+            [$isManager ? 1 : 0, $teamId, $memberId]
+        );
+        tm_flash('success', $isManager ? 'User promoted to team manager.' : 'Manager flag removed.');
+        break;
+
+    default:
+        tm_flash('error', "Unknown action: '{$action}'.");
+        break;
+}
+
+header('Location: ../TM_UserList.php#teams'); exit;

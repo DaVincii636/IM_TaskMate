@@ -9,6 +9,44 @@ tm_require_login();
 $uid       = tm_uid();
 $firstName = tm_uname();
 $flash     = tm_get_flash();
+$filterTeam = (int)($_GET['team'] ?? 0); // Feature 8: analytics team filter
+
+// ── Feature 8: Load teams the current user belongs to (for filter) ───────────
+$_tstmt  = tm_exec(
+    "SELECT t.team_id, t.team_name FROM TM_Teams t
+     JOIN TM_TeamMembers m ON m.team_id = t.team_id
+     WHERE m.user_id = :p1
+     ORDER BY t.team_name",
+    [$uid]
+);
+$myTeams = tm_fetch_all($_tstmt);
+
+// If a team filter is active, override $uid context for queries:
+// We show analytics for tasks owned by all members of the selected team.
+// We keep a separate $scopeUserIds array for use in analytics queries.
+$scopeWhere = 'user_id = :uid_scope';
+$scopeParams = [$uid]; // default: self
+if ($filterTeam > 0) {
+    // Verify user belongs to this team (security: users can only filter by their own teams)
+    $chk = tm_exec(
+        'SELECT COUNT(*) FROM TM_TeamMembers WHERE team_id = :p1 AND user_id = :p2',
+        [$filterTeam, $uid]
+    );
+    if ((int)tm_scalar($chk) > 0) {
+        // Get all member user_ids as a comma-separated list for IN clause
+        $mStmt = tm_exec(
+            'SELECT user_id FROM TM_TeamMembers WHERE team_id = :p1', [$filterTeam]
+        );
+        $memberIds = array_column(tm_fetch_all($mStmt), 'user_id');
+        if (!empty($memberIds)) {
+            $inList = implode(',', array_map('intval', $memberIds));
+            $scopeWhere  = "user_id IN ($inList)";
+            $scopeParams = []; // IN list is inline, no bind params needed
+        }
+    } else {
+        $filterTeam = 0; // reset invalid filter
+    }
+}
 
 // ── Notifications (bell) ──────────────────────────────────────────────────────
 require_once 'TM_PHP/TM_NavNotif.php';
@@ -318,6 +356,7 @@ $chartDue       = array_column(array_values($weeks), 'total_due');
     </style>
 </head>
 <body>
+<!-- Feature 8 team filter injected -->
 
 <nav class="navbar">
     <div class="navbar-logo">Task<span>Mate</span></div>

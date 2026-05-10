@@ -5,8 +5,9 @@ tm_require_role('moderator');
 
 $flash     = tm_get_flash();
 $userName  = tm_uname();
-$is_admin  = tm_is_admin();
-$uid       = tm_uid();
+$is_admin     = tm_is_admin();
+$is_org_admin = tm_is_org_admin(); // Feature 8: true for admin and org_admin
+$uid          = tm_uid();
 $oid       = tm_org_id();
 
 // ── Feature 6: Users — system admins see all, org_admins see own org ─────────
@@ -63,6 +64,48 @@ if ($is_admin) {
         ];
     }, $orgs));
 }
+
+// ── Feature 8: Load teams for the Teams tab ───────────────────────────────────
+$teams = [];
+if ($is_admin) {
+    $teamStmt = tm_exec(
+        "SELECT t.team_id, t.team_name, t.team_desc, t.org_id,
+                o.org_name,
+                u.first_name || ' ' || u.last_name AS created_by_name,
+                TO_CHAR(t.created_at,'YYYY-MM-DD') AS created_at,
+                (SELECT COUNT(*) FROM TM_TeamMembers m WHERE m.team_id = t.team_id) AS member_count
+         FROM TM_Teams t
+         JOIN TM_Organizations o ON o.org_id = t.org_id
+         JOIN TM_Users u ON u.user_id = t.created_by
+         ORDER BY t.org_id, t.team_id"
+    );
+} else {
+    $teamStmt = tm_exec(
+        "SELECT t.team_id, t.team_name, t.team_desc, t.org_id,
+                o.org_name,
+                u.first_name || ' ' || u.last_name AS created_by_name,
+                TO_CHAR(t.created_at,'YYYY-MM-DD') AS created_at,
+                (SELECT COUNT(*) FROM TM_TeamMembers m WHERE m.team_id = t.team_id) AS member_count
+         FROM TM_Teams t
+         JOIN TM_Organizations o ON o.org_id = t.org_id
+         JOIN TM_Users u ON u.user_id = t.created_by
+         WHERE t.org_id = :p1
+         ORDER BY t.team_id",
+        [$oid]
+    );
+}
+$teams = array_map(function($t) {
+    return [
+        'team_id'       => (int)($t['team_id']       ?? $t['TEAM_ID']       ?? 0),
+        'team_name'     => $t['team_name']     ?? $t['TEAM_NAME']     ?? '',
+        'description'   => $t['team_desc']     ?? $t['TEAM_DESC']     ?? '',
+        'org_id'        => (int)($t['org_id']        ?? $t['ORG_ID']        ?? 0),
+        'org_name'      => $t['org_name']      ?? $t['ORG_NAME']      ?? '',
+        'created_by_name' => $t['created_by_name'] ?? $t['CREATED_BY_NAME'] ?? '',
+        'created_at'    => $t['created_at']    ?? $t['CREATED_AT']    ?? '',
+        'member_count'  => (int)($t['member_count']  ?? $t['MEMBER_COUNT']  ?? 0),
+    ];
+}, tm_fetch_all($teamStmt));
 
 // ── Notifications ─────────────────────────────────────────────────────────────
 require_once 'TM_PHP/TM_NavNotif.php';
@@ -161,6 +204,19 @@ require_once 'TM_PHP/TM_NavNotif.php';
                         background:linear-gradient(135deg,#111,#333);color:#fff;border:none;
                         cursor:pointer;font-family:'Poppins',sans-serif;transition:all .2s;}
         .btn-save-modal:hover{opacity:.9;transform:translateY(-1px);}
+
+        /* ── Feature 8: Team cards ── */
+        .team-card{background:var(--white);border:1px solid var(--border,#e5e7eb);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:0;}
+        .team-card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;gap:8px;}
+        .team-card-name{font-size:14px;font-weight:700;color:var(--black);}
+        .team-card-org{font-size:11px;color:var(--gray-400);margin-top:2px;}
+        .team-member-list{display:flex;flex-direction:column;gap:6px;}
+        .team-member-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--bg,#f9fafb);}
+        .team-member-row:last-child{border-bottom:none;}
+        .team-member-avatar{width:28px;height:28px;border-radius:50%;background:var(--black);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;}
+        .team-member-info{display:flex;align-items:center;gap:6px;flex:1;min-width:0;}
+        .team-member-name{font-size:12px;font-weight:600;color:var(--black);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .team-badge-manager{font-size:10px;font-weight:700;background:#fef9c3;color:#92400e;border-radius:50px;padding:1px 7px;flex-shrink:0;}
     </style>
 </head>
 <body>
@@ -289,11 +345,14 @@ require_once 'TM_PHP/TM_NavNotif.php';
     </div>
     <?php endif; ?>
 
-    <!-- ── FEATURE 6: Tab navigation (Users / Organizations) ── -->
-    <?php if ($is_admin): ?>
+    <!-- ── FEATURE 6 + 8: Tab navigation (Users / Organizations / Teams) ── -->
+    <?php if ($is_admin || $is_org_admin): ?>
     <div class="admin-tabs">
-        <button class="admin-tab active" onclick="switchTab('tab-users', this)">👥 Users</button>
-        <button class="admin-tab" onclick="switchTab('tab-orgs', this)">🏢 Organizations</button>
+        <button class="admin-tab active" onclick="switchTab('tab-users', this)">&#128101; Users</button>
+        <?php if ($is_admin): ?>
+        <button class="admin-tab" onclick="switchTab('tab-orgs', this)">&#127970; Organizations</button>
+        <?php endif; ?>
+        <button class="admin-tab" onclick="switchTab('tab-teams', this)">&#127991; Teams</button>
     </div>
     <?php endif; ?>
 
@@ -542,6 +601,145 @@ require_once 'TM_PHP/TM_NavNotif.php';
 
     </div><!-- /tab-panel#tab-orgs -->
     <?php endif; ?>
+    <!-- ══════════════════════════════════════════
+         FEATURE 8 — TEAMS TAB
+         ══════════════════════════════════════════ -->
+    <?php if ($is_admin || $is_org_admin): ?>
+    <div class="tab-panel" id="tab-teams">
+
+        <!-- Header row -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+            <div>
+                <h2 style="margin:0;font-size:1rem;font-weight:700;">Teams &amp; Departments</h2>
+                <p style="margin:4px 0 0;font-size:13px;color:var(--gray-500);">
+                    Organize users into teams to filter tasks and analytics by group.
+                </p>
+            </div>
+            <button class="btn-add-user" onclick="openAdminModal('addTeamModal')">
+                + New Team
+            </button>
+        </div>
+
+        <?php if (empty($teams)): ?>
+        <div style="padding:3rem;text-align:center;color:var(--gray-400);">
+            <i class="fa-solid fa-people-group" style="font-size:2rem;margin-bottom:.75rem;display:block;"></i>
+            <strong style="display:block;margin-bottom:.25rem;">No teams yet</strong>
+            <span style="font-size:13px;">Create a team to start grouping users and filtering tasks by department.</span>
+        </div>
+        <?php else: ?>
+
+        <!-- Teams grid -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;">
+        <?php foreach ($teams as $team):
+            // Load members for this team
+            $mStmt = tm_exec(
+                "SELECT u.user_id, u.first_name, u.last_name, u.email, u.role, m.is_manager
+                 FROM TM_TeamMembers m
+                 JOIN TM_Users u ON u.user_id = m.user_id
+                 WHERE m.team_id = :p1
+                 ORDER BY m.is_manager DESC, u.first_name",
+                [$team['team_id']]
+            );
+            $members = tm_fetch_all($mStmt);
+        ?>
+        <div class="team-card">
+            <div class="team-card-header">
+                <div>
+                    <div class="team-card-name"><?= htmlspecialchars($team['team_name']) ?></div>
+                    <?php if ($is_admin): ?>
+                    <div class="team-card-org"><?= htmlspecialchars($team['org_name']) ?></div>
+                    <?php endif; ?>
+                </div>
+                <div style="display:flex;gap:6px;flex-shrink:0;">
+                    <button class="btn-edit-user"
+                            onclick="openEditTeamModal(this)"
+                            data-team-id="<?= $team['team_id'] ?>"
+                            data-team-name="<?= htmlspecialchars($team['team_name']) ?>"
+                            data-description="<?= htmlspecialchars($team['description']) ?>"
+                            title="Edit team">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button class="btn-delete-user"
+                            onclick="openDeleteTeamModal(this)"
+                            data-team-id="<?= $team['team_id'] ?>"
+                            data-team-name="<?= htmlspecialchars($team['team_name']) ?>"
+                            title="Delete team">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+
+            <?php if ($team['description']): ?>
+            <p style="font-size:12px;color:var(--gray-500);margin:0 0 12px;line-height:1.5;">
+                <?= htmlspecialchars($team['description']) ?>
+            </p>
+            <?php endif; ?>
+
+            <!-- Member list -->
+            <div class="team-member-list">
+            <?php if (empty($members)): ?>
+                <p style="font-size:12px;color:var(--gray-400);margin:0;padding:8px 0;">No members yet.</p>
+            <?php else: ?>
+                <?php foreach ($members as $m):
+                    $mname = htmlspecialchars(trim($m['first_name'] . ' ' . $m['last_name']));
+                    $isMan = (int)($m['is_manager'] ?? 0) === 1;
+                ?>
+                <div class="team-member-row">
+                    <div class="team-member-avatar"><?= strtoupper(substr($m['first_name'], 0, 1)) ?></div>
+                    <div class="team-member-info">
+                        <span class="team-member-name"><?= $mname ?></span>
+                        <?php if ($isMan): ?>
+                        <span class="team-badge-manager">Manager</span>
+                        <?php endif; ?>
+                    </div>
+                    <div style="display:flex;gap:4px;margin-left:auto;">
+                        <!-- Toggle manager -->
+                        <form method="post" action="TM_PHP/TM_TeamActions.php" style="display:inline;">
+                            <input type="hidden" name="action"     value="set_manager"/>
+                            <input type="hidden" name="team_id"    value="<?= $team['team_id'] ?>"/>
+                            <input type="hidden" name="user_id"    value="<?= (int)$m['user_id'] ?>"/>
+                            <input type="hidden" name="is_manager" value="<?= $isMan ? 0 : 1 ?>"/>
+                            <button type="submit"
+                                    class="btn-edit-user"
+                                    style="padding:3px 8px;font-size:11px;"
+                                    title="<?= $isMan ? 'Remove manager flag' : 'Make manager' ?>">
+                                <i class="fa-solid fa-star<?= $isMan ? '' : '-half-stroke' ?>"></i>
+                            </button>
+                        </form>
+                        <!-- Remove member -->
+                        <form method="post" action="TM_PHP/TM_TeamActions.php" style="display:inline;">
+                            <input type="hidden" name="action"  value="remove_member"/>
+                            <input type="hidden" name="team_id" value="<?= $team['team_id'] ?>"/>
+                            <input type="hidden" name="user_id" value="<?= (int)$m['user_id'] ?>"/>
+                            <button type="submit"
+                                    class="btn-delete-user"
+                                    style="padding:3px 8px;font-size:11px;"
+                                    title="Remove from team"
+                                    onclick="return confirm('Remove <?= $mname ?> from this team?')">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+            </div><!-- /.team-member-list -->
+
+            <!-- Add member footer -->
+            <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+                <button class="btn-edit-user"
+                        style="width:100%;justify-content:center;display:flex;align-items:center;gap:6px;"
+                        onclick="openAddMemberModal(<?= $team['team_id'] ?>, '<?= htmlspecialchars($team['team_name'], ENT_QUOTES) ?>')">
+                    <i class="fa-solid fa-user-plus"></i> Add Member
+                </button>
+            </div>
+        </div><!-- /.team-card -->
+        <?php endforeach; ?>
+        </div><!-- /.teams grid -->
+        <?php endif; ?>
+
+    </div><!-- /tab-panel#tab-teams -->
+    <?php endif; ?>
 
 </main>
 
@@ -755,6 +953,131 @@ require_once 'TM_PHP/TM_NavNotif.php';
     <input type="hidden" name="id" id="deleteUserId"/>
 </form>
 
+
+<!-- ══════════════════════════════════════════════════════════
+     FEATURE 8 — TEAM MODALS
+     ══════════════════════════════════════════════════════════ -->
+
+<!-- ADD TEAM MODAL -->
+<div class="modal-overlay" id="addTeamModal">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div class="modal-title">&#127991; New Team</div>
+            <button class="modal-close" onclick="closeAdminModal('addTeamModal')">&#x2715;</button>
+        </div>
+        <form method="post" action="TM_PHP/TM_TeamActions.php">
+            <input type="hidden" name="action" value="create_team"/>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Team Name <span style="color:#ef4444">*</span></label>
+                    <input type="text" name="team_name" class="form-input"
+                           placeholder="e.g. Engineering, Marketing" required/>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description <span style="color:var(--gray-400);font-weight:400;">(optional)</span></label>
+                    <input type="text" name="description" class="form-input"
+                           placeholder="Short description of this team's purpose"/>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel-modal" onclick="closeAdminModal('addTeamModal')">Cancel</button>
+                <button type="submit" class="btn-save-modal">Create Team</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- EDIT TEAM MODAL -->
+<div class="modal-overlay" id="editTeamModal">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div class="modal-title">&#9999; Edit Team</div>
+            <button class="modal-close" onclick="closeAdminModal('editTeamModal')">&#x2715;</button>
+        </div>
+        <form method="post" action="TM_PHP/TM_TeamActions.php">
+            <input type="hidden" name="action" value="edit_team"/>
+            <input type="hidden" name="team_id" id="editTeamId"/>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Team Name <span style="color:#ef4444">*</span></label>
+                    <input type="text" name="team_name" class="form-input" id="editTeamName" required/>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <input type="text" name="description" class="form-input" id="editTeamDesc"/>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel-modal" onclick="closeAdminModal('editTeamModal')">Cancel</button>
+                <button type="submit" class="btn-save-modal">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- DELETE TEAM PC-MODAL -->
+<div id="deleteTeamModal" class="pc-modal-overlay">
+    <div class="pc-modal-box">
+        <div class="pc-modal-icon" style="background:rgba(239,68,68,.12)">
+            <i class="fa-solid fa-trash" style="color:#ef4444"></i>
+        </div>
+        <div class="pc-modal-title">Delete Team?</div>
+        <div class="pc-modal-body">
+            Delete <strong id="deleteTeamName"></strong>?
+            Members will not be deleted — only their team membership will be removed.
+            This <strong>cannot be undone</strong>.
+        </div>
+        <div class="pc-modal-btns">
+            <button class="pc-modal-cancel" onclick="closePcModal('deleteTeamModal')">Cancel</button>
+            <button class="pc-modal-confirm-red" onclick="document.getElementById('deleteTeamForm').submit()">
+                <i class="fa-solid fa-trash"></i> Yes, Delete
+            </button>
+        </div>
+    </div>
+</div>
+<form method="post" action="TM_PHP/TM_TeamActions.php" id="deleteTeamForm" style="display:none">
+    <input type="hidden" name="action" value="delete_team"/>
+    <input type="hidden" name="team_id" id="deleteTeamId"/>
+</form>
+
+<!-- ADD MEMBER MODAL -->
+<div class="modal-overlay" id="addMemberModal">
+    <div class="modal-card" style="max-width:420px">
+        <div class="modal-header">
+            <div class="modal-title">&#128100;+ Add Member to <span id="addMemberTeamName"></span></div>
+            <button class="modal-close" onclick="closeAdminModal('addMemberModal')">&#x2715;</button>
+        </div>
+        <form method="post" action="TM_PHP/TM_TeamActions.php">
+            <input type="hidden" name="action" value="add_member"/>
+            <input type="hidden" name="team_id" id="addMemberTeamId"/>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Select User</label>
+                    <select name="member_user_id" class="modal-select" required>
+                        <option value="">— Choose a user —</option>
+                        <?php foreach ($users as $u):
+                            $uId   = (int)($u['user_id'] ?? 0);
+                            $uName = htmlspecialchars(trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')));
+                            $uEmail = htmlspecialchars($u['email'] ?? '');
+                        ?>
+                        <option value="<?= $uId ?>"><?= $uName ?> (<?= $uEmail ?>)</option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">
+                        <input type="checkbox" name="is_manager" value="1" style="margin-right:6px;"/>
+                        Assign as Team Manager
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel-modal" onclick="closeAdminModal('addMemberModal')">Cancel</button>
+                <button type="submit" class="btn-save-modal">Add Member</button>
+            </div>
+        </form>
+    </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1011,8 +1334,11 @@ function switchTab(panelId, btn) {
 (function() {
     var hash = window.location.hash;
     if (hash === '#orgs') {
-        var orgTab = document.querySelector('.admin-tab:nth-child(2)');
+        var orgTab = document.querySelector('[onclick*="tab-orgs"]');
         if (orgTab) switchTab('tab-orgs', orgTab);
+    } else if (hash === '#teams') {
+        var teamTab = document.querySelector('[onclick*="tab-teams"]');
+        if (teamTab) switchTab('tab-teams', teamTab);
     }
 })();
 
@@ -1050,6 +1376,25 @@ function openRoleModal(btn) {
     if (sel) sel.value = btn.dataset.currentRole || 'user';
     openAdminModal('setRoleModal');
 }
+
+// ── Feature 8: Team modal helpers ─────────────────────────────────────────────
+function openEditTeamModal(btn) {
+    document.getElementById('editTeamId').value   = btn.dataset.teamId;
+    document.getElementById('editTeamName').value = btn.dataset.teamName;
+    document.getElementById('editTeamDesc').value = btn.dataset.description || '';
+    openAdminModal('editTeamModal');
+}
+
+function openDeleteTeamModal(btn) {
+    document.getElementById('deleteTeamId').value         = btn.dataset.teamId;
+    document.getElementById('deleteTeamName').textContent = btn.dataset.teamName;
+    openPcModal('deleteTeamModal');
+}
+
+function openAddMemberModal(teamId, teamName) {
+    document.getElementById('addMemberTeamId').value          = teamId;
+    document.getElementById('addMemberTeamName').textContent  = teamName;
+    openAdminModal('addMemberModal');
+}
+
 </script>
-</body>
-</html>
