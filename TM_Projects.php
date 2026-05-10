@@ -825,20 +825,33 @@ require_once 'TM_PHP/TM_NavNotif.php';
                     return;
                 }
                 list.innerHTML = tasks.map(function(t) {
-                    var statusColor = t.status === 'done' ? '#22c55e' : t.status === 'in_progress' ? '#3b82f6' : '#9ca3af';
-                    var statusLabel = t.status === 'done' ? 'Done' : t.status === 'in_progress' ? 'In Progress' : 'To Do';
+                    var statusColors = {
+                        done:        '#22c55e', done_late:   '#16a34a',
+                        in_progress: '#3b82f6', review:      '#f97316',
+                        pending:     '#9ca3af', cancelled:   '#6b7280'
+                    };
+                    var statusLabels = {
+                        done:        'Done',       done_late:   'Done Late',
+                        in_progress: 'In Progress', review:      'Review',
+                        pending:     'Pending',     cancelled:   'Cancelled'
+                    };
+                    var isDone = t.status === 'done' || t.status === 'done_late';
+                    var isCancelled = t.status === 'cancelled';
+                    var statusColor = statusColors[t.status] || '#9ca3af';
+                    var statusLabel = statusLabels[t.status] || t.status;
                     return [
-                        '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;',
-                        'background:var(--bg,#f9fafb);border:1px solid var(--border,#e5e7eb);border-radius:8px;">',
+                        '<div data-task-id="' + t.task_id + '" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;',
+                        'background:var(--bg,#f9fafb);border:1px solid var(--border,#e5e7eb);border-radius:8px;cursor:pointer;" ',
+                        'title="Click to view task details">',
                             '<div style="flex:1;min-width:0;">',
-                                '<div style="font-size:13px;font-weight:600;color:var(--black,#111);',
-                                (t.status === 'done' ? 'text-decoration:line-through;color:#9ca3af;' : '') + '">' + escHtml(t.name) + '</div>',
+                                '<div style="font-size:13px;font-weight:600;',
+                                ((isDone || isCancelled) ? 'text-decoration:line-through;color:#9ca3af;' : 'color:var(--black,#111);') + '">' + escHtml(t.name) + '</div>',
                                 '<div style="font-size:11px;color:var(--gray-400);margin-top:2px;">',
                                     '<span style="color:' + statusColor + ';font-weight:600;">' + statusLabel + '</span>',
                                     (t.due_date ? ' · Due ' + friendlyDate(t.due_date) : ''),
                                 '</div>',
                             '</div>',
-                            '<button class="proj-unlink-btn" onclick="doUnlinkTask(' + t.task_id + ')" title="Remove from project">',
+                            '<button class="proj-unlink-btn" onclick="event.stopPropagation();doUnlinkTask(' + t.task_id + ')" title="Remove from project">',
                                 '<i class="fa-solid fa-xmark"></i>',
                             '</button>',
                         '</div>',
@@ -932,5 +945,6 @@ require_once 'TM_PHP/TM_NavNotif.php';
 </script>
 
 <script src="TM_JS/TM_App.js"></script>
+<?php require_once 'TM_PHP/TM_TaskModal.php'; ?>
 </body>
 </html>

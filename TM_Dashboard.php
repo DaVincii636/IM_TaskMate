@@ -58,6 +58,21 @@ $cntOverdue = _tm_count(tm_fetch_all(tm_exec(
     [$uid, $uid, $oid, $uid]
 )));
 
+// ── In-Progress count ─────────────────────────────────────────────────────────
+$cntInProgress = _tm_count(tm_fetch_all(tm_exec(
+    "SELECT COUNT(*) AS n FROM TM_Tasks
+     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)
+            OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id=:p4))
+       AND status = 'in_progress'",
+    [$uid, $uid, $oid, $uid]
+)));
+
+// ── Projects count (projects the user is a member of) ─────────────────────────
+$cntProjects = _tm_count(tm_fetch_all(tm_exec(
+    "SELECT COUNT(*) AS n FROM TM_ProjectMembers WHERE user_id = :p1",
+    [$uid]
+)));
+
 // ── 5 upcoming tasks (not done/cancelled, closest due date first) ─────────────
 $stmtUpcoming = tm_exec(
     "SELECT task_id, task_name,
@@ -110,6 +125,10 @@ $allTasks = array_map(function($row) {
 }, $allTasks);
 $tasksJson = json_encode($allTasks, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
 if ($tasksJson === false) { $tasksJson = '[]'; }
+
+// Expose to TM_TaskModal.php so the view/edit modals use the same full task list
+// (avoids a second narrower query in TM_TaskModal.php that would miss project-linked tasks)
+$allTasksForModal = $allTasks;
 
 // ── Feature 8: Teams this user belongs to ────────────────────────────────────
 // ── End Feature 8 ─────────────────────────────────────────────────────────────
@@ -170,7 +189,7 @@ function statusLabel(string $s): string {
 /* ── Stat cards ──────────────────────────────────────── */
 .stat-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
     margin-bottom: 2rem;
 }
@@ -405,6 +424,11 @@ function statusLabel(string $s): string {
             <div class="stat-value"><?= (int)$cntPending ?></div>
             <div class="stat-label">Pending</div>
         </div>
+        <div class="stat-card" style="border-left:3px solid #f97316;">
+            <div class="stat-icon" style="background:#ffedd5;color:#c2410c;"><i class="fa-solid fa-spinner"></i></div>
+            <div class="stat-value"><?= (int)$cntInProgress ?></div>
+            <div class="stat-label">In Progress</div>
+        </div>
         <div class="stat-card accent-green">
             <div class="stat-icon"><i class="fa-solid fa-circle-check"></i></div>
             <div class="stat-value"><?= (int)$cntDone ?></div>
@@ -414,6 +438,11 @@ function statusLabel(string $s): string {
             <div class="stat-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
             <div class="stat-value"><?= (int)$cntOverdue ?></div>
             <div class="stat-label">Overdue</div>
+        </div>
+        <div class="stat-card" style="border-left:3px solid #6366f1;">
+            <div class="stat-icon" style="background:#ede9fe;color:#4338ca;"><i class="fa-solid fa-folder-open"></i></div>
+            <div class="stat-value"><?= (int)$cntProjects ?></div>
+            <div class="stat-label">Projects</div>
         </div>
     </div>
 
@@ -433,6 +462,9 @@ function statusLabel(string $s): string {
         </a>
         <a href="TM_Calendar.php" class="qa-btn">
             <i class="fa-regular fa-calendar"></i> Calendar
+        </a>
+        <a href="TM_Projects.php" class="qa-btn">
+            <i class="fa-solid fa-folder-open"></i> Projects
         </a>
     </div>
 

@@ -694,6 +694,30 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 
 </div><!-- /.tasks-page -->
 
+<?php
+// Provide $allTasksForModal so TM_TaskModal.php uses the same full scope as this page.
+// The $tasks array above is filtered/paginated; we need ALL tasks for the modal lookup.
+$_modalStmt = tm_exec(
+    "SELECT task_id, task_name,
+            TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
+            TO_CHAR(due_date,'YYYY-MM-DD')   AS due_date,
+            category, custom_category, priority, color, notes, status, recurrence
+     FROM TM_Tasks
+     WHERE $baseScope
+     ORDER BY due_date ASC",
+    $extraParams
+);
+$allTasksForModal = tm_fetch_all($_modalStmt);
+$allTasksForModal = array_map(function($row) {
+    if (isset($row['notes'])) {
+        if ($row['notes'] instanceof OCILob) $row['notes'] = $row['notes']->load();
+        elseif (is_resource($row['notes']))  $row['notes'] = stream_get_contents($row['notes']);
+        $row['notes'] = (string)($row['notes'] ?? '');
+    }
+    return $row;
+}, $allTasksForModal);
+?>
+
 <?php require_once 'TM_PHP/TM_TaskModal.php'; ?>
 
 <!-- ── Quick-Done Confirmation Modal ─────────────────────── -->

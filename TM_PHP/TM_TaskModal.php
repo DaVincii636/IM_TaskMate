@@ -22,10 +22,8 @@
  */
 
 if (!isset($allTasksForModal)) {
-    // Fetch full task data — include both tasks owned by AND delegated to this user.
-    // Feature 10: after delegation user_id changes to the new owner, so owned tasks
-    // cover that case. We also pull tasks where assigned_to = uid in case a future
-    // flow keeps the original owner but sets assigned_to.
+    // Fetch full task data — include tasks owned by, delegated to, org-wide,
+    // and tasks in projects this user is a member of.
     $_modal_uid = tm_uid();
     $_modal_oid = tm_org_id();
     $_modal_stmt = tm_exec(
@@ -37,8 +35,9 @@ if (!isset($allTasksForModal)) {
          WHERE user_id = :p1
             OR assigned_to = :p2
             OR (is_org_task = 1 AND org_id = :p3)
+            OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id = :p4)
          ORDER BY due_date ASC",
-        [$_modal_uid, $_modal_uid, $_modal_oid]
+        [$_modal_uid, $_modal_uid, $_modal_oid, $_modal_uid]
     );
     $allTasksForModal = tm_fetch_all($_modal_stmt);
     // Resolve CLOB/LOB
@@ -1283,6 +1282,14 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                         '<span class="vm-value">' + escHtml(d.team_name) + '</span></div>';
                 }
 
+                // Organization
+                if (d.org_name) {
+                    hasExtra = true;
+                    gridHtml += '<div class="vm-field">' +
+                        '<span class="vm-label"><i class="fa-solid fa-building" style="margin-right:4px;"></i>Organization</span>' +
+                        '<span class="vm-value">' + escHtml(d.org_name) + '</span></div>';
+                }
+
                 // Recurrence — from TASKS dict
                 var taskData = (typeof TASKS !== 'undefined') ? TASKS[parseInt(id, 10)] : null;
                 if (taskData && taskData.recurrence) {
@@ -1294,8 +1301,35 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                 }
 
                 gridHtml += '</div>';
-                if (hasExtra) {
+
+                // Prerequisites (blockers) — tasks that must be completed first
+                if (d.blockers && d.blockers.length > 0) {
+                    hasExtra = true;
+                    var statusDot = function(s) {
+                        var colors = {done:'#22c55e', done_late:'#16a34a', cancelled:'#6b7280',
+                                      in_progress:'#3b82f6', review:'#f97316', pending:'#94a3b8'};
+                        return '<span style="width:8px;height:8px;border-radius:50%;display:inline-block;' +
+                               'margin-right:5px;flex-shrink:0;background:' + (colors[s]||'#94a3b8') + ';"></span>';
+                    };
+                    var blockerItems = d.blockers.map(function(b) {
+                        var isDone = b.status === 'done' || b.status === 'done_late';
+                        return '<li style="display:flex;align-items:center;gap:2px;padding:3px 0;' +
+                               (isDone ? 'text-decoration:line-through;color:var(--gray-400);' : 'color:var(--black);') + '">' +
+                               statusDot(b.status) + escHtml(b.name) + '</li>';
+                    }).join('');
+                    extras.innerHTML = gridHtml +
+                        '<div style="height:1px;background:var(--gray-100);margin:.85rem 0 .75rem;"></div>' +
+                        '<div class="vm-field">' +
+                        '<span class="vm-label" style="margin-bottom:6px;display:block;">' +
+                        '<i class="fa-solid fa-lock" style="margin-right:4px;color:#f97316;"></i>' +
+                        'Must Complete First</span>' +
+                        '<ul style="list-style:none;margin:0;padding:0;font-size:13px;">' + blockerItems + '</ul>' +
+                        '</div>';
+                } else {
                     extras.innerHTML = gridHtml;
+                }
+
+                if (hasExtra) {
                     body.appendChild(extras);
                 }
             }).catch(function () {});
