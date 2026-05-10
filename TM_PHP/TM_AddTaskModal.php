@@ -29,9 +29,9 @@
             <div class="modal-title">New Task</div>
             <button class="modal-close" onclick="closeModal('addTaskModal')">&#x2715;</button>
         </div>
-        <form method="post" action="TM_PHP/TM_TaskActions.php" id="addTaskForm">
+        <form method="post" action="TM_PHP/TM_TaskActions.php" id="addTaskForm" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;">
             <input type="hidden" name="action" value="add"/>
-            <div class="modal-body">
+            <div class="modal-body" style="overflow-y:auto;">
                 <div class="form-group">
                     <label class="form-label">Task Name</label>
                     <input type="text" name="name" class="form-input" id="addTaskName"
@@ -96,22 +96,20 @@
 
                 <!-- ── Organization task checkbox (admin only) ──────── -->
                 <?php if (function_exists('tm_is_admin') && tm_is_admin()): ?>
-                <div class="form-group" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg);border-radius:var(--radius-sm);border:1.5px solid var(--border);">
-                    <input type="checkbox" name="is_org_task" id="addIsOrgTask" value="1"
-                           style="width:18px;height:18px;accent-color:var(--black);cursor:pointer;flex-shrink:0;"/>
-                    <label for="addIsOrgTask" style="font-size:13px;font-weight:600;cursor:pointer;margin:0;">
-                        <i class="fa-solid fa-building" style="margin-right:5px;color:var(--gray-400);font-size:12px;"></i>
-                        Organization-wide task
-                        <span style="display:block;font-size:11px;font-weight:400;color:var(--gray-400);margin-top:2px;">
-                            Check to mark this as a shared org task (leave unchecked for personal)
+                <div class="form-group">
+                    <label class="form-label">Organization-wide Task</label>
+                    <label class="form-toggle-row">
+                        <input type="checkbox" name="is_org_task" id="addIsOrgTask" value="1" class="form-toggle-input"/>
+                        <span class="form-toggle-track">
+                            <span class="form-toggle-thumb"></span>
                         </span>
+                        <span class="form-toggle-text">Mark as a shared task visible to all org members</span>
                     </label>
                 </div>
 
                 <!-- ── CHANGE 1: Assign to user (admin only) ──────────── -->
                 <div class="form-group" id="addAssignGroup">
                     <label class="form-label">
-                        <i class="fa-solid fa-user-plus" style="margin-right:4px;color:var(--gray-400)"></i>
                         Assign To
                     </label>
                     <select name="assigned_to" class="form-input" id="addAssignSelect">
@@ -123,7 +121,7 @@
                 <div class="form-group">
                     <label class="form-label">Notes</label>
                     <textarea name="notes" class="form-input tm-auto-expand" id="addTaskNotes"
-                              placeholder="Optional notes… use @username to notify teammates"
+                              placeholder="Optional notes…"
                               style="resize:none;overflow:hidden;"></textarea>
                     <!-- @mention autocomplete suggestions -->
                     <div id="addMentionSuggestions" class="tm-mention-suggestions" style="display:none;"></div>
@@ -175,6 +173,21 @@
             });
         });
         observer.observe(overlay, { attributes: true });
+    }
+
+    // ── Org-wide toggle hides Assign To ───────────────────────────────────────
+    var orgCheckbox   = document.getElementById('addIsOrgTask');
+    var assignGroup   = document.getElementById('addAssignGroup');
+    var assignSelect  = document.getElementById('addAssignSelect');
+    if (orgCheckbox && assignGroup) {
+        orgCheckbox.addEventListener('change', function () {
+            if (this.checked) {
+                assignGroup.style.display = 'none';
+                if (assignSelect) assignSelect.value = '';
+            } else {
+                assignGroup.style.display = '';
+            }
+        });
     }
 
     // ── @mention autocomplete for Add modal notes ─────────────────────────────

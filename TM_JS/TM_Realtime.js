@@ -129,7 +129,6 @@
                 // ── Online users ──────────────────────────────────────────
                 if (data.online) {
                     emit('tm:online-changed', { users: data.online });
-                    renderOnlineBar(data.online);
                 }
             })
             .catch(() => { /* silently swallow network errors */ })
@@ -245,45 +244,7 @@
         });
     }
 
-    /**
-     * renderOnlineBar
-     * Shows/updates the floating "who's online" indicator.
-     * The bar is created the first time; subsequent calls update it.
-     */
-    function renderOnlineBar(users) {
-        let bar = document.getElementById('tm-online-bar');
-        if (!bar) {
-            bar = document.createElement('div');
-            bar.id = 'tm-online-bar';
-            bar.className = 'tm-online-bar';
-            document.body.appendChild(bar);
-        }
-
-        if (!users || users.length === 0) {
-            bar.style.display = 'none';
-            return;
-        }
-
-        bar.style.display = 'flex';
-
-        const avatars = users.slice(0, 5).map(u => {
-            const initials = getInitials(u.full_name || u.username);
-            const pageIcon = pageTypeIcon(u.page_type);
-            return `<span class="tm-avatar" title="${esc(u.full_name || u.username)} · ${esc(u.page_type)}">
-                        ${esc(initials)}${pageIcon}
-                    </span>`;
-        }).join('');
-
-        const extra = users.length > 5
-            ? `<span class="tm-avatar tm-avatar-extra">+${users.length - 5}</span>`
-            : '';
-
-        bar.innerHTML = `
-            <span class="tm-online-dot"></span>
-            <span class="tm-online-label">${users.length} online</span>
-            <div class="tm-avatar-row">${avatars}${extra}</div>`;
-    }
-
+    
     // ── Label / CSS helpers (mirror TM_Dashboard.php PHP functions) ──────────
     function statusCssClass(s) {
         return { pending: 'status-pending', in_progress: 'status-in-progress',
@@ -304,10 +265,7 @@
         return (name || '?').split(' ').slice(0, 2)
             .map(w => w[0] || '').join('').toUpperCase();
     }
-    function pageTypeIcon(pt) {
-        return { tasks: '📋', dashboard: '🏠', calendar: '📅',
-                 task_detail: '🔍', activity: '📊' }[pt] || '';
-    }
+    function pageTypeIcon(pt) { return ''; }
     function esc(str) {
         return String(str || '')
             .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -327,55 +285,6 @@
 }
 .tm-rt-flash { animation: tm-rt-flash-anim 1.2s ease-out forwards; }
 
-/* ── "Who's online" bar ─────────────────────────────── */
-.tm-online-bar {
-    position: fixed;
-    bottom: 1.25rem;
-    right: 1.25rem;
-    z-index: 900;
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    background: var(--white, #fff);
-    border: 1px solid var(--gray-100, #f3f4f6);
-    border-radius: 50px;
-    padding: .4rem .9rem .4rem .6rem;
-    box-shadow: 0 4px 18px rgba(0,0,0,.12);
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--gray-500, #6b7280);
-    font-family: 'Poppins', sans-serif;
-    transition: opacity .3s;
-}
-.tm-online-bar:hover { opacity: 1 !important; }
-
-.tm-online-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: #22c55e;
-    flex-shrink: 0;
-    animation: tm-pulse 2s ease-in-out infinite;
-}
-@keyframes tm-pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50%       { opacity: .6; transform: scale(1.3); }
-}
-
-.tm-online-label { white-space: nowrap; }
-
-.tm-avatar-row { display: flex; gap: .25rem; margin-left: .25rem; }
-.tm-avatar {
-    width: 26px; height: 26px;
-    border-radius: 50%;
-    background: var(--black, #111);
-    color: #fff;
-    font-size: 10px;
-    font-weight: 700;
-    display: flex; align-items: center; justify-content: center;
-    position: relative;
-    cursor: default;
-}
-.tm-avatar-extra { background: var(--gray-300, #d1d5db); color: var(--gray-600, #4b5563); }
 
 /* ── Live comment badge ─────────────────────────────── */
 .tm-live-badge {

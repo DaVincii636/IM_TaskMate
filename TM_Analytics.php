@@ -115,39 +115,21 @@ foreach ($weeklyRaw as $row) {
 // Also includes tasks marked done_late (completed after due date)
 // ══════════════════════════════════════════════════════════════════════════════
 $stmtMissed = tm_exec(
-    "SELECT cat_label, missed_count
-     FROM (
-         SELECT CASE WHEN category = 'others' AND custom_category IS NOT NULL
-                          THEN custom_category
-                          ELSE INITCAP(category)
+    "SELECT CASE WHEN category = 'others' AND custom_category IS NOT NULL
+                     THEN custom_category
+                     ELSE INITCAP(category)
                 END AS cat_label,
-                COUNT(*) AS missed_count
-         FROM TM_Tasks
-         WHERE user_id = :p1
-           AND due_date < TRUNC(SYSDATE)
-           AND status NOT IN ('done','cancelled')
-         GROUP BY CASE WHEN category = 'others' AND custom_category IS NOT NULL
-                       THEN custom_category
-                       ELSE INITCAP(category)
-                  END
-         UNION ALL
-         SELECT CASE WHEN category = 'others' AND custom_category IS NOT NULL
-                          THEN custom_category
-                          ELSE INITCAP(category)
-                END AS cat_label,
-                COUNT(*) AS missed_count
-         FROM TM_Tasks
-         WHERE user_id = :p2
-           AND due_date < TRUNC(SYSDATE)
-           AND status = 'done_late'
-         GROUP BY CASE WHEN category = 'others' AND custom_category IS NOT NULL
-                       THEN custom_category
-                       ELSE INITCAP(category)
-                  END
-     )
-     GROUP BY cat_label
-     ORDER BY SUM(missed_count) DESC",
-    [$uid, $uid]
+            COUNT(*) AS missed_count
+     FROM TM_Tasks
+     WHERE user_id = :p1
+       AND due_date < TRUNC(SYSDATE)
+       AND status NOT IN ('done','cancelled')
+     GROUP BY CASE WHEN category = 'others' AND custom_category IS NOT NULL
+                   THEN custom_category
+                   ELSE INITCAP(category)
+              END
+     ORDER BY COUNT(*) DESC",
+    [$uid]
 );
 $missedRows = tm_fetch_all($stmtMissed);
 
@@ -531,7 +513,7 @@ $chartDue       = array_column(array_values($weeks), 'total_due');
                         <div class="stat-tile-val <?= $streak > 0 ? 'streak-active' : '' ?>">
                             <?= $streak ?>
                             <?php if ($streak > 0): ?>
-                            <span style="font-size:1.5rem;">🔥</span>
+                            
                             <?php endif; ?>
                         </div>
                         <div class="stat-tile-sub">Day Streak</div>

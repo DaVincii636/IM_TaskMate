@@ -74,7 +74,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
             <div class="modal-title" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--gray-400);">Task Details</div>
             <button class="modal-close" onclick="closeModal('taskViewModal')">&#x2715;</button>
         </div>
-        <div class="modal-body" id="viewModalBody" style="padding-top:0;overflow:hidden;">
+        <div class="modal-body" id="viewModalBody" style="padding-top:0;overflow-y:auto;">
             <!-- filled by JS -->
         </div>
         <div class="modal-footer" style="justify-content:space-between;">
@@ -499,7 +499,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
           + '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:1.25rem;">'
           +   '<span class="status-pill ' + statusClass(t.status) + '">' + statusLabel(t.status) + '</span>'
           +   '<span class="pri-pill ' + priClass(t.pri) + '">' + priLabel(t.pri) + '</span>'
-          +   (isOverdue ? '<span style="background:#fee2e2;color:#b91c1c;font-size:11px;font-weight:700;padding:3px 10px;border-radius:50px;">⚠ Overdue</span>' : '')
+          +   (isOverdue ? '<span style="background:#fee2e2;color:#b91c1c;font-size:11px;font-weight:700;padding:3px 10px;border-radius:50px;">Overdue</span>' : '')
           + '</div>'
 
             // ── Divider ────────────────────────────────────────
