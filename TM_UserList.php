@@ -5,11 +5,64 @@ tm_require_role('moderator');
 
 $flash     = tm_get_flash();
 $userName  = tm_uname();
-$stmt = tm_exec('SELECT user_id, first_name, last_name, email, phone, role, status FROM TM_Users ORDER BY user_id DESC');
-$users     = tm_fetch_all($stmt);
-$userCount = count($users);
 $is_admin  = tm_is_admin();
 $uid       = tm_uid();
+$oid       = tm_org_id();
+
+// ── Feature 6: Users — system admins see all, org_admins see own org ─────────
+if ($is_admin) {
+    $stmt = tm_exec(
+        'SELECT u.user_id, u.first_name, u.last_name, u.email, u.phone,
+                u.role, u.status, u.org_id,
+                o.org_name
+         FROM TM_Users u
+         LEFT JOIN TM_Organizations o ON o.org_id = u.org_id
+         ORDER BY u.user_id DESC'
+    );
+} else {
+    $stmt = tm_exec(
+        'SELECT u.user_id, u.first_name, u.last_name, u.email, u.phone,
+                u.role, u.status, u.org_id,
+                o.org_name
+         FROM TM_Users u
+         LEFT JOIN TM_Organizations o ON o.org_id = u.org_id
+         WHERE u.org_id = :p1
+         ORDER BY u.user_id DESC',
+        [$oid]
+    );
+}
+$users     = tm_fetch_all($stmt);
+$userCount = count($users);
+
+// ── Feature 6: Load all organizations (for admin org panel & dropdowns) ───────
+$orgs = [];
+$orgsById = [];
+if ($is_admin) {
+    $orgStmt = tm_exec(
+        "SELECT o.org_id, o.org_name, o.plan,
+                TO_CHAR(o.created_at,'YYYY-MM-DD') AS created_at,
+                (SELECT COUNT(*) FROM TM_Users u WHERE u.org_id = o.org_id) AS member_count
+         FROM TM_Organizations o
+         ORDER BY o.org_id ASC"
+    );
+    $orgs = tm_fetch_all($orgStmt);
+    foreach ($orgs as $o) {
+        $id = (int)($o['org_id'] ?? $o['ORG_ID'] ?? 0);
+        $orgs[array_search($o, $orgs)]['org_id']       = $id;
+        $orgs[array_search($o, $orgs)]['member_count'] = (int)($o['member_count'] ?? $o['MEMBER_COUNT'] ?? 0);
+        $orgsById[$id] = $o['org_name'] ?? $o['ORG_NAME'] ?? '';
+    }
+    // Re-index cleanly
+    $orgs = array_values(array_map(function($o) {
+        return [
+            'org_id'       => (int)($o['org_id']       ?? $o['ORG_ID']       ?? 0),
+            'org_name'     => $o['org_name']     ?? $o['ORG_NAME']     ?? '',
+            'plan'         => $o['plan']         ?? $o['PLAN']         ?? 'free',
+            'created_at'   => $o['created_at']   ?? $o['CREATED_AT']   ?? '',
+            'member_count' => (int)($o['member_count'] ?? $o['MEMBER_COUNT'] ?? 0),
+        ];
+    }, $orgs));
+}
 
 // ── Notifications ─────────────────────────────────────────────────────────────
 require_once 'TM_PHP/TM_NavNotif.php';
@@ -37,6 +90,51 @@ require_once 'TM_PHP/TM_NavNotif.php';
         .btn-delete-user{padding:6px 14px;font-size:12px;font-weight:600;border-radius:6px;border:1px solid #fca5a5;
                          background:#fef2f2;color:#ef4444;cursor:pointer;transition:all .2s;font-family:'Poppins',sans-serif;}
         .btn-delete-user:hover{background:#fee2e2;}
+
+        /* ── Tab navigation ── */
+        .admin-tabs{display:flex;gap:4px;margin-bottom:24px;border-bottom:2px solid var(--border,#e5e7eb);padding-bottom:0;}
+        .admin-tab{padding:10px 22px;font-size:13px;font-weight:600;border:none;background:none;
+                   cursor:pointer;color:var(--gray-300,#9ca3af);border-bottom:3px solid transparent;
+                   margin-bottom:-2px;transition:all .2s;font-family:'Poppins',sans-serif;border-radius:6px 6px 0 0;}
+        .admin-tab:hover{color:var(--black,#111);background:var(--bg,#f9fafb);}
+        .admin-tab.active{color:var(--black,#111);border-bottom-color:var(--black,#111);}
+        .tab-panel{display:none;}.tab-panel.active{display:block;}
+
+        /* ── Org cards grid ── */
+        .org-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-top:4px;}
+        .org-card{background:var(--white,#fff);border:1.5px solid var(--border,#e5e7eb);border-radius:14px;
+                  padding:20px;transition:box-shadow .2s;}
+        .org-card:hover{box-shadow:0 4px 20px rgba(0,0,0,.08);}
+        .org-card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;}
+        .org-card-name{font-size:15px;font-weight:700;color:var(--black,#111);line-height:1.3;}
+        .org-card-plan{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+                       padding:2px 8px;border-radius:50px;}
+        .plan-free{background:#f3f4f6;color:#6b7280;}
+        .plan-pro{background:#dbeafe;color:#1d4ed8;}
+        .plan-enterprise{background:#fef3c7;color:#b45309;}
+        .org-card-meta{font-size:12px;color:var(--gray-300,#9ca3af);margin-bottom:16px;}
+        .org-card-meta span{margin-right:14px;}
+        .org-card-actions{display:flex;gap:8px;flex-wrap:wrap;}
+        .btn-org-edit{padding:6px 14px;font-size:12px;font-weight:600;border-radius:6px;
+                      border:1px solid var(--border,#e5e7eb);background:var(--bg,#f9fafb);
+                      color:var(--black,#111);cursor:pointer;font-family:'Poppins',sans-serif;transition:all .2s;}
+        .btn-org-edit:hover{background:var(--border,#eee);}
+        .btn-org-delete{padding:6px 14px;font-size:12px;font-weight:600;border-radius:6px;
+                        border:1px solid #fca5a5;background:#fef2f2;color:#ef4444;
+                        cursor:pointer;font-family:'Poppins',sans-serif;transition:all .2s;}
+        .btn-org-delete:hover{background:#fee2e2;}
+        .btn-org-delete:disabled{opacity:.4;cursor:not-allowed;}
+        .org-badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;
+                   background:#e0f2fe;color:#0369a1;}
+        .modal-select{width:100%;padding:10px 12px;border-radius:8px;font-size:13px;
+                      border:1.5px solid var(--border,#e5e7eb);font-family:'Poppins',sans-serif;
+                      background:var(--white,#fff);color:var(--black,#111);outline:none;}
+        .modal-select:focus{border-color:var(--black,#111);}
+        .transfer-user-name{font-weight:700;color:var(--black,#111);}
+        .org-empty{text-align:center;padding:50px 20px;color:var(--gray-300,#9ca3af);}
+        .org-empty-icon{font-size:2.5rem;margin-bottom:.75rem;}
+        .org-empty-text{font-size:14px;font-weight:600;color:var(--black,#111);margin-bottom:.25rem;}
+        .org-empty-sub{font-size:12px;}
         .table-card{background:var(--white,#fff);border-radius:var(--radius-lg,16px);border:1px solid var(--border,#e5e7eb);overflow:hidden;}
         .table-wrap{overflow-x:auto;}
         .empty-table{text-align:center;padding:60px 20px;}
@@ -191,6 +289,18 @@ require_once 'TM_PHP/TM_NavNotif.php';
     </div>
     <?php endif; ?>
 
+    <!-- ── FEATURE 6: Tab navigation (Users / Organizations) ── -->
+    <?php if ($is_admin): ?>
+    <div class="admin-tabs">
+        <button class="admin-tab active" onclick="switchTab('tab-users', this)">👥 Users</button>
+        <button class="admin-tab" onclick="switchTab('tab-orgs', this)">🏢 Organizations</button>
+    </div>
+    <?php endif; ?>
+
+    <!-- ══════════════════════════════════════════
+         TAB: USERS (existing content wrapped)
+         ══════════════════════════════════════════ -->
+    <div class="tab-panel active" id="tab-users">
     <div class="admin-bar">
         <span class="admin-badge">⚙ User List</span>
         <?php if ($is_admin): ?>
@@ -223,7 +333,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
             <?php else: ?>
                 <table id="usersTable">
                     <thead>
-                        <tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th>Actions</th></tr>
+                        <tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><?php if ($is_admin): ?><th>Org</th><?php endif; ?><th>Actions</th></tr>
                     </thead>
                     <tbody>
                         <?php foreach ($users as $i => $u): ?>
@@ -254,6 +364,9 @@ require_once 'TM_PHP/TM_NavNotif.php';
                                 echo $stLabel;
                                 ?>
                             </td>
+                            <?php if ($is_admin): ?>
+                            <td><span class="org-badge"><?= htmlspecialchars($u['org_name'] ?? $u['ORG_NAME'] ?? '—') ?></span></td>
+                            <?php endif; ?>
                             <td>
                                 <?php if ($is_admin): ?>
                                 <div class="td-actions">
@@ -294,6 +407,141 @@ require_once 'TM_PHP/TM_NavNotif.php';
             <?php endif; ?>
         </div>
     </div>
+    </div><!-- /tab-panel#tab-users -->
+
+    <!-- ══════════════════════════════════════════
+         TAB: ORGANIZATIONS (Feature 6)
+         Visible to system admins only.
+         ══════════════════════════════════════════ -->
+    <?php if ($is_admin): ?>
+    <div class="tab-panel" id="tab-orgs">
+
+        <div class="admin-bar">
+            <span class="admin-badge">🏢 Organizations</span>
+            <button class="btn-add-user" onclick="openAdminModal('addOrgModal')">+ New Organization</button>
+        </div>
+
+        <?php if (empty($orgs)): ?>
+        <div class="org-empty">
+            <div class="org-empty-icon">🏢</div>
+            <div class="org-empty-text">No organizations yet</div>
+            <div class="org-empty-sub">Click "New Organization" to create one</div>
+        </div>
+        <?php else: ?>
+        <div class="org-grid">
+            <?php foreach ($orgs as $org):
+                $planClass  = 'plan-' . ($org['plan'] ?? 'free');
+                $planLabel  = strtoupper($org['plan'] ?? 'FREE');
+                $memberCount = (int)($org['member_count'] ?? 0);
+                $isDefault  = ((int)$org['org_id'] === 1);
+            ?>
+            <div class="org-card">
+                <div class="org-card-header">
+                    <div class="org-card-name"><?= htmlspecialchars($org['org_name']) ?></div>
+                    <span class="org-card-plan <?= $planClass ?>"><?= $planLabel ?></span>
+                </div>
+                <div class="org-card-meta">
+                    <span>👥 <?= $memberCount ?> member<?= $memberCount !== 1 ? 's' : '' ?></span>
+                    <span>📅 <?= htmlspecialchars($org['created_at']) ?></span>
+                    <?php if ($isDefault): ?>
+                    <span style="color:#b45309;font-weight:600;">⭐ Default</span>
+                    <?php endif; ?>
+                </div>
+                <div class="org-card-actions">
+                    <button class="btn-org-edit"
+                        data-org-id="<?= $org['org_id'] ?>"
+                        data-org-name="<?= htmlspecialchars($org['org_name']) ?>"
+                        data-org-plan="<?= htmlspecialchars($org['plan']) ?>"
+                        onclick="openEditOrgModal(this)">
+                        ✏ Edit
+                    </button>
+                    <button class="btn-org-delete"
+                        <?= $memberCount > 0 || $isDefault ? 'disabled title="' . ($isDefault ? 'Cannot delete the Default Org' : 'Transfer all members first') . '"' : '' ?>
+                        data-org-id="<?= $org['org_id'] ?>"
+                        data-org-name="<?= htmlspecialchars($org['org_name']) ?>"
+                        onclick="openDeleteOrgModal(this)">
+                        🗑 Delete
+                    </button>
+                </div>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+
+        <!-- ── Users with org assignment table ── -->
+        <div style="margin-top:32px;">
+            <div class="admin-bar" style="margin-bottom:12px;">
+                <span class="admin-badge">👤 User — Organization Assignment</span>
+            </div>
+            <div class="table-card">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Organization</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($users as $i => $u):
+                            $uOrgName = $u['org_name'] ?? $u['ORG_NAME'] ?? '—';
+                            $uOrgId   = (int)($u['org_id'] ?? $u['ORG_ID'] ?? 0);
+                            $uRole    = $u['role'] ?? 'user';
+                        ?>
+                        <tr>
+                            <td><?= $i + 1 ?></td>
+                            <td style="font-weight:600"><?= htmlspecialchars(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')) ?></td>
+                            <td><?= htmlspecialchars($u['email'] ?? '') ?></td>
+                            <td>
+                                <?php
+                                $roleBadge = match($uRole) {
+                                    'admin'     => '<span style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">ADMIN</span>',
+                                    'org_admin' => '<span style="background:#fce7f3;color:#9d174d;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">ORG ADMIN</span>',
+                                    'moderator' => '<span style="background:#ede9fe;color:#7c3aed;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">MOD</span>',
+                                    default     => '<span style="background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">USER</span>',
+                                };
+                                echo $roleBadge;
+                                ?>
+                            </td>
+                            <td><span class="org-badge"><?= htmlspecialchars($uOrgName) ?></span></td>
+                            <td>
+                                <?php if ($u['user_id'] !== $uid): ?>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                    <button class="btn-org-edit"
+                                        data-uid="<?= $u['user_id'] ?>"
+                                        data-uname="<?= htmlspecialchars(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')) ?>"
+                                        data-current-org="<?= $uOrgId ?>"
+                                        data-current-role="<?= htmlspecialchars($uRole) ?>"
+                                        onclick="openTransferModal(this)">
+                                        🔀 Transfer
+                                    </button>
+                                    <button class="btn-org-edit"
+                                        data-uid="<?= $u['user_id'] ?>"
+                                        data-uname="<?= htmlspecialchars(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')) ?>"
+                                        data-current-role="<?= htmlspecialchars($uRole) ?>"
+                                        onclick="openRoleModal(this)"
+                                        style="background:#fdf4ff;border-color:#e9d5ff;color:#7c3aed;">
+                                        🛡 Set Role
+                                    </button>
+                                </div>
+                                <?php else: ?>
+                                <span style="font-size:12px;color:#9ca3af">You</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /tab-panel#tab-orgs -->
+    <?php endif; ?>
 
 </main>
 
@@ -334,9 +582,20 @@ require_once 'TM_PHP/TM_NavNotif.php';
                 <select name="role" class="form-input">
                     <option value="user">User</option>
                     <option value="moderator">Moderator</option>
+                    <option value="org_admin">Org Admin</option>
                     <option value="admin">Admin</option>
                 </select>
                 </div>
+                <?php if ($is_admin && !empty($orgs)): ?>
+                <div class="form-group">
+                    <label class="form-label">Organization</label>
+                    <select name="org_id" class="form-input">
+                        <?php foreach ($orgs as $org): ?>
+                        <option value="<?= $org['org_id'] ?>"><?= htmlspecialchars($org['org_name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php endif; ?>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-cancel-modal" onclick="closeAdminModal('addModal')">Cancel</button>
@@ -384,6 +643,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
                 <select name="role" class="form-input" id="edit_role">
                     <option value="user">User</option>
                     <option value="moderator">Moderator</option>
+                    <option value="org_admin">Org Admin</option>
                     <option value="admin">Admin</option>
                 </select>
                 </div>
@@ -573,6 +833,223 @@ require_once 'TM_PHP/TM_NavNotif.php';
         if (!ok) e.preventDefault();
     });
 })();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     FEATURE 6 — ORGANIZATION MODALS
+     ══════════════════════════════════════════════════════════ -->
+
+<!-- ── ADD ORG MODAL ── -->
+<div class="modal-overlay" id="addOrgModal">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div class="modal-title">🏢 New Organization</div>
+            <button class="modal-close" onclick="closeAdminModal('addOrgModal')">&#x2715;</button>
+        </div>
+        <form method="post" action="TM_PHP/TM_OrgActions.php">
+            <input type="hidden" name="action" value="create_org"/>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Organization Name</label>
+                    <input type="text" name="org_name" class="form-input"
+                           placeholder="e.g. Acme Corp" required/>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Plan</label>
+                    <select name="org_plan" class="modal-select">
+                        <option value="free">Free</option>
+                        <option value="pro">Pro</option>
+                        <option value="enterprise">Enterprise</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel-modal" onclick="closeAdminModal('addOrgModal')">Cancel</button>
+                <button type="submit" class="btn-save-modal">Create Organization</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ── EDIT ORG MODAL ── -->
+<div class="modal-overlay" id="editOrgModal">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div class="modal-title">✏ Edit Organization</div>
+            <button class="modal-close" onclick="closeAdminModal('editOrgModal')">&#x2715;</button>
+        </div>
+        <form method="post" action="TM_PHP/TM_OrgActions.php">
+            <input type="hidden" name="action" value="edit_org"/>
+            <input type="hidden" name="org_id" id="editOrgId"/>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Organization Name</label>
+                    <input type="text" name="org_name" class="form-input" id="editOrgName" required/>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Plan</label>
+                    <select name="org_plan" class="modal-select" id="editOrgPlan">
+                        <option value="free">Free</option>
+                        <option value="pro">Pro</option>
+                        <option value="enterprise">Enterprise</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel-modal" onclick="closeAdminModal('editOrgModal')">Cancel</button>
+                <button type="submit" class="btn-save-modal">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ── DELETE ORG PC-MODAL ── -->
+<div id="deleteOrgModal" class="pc-modal-overlay">
+    <div class="pc-modal-box">
+        <div class="pc-modal-icon" style="background:rgba(239,68,68,.12)">
+            <i class="fa-solid fa-building-circle-xmark" style="color:#ef4444"></i>
+        </div>
+        <div class="pc-modal-title">Delete Organization?</div>
+        <div class="pc-modal-body">
+            Delete <strong id="deleteOrgName"></strong>?
+            This <strong>cannot be undone</strong>. All members must be transferred first.
+        </div>
+        <div class="pc-modal-btns">
+            <button class="pc-modal-cancel" onclick="closePcModal('deleteOrgModal')">Cancel</button>
+            <button class="pc-modal-confirm-red" onclick="document.getElementById('deleteOrgForm').submit()">
+                <i class="fa-solid fa-trash"></i> Yes, Delete
+            </button>
+        </div>
+    </div>
+</div>
+<form method="post" action="TM_PHP/TM_OrgActions.php" id="deleteOrgForm" style="display:none">
+    <input type="hidden" name="action" value="delete_org"/>
+    <input type="hidden" name="org_id" id="deleteOrgId"/>
+</form>
+
+<!-- ── TRANSFER USER MODAL ── -->
+<div class="modal-overlay" id="transferUserModal">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div class="modal-title">🔀 Transfer User to Organization</div>
+            <button class="modal-close" onclick="closeAdminModal('transferUserModal')">&#x2715;</button>
+        </div>
+        <form method="post" action="TM_PHP/TM_OrgActions.php">
+            <input type="hidden" name="action" value="transfer_user"/>
+            <input type="hidden" name="user_id" id="transferUserId"/>
+            <div class="modal-body">
+                <p style="font-size:13px;color:#6b7280;margin:0 0 16px">
+                    Transferring <span class="transfer-user-name" id="transferUserName"></span>
+                    — all their tasks will move to the new organization too.
+                </p>
+                <div class="form-group">
+                    <label class="form-label">Move to Organization</label>
+                    <select name="new_org_id" class="modal-select" id="transferOrgSelect">
+                        <?php foreach ($orgs as $org): ?>
+                        <option value="<?= $org['org_id'] ?>"><?= htmlspecialchars($org['org_name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel-modal" onclick="closeAdminModal('transferUserModal')">Cancel</button>
+                <button type="submit" class="btn-save-modal">Transfer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ── SET ROLE MODAL ── -->
+<div class="modal-overlay" id="setRoleModal">
+    <div class="modal-card" style="max-width:400px">
+        <div class="modal-header">
+            <div class="modal-title">🛡 Set User Role</div>
+            <button class="modal-close" onclick="closeAdminModal('setRoleModal')">&#x2715;</button>
+        </div>
+        <form method="post" action="TM_PHP/TM_OrgActions.php">
+            <input type="hidden" name="action" value="set_org_admin"/>
+            <input type="hidden" name="user_id" id="setRoleUserId"/>
+            <div class="modal-body">
+                <p style="font-size:13px;color:#6b7280;margin:0 0 16px">
+                    Changing role for <span class="transfer-user-name" id="setRoleUserName"></span>.
+                </p>
+                <div class="form-group">
+                    <label class="form-label">New Role</label>
+                    <select name="new_role" class="modal-select" id="setRoleSelect">
+                        <option value="user">User — standard task access</option>
+                        <option value="moderator">Moderator — can view admin panel</option>
+                        <option value="org_admin">Org Admin — manages their own org's users</option>
+                        <option value="admin">Admin — full system access</option>
+                    </select>
+                </div>
+                <div style="margin-top:12px;padding:10px 14px;background:#fffbeb;border-radius:8px;border:1px solid #fde68a;font-size:12px;color:#92400e;">
+                    ⚠ <strong>Org Admin</strong> can add, edit, suspend, and delete users within their own organization only.
+                    <strong>Admin</strong> has unrestricted access to the entire system.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel-modal" onclick="closeAdminModal('setRoleModal')">Cancel</button>
+                <button type="submit" class="btn-save-modal">Save Role</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(panelId, btn) {
+    document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+    document.querySelectorAll('.admin-tab').forEach(function(b) { b.classList.remove('active'); });
+    var panel = document.getElementById(panelId);
+    if (panel) panel.classList.add('active');
+    if (btn) btn.classList.add('active');
+    // Update URL hash so page reload lands on correct tab
+    history.replaceState(null, '', '#' + panelId.replace('tab-', ''));
+}
+
+// ── Auto-activate correct tab from URL hash on load ───────────────────────────
+(function() {
+    var hash = window.location.hash;
+    if (hash === '#orgs') {
+        var orgTab = document.querySelector('.admin-tab:nth-child(2)');
+        if (orgTab) switchTab('tab-orgs', orgTab);
+    }
+})();
+
+// ── Edit Org modal ────────────────────────────────────────────────────────────
+function openEditOrgModal(btn) {
+    document.getElementById('editOrgId').value   = btn.dataset.orgId;
+    document.getElementById('editOrgName').value = btn.dataset.orgName;
+    document.getElementById('editOrgPlan').value = btn.dataset.orgPlan || 'free';
+    openAdminModal('editOrgModal');
+}
+
+// ── Delete Org modal ──────────────────────────────────────────────────────────
+function openDeleteOrgModal(btn) {
+    if (btn.disabled) return;
+    document.getElementById('deleteOrgId').value          = btn.dataset.orgId;
+    document.getElementById('deleteOrgName').textContent  = btn.dataset.orgName;
+    openPcModal('deleteOrgModal');
+}
+
+// ── Transfer User modal ───────────────────────────────────────────────────────
+function openTransferModal(btn) {
+    document.getElementById('transferUserId').value        = btn.dataset.uid;
+    document.getElementById('transferUserName').textContent = btn.dataset.uname;
+    // Pre-select user's current org in the dropdown
+    var sel = document.getElementById('transferOrgSelect');
+    if (sel) sel.value = btn.dataset.currentOrg || '';
+    openAdminModal('transferUserModal');
+}
+
+// ── Set Role modal ────────────────────────────────────────────────────────────
+function openRoleModal(btn) {
+    document.getElementById('setRoleUserId').value          = btn.dataset.uid;
+    document.getElementById('setRoleUserName').textContent  = btn.dataset.uname;
+    var sel = document.getElementById('setRoleSelect');
+    if (sel) sel.value = btn.dataset.currentRole || 'user';
+    openAdminModal('setRoleModal');
+}
 </script>
 </body>
 </html>
