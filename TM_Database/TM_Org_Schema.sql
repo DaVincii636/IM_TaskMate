@@ -5,17 +5,21 @@
 -- =============================================
 
 -- ── ORGANIZATIONS TABLE ───────────────────────
+BEGIN EXECUTE IMMEDIATE '
 CREATE TABLE TM_Organizations (
     org_id     NUMBER(10)    NOT NULL,
     org_name   VARCHAR2(100) NOT NULL,
-    plan       VARCHAR2(20)  DEFAULT 'free' NOT NULL,
+    plan       VARCHAR2(20)  DEFAULT ''free'' NOT NULL,
     created_at TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_tm_orgs      PRIMARY KEY (org_id),
     CONSTRAINT uq_tm_orgname   UNIQUE (org_name),
-    CONSTRAINT chk_tm_org_plan CHECK (plan IN ('free','pro','enterprise'))
-);
+    CONSTRAINT chk_tm_org_plan CHECK (plan IN (''free'',''pro'',''enterprise''))
+)'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
 
-CREATE SEQUENCE TM_Orgs_seq START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
+BEGIN EXECUTE IMMEDIATE 'CREATE SEQUENCE TM_Orgs_seq START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE';
+EXCEPTION WHEN OTHERS THEN NULL; END;
+/
 
 CREATE OR REPLACE TRIGGER trg_tm_orgs_id
     BEFORE INSERT ON TM_Organizations FOR EACH ROW
@@ -26,38 +30,57 @@ BEGIN
 END;
 /
 
--- Seed default org (org_id = 1) so FK on TM_Users is satisfiable
-INSERT INTO TM_Organizations (org_name, plan) VALUES ('Default Organization', 'free');
-COMMIT;
+-- Seed default org only if it doesn't exist yet
+BEGIN
+    INSERT INTO TM_Organizations (org_name, plan)
+    SELECT 'Default Organization', 'free' FROM DUAL
+    WHERE NOT EXISTS (SELECT 1 FROM TM_Organizations WHERE org_id = 1);
+    COMMIT;
+EXCEPTION WHEN OTHERS THEN NULL;
+END;
+/
 
 -- ── ADD org_id + status TO TM_Users ──────────
-ALTER TABLE TM_Users ADD org_id NUMBER(10) DEFAULT 1 NOT NULL;
-ALTER TABLE TM_Users ADD status VARCHAR2(20) DEFAULT 'active' NOT NULL;
-
-ALTER TABLE TM_Users ADD CONSTRAINT fk_users_org
-    FOREIGN KEY (org_id) REFERENCES TM_Organizations(org_id);
-
-ALTER TABLE TM_Users ADD CONSTRAINT chk_tm_user_status
-    CHECK (status IN ('pending', 'active', 'suspended'));
-
-CREATE INDEX idx_tm_users_org    ON TM_Users(org_id);
-CREATE INDEX idx_tm_users_status ON TM_Users(status);
+BEGIN EXECUTE IMMEDIATE 'ALTER TABLE TM_Users ADD org_id NUMBER(10) DEFAULT 1 NOT NULL';
+EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'ALTER TABLE TM_Users ADD status VARCHAR2(20) DEFAULT ''active'' NOT NULL';
+EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'ALTER TABLE TM_Users ADD CONSTRAINT fk_users_org FOREIGN KEY (org_id) REFERENCES TM_Organizations(org_id)';
+EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'ALTER TABLE TM_Users ADD CONSTRAINT chk_tm_user_status CHECK (status IN (''pending'', ''active'', ''suspended''))';
+EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'CREATE INDEX idx_tm_users_org ON TM_Users(org_id)';
+EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'CREATE INDEX idx_tm_users_status ON TM_Users(status)';
+EXCEPTION WHEN OTHERS THEN NULL; END;
+/
 
 -- ── ADD org_id TO TM_Tasks ────────────────────
-ALTER TABLE TM_Tasks ADD org_id NUMBER(10) DEFAULT 1 NOT NULL;
-
-ALTER TABLE TM_Tasks ADD CONSTRAINT fk_tasks_org
-    FOREIGN KEY (org_id) REFERENCES TM_Organizations(org_id);
-
-CREATE INDEX idx_tm_tasks_org ON TM_Tasks(org_id);
+BEGIN EXECUTE IMMEDIATE 'ALTER TABLE TM_Tasks ADD org_id NUMBER(10) DEFAULT 1 NOT NULL';
+EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'ALTER TABLE TM_Tasks ADD CONSTRAINT fk_tasks_org FOREIGN KEY (org_id) REFERENCES TM_Organizations(org_id)';
+EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'CREATE INDEX idx_tm_tasks_org ON TM_Tasks(org_id)';
+EXCEPTION WHEN OTHERS THEN NULL; END;
+/
 
 -- ── ADD is_org_task TO TM_Tasks ───────────────
-ALTER TABLE TM_Tasks ADD is_org_task NUMBER(1) DEFAULT 0 NOT NULL;
-
-ALTER TABLE TM_Tasks ADD CONSTRAINT chk_is_org_task
-    CHECK (is_org_task IN (0, 1));
-
-CREATE INDEX idx_tm_tasks_org_task ON TM_Tasks(org_id, is_org_task);
+BEGIN EXECUTE IMMEDIATE 'ALTER TABLE TM_Tasks ADD is_org_task NUMBER(1) DEFAULT 0 NOT NULL';
+EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'ALTER TABLE TM_Tasks ADD CONSTRAINT chk_is_org_task CHECK (is_org_task IN (0, 1))';
+EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'CREATE INDEX idx_tm_tasks_org_task ON TM_Tasks(org_id, is_org_task)';
+EXCEPTION WHEN OTHERS THEN NULL; END;
+/
 
 -- ── ORG-SCOPED VIEW ───────────────────────────
 CREATE OR REPLACE VIEW VW_Tasks_OrgScoped AS
