@@ -267,7 +267,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
         ? tm_exec("SELECT user_id, first_name, last_name, email, phone FROM TM_Users WHERE status='pending' ORDER BY created_at ASC")
         : tm_exec("SELECT user_id, first_name, last_name, email, phone FROM TM_Users WHERE status='pending' AND org_id = :p1 ORDER BY created_at ASC", [$oid]);
     $pendingUsers = tm_fetch_all($pendingStmt);
-    if ($is_admin && !empty($pendingUsers)):
+    if (($is_admin || $is_org_admin) && !empty($pendingUsers)):
     ?>
     <div class="table-card" style="margin-bottom:24px;border:1.5px solid #fcd34d;">
         <div style="padding:14px 20px;background:#fffbeb;border-bottom:1px solid #fde68a;display:flex;align-items:center;gap:10px;">
@@ -426,8 +426,19 @@ require_once 'TM_PHP/TM_NavNotif.php';
                                 $isPending  = $userStatus === 'pending';
                                 ?>
                                 <?php if ($is_org_admin && $isPending): ?>
-                                <!-- Org admin: no actions on pending users -->
-                                <span style="font-size:12px;color:#9ca3af">Pending</span>
+                                <!-- Org admin: approve or reject pending users in their org -->
+                                <div class="td-actions">
+                                    <form method="post" action="TM_PHP/TM_UserActions.php" style="display:inline">
+                                        <input type="hidden" name="action" value="approve"/>
+                                        <input type="hidden" name="id" value="<?= $u['user_id'] ?>"/>
+                                        <button type="submit" style="padding:6px 14px;font-size:12px;font-weight:600;border-radius:6px;border:1px solid #6ee7b7;background:#ecfdf5;color:#065f46;cursor:pointer;font-family:'Poppins',sans-serif;">Approve</button>
+                                    </form>
+                                    <form method="post" action="TM_PHP/TM_UserActions.php" style="display:inline">
+                                        <input type="hidden" name="action" value="suspend"/>
+                                        <input type="hidden" name="id" value="<?= $u['user_id'] ?>"/>
+                                        <button type="submit" class="btn-delete-user">Reject</button>
+                                    </form>
+                                </div>
                                 <?php else: ?>
                                 <div class="td-actions">
                                     <button class="btn-edit-user"

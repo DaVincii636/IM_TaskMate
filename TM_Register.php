@@ -1,7 +1,12 @@
 <?php
 require_once 'TM_PHP/TM_Session.php';
+require_once 'TM_PHP/TM_DB.php';
 if (tm_is_logged_in()) { header('Location: TM_Dashboard.php'); exit; }
 $flash = tm_get_flash();
+
+// Load organizations for the dropdown (exclude Default Organization, org_id = 1)
+$orgStmt = tm_exec('SELECT org_id, org_name FROM TM_Organizations WHERE org_id != 1 ORDER BY org_name ASC');
+$orgList  = tm_fetch_all($orgStmt);
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -50,11 +55,20 @@ $flash = tm_get_flash();
                     oninput="this.value=this.value.replace(/[^0-9]/g,'')"/>
             </div>
             <div class="form-group">
-                <label class="form-label">ORGANIZATION CODE <span style="color:var(--gray-400);font-weight:400;">(optional)</span></label>
-                <input type="text" name="org_code" class="form-input" placeholder="Leave blank to use Default Organization" value="<?= htmlspecialchars($_POST['org_code'] ?? '') ?>"/>
-                 <p style="font-size:11px;color:var(--gray-400);margin:.35rem 0 0;">
-                   Enter your organization's exact name if you were given one.
-              </p>
+                <label class="form-label">ORGANIZATION NAME <span style="color:var(--gray-400);font-weight:400;">(optional)</span></label>
+                <select name="org_name" class="form-input" style="appearance:auto;">
+                    <option value="">— None (Default Organization) —</option>
+                    <?php foreach ($orgList as $org):
+                        $oid  = $org['org_id']   ?? $org['ORG_ID']   ?? '';
+                        $oname = $org['org_name'] ?? $org['ORG_NAME'] ?? '';
+                        $selected = (($_POST['org_name'] ?? '') === $oname) ? 'selected' : '';
+                    ?>
+                    <option value="<?= htmlspecialchars($oname) ?>" <?= $selected ?>><?= htmlspecialchars($oname) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <p style="font-size:11px;color:var(--gray-400);margin:.35rem 0 0;">
+                    Select your organization, or leave blank to use the Default Organization.
+                </p>
             </div>
             <div class="form-group">
                 <label class="form-label">Password</label>

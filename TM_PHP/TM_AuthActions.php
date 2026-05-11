@@ -71,10 +71,9 @@ if ($action === 'register') {
     $pw  = $_POST['password']            ?? '';
     $cpw = $_POST['confirmPassword']     ?? '';
 
-    // Feature 6: allow registrants to supply an org invite code or org name.
-    // If omitted, they land in org_id = 1 (Default Organization) and an admin
-    // can reassign them later via TM_UserList.php.
-    $orgCode = trim($_POST['org_code'] ?? '');
+    // Feature 6: allow registrants to select an org by name from the dropdown.
+    // If omitted, they land in org_id = 1 (Default Organization).
+    $orgCode = trim($_POST['org_name'] ?? '');
 
     if (!$fn || !$ln || !$em || !$ph || !$pw) {
         tm_flash('error', 'All fields are required.');
