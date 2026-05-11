@@ -17,7 +17,7 @@ if (tm_is_logged_in()) { header('Location: TM_Dashboard.php'); exit; }
         <div class="landing-brand-wrap">
             <span class="landing-brand" id="landingTyping"></span><span class="landing-cursor">|</span>
         </div>
-        <a href="TM_Login.php" class="btn-plan">Plan Your Day</a>
+        <a href="TM_Login.php" class="btn-plan">Manage Your Project</a>
     </div>
 </div>
 <script>
