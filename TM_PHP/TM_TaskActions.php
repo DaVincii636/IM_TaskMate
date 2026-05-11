@@ -115,7 +115,7 @@ if ($action === 'export') {
             $extra  = ['team_name' => '', 'org_name' => '', 'assigned_to_name' => ''];
             if ($taskId > 0) {
                 $infoRow = tm_fetch_one(tm_exec(
-                    "SELECT p.name AS project_name, tm.team_name, o.org_name,
+                    "SELECT tm.team_name, o.org_name,
                             u.first_name || ' ' || u.last_name AS assigned_to_name
                      FROM TM_Tasks t
                      LEFT JOIN TM_Teams         tm ON tm.team_id     = t.team_id
@@ -124,9 +124,10 @@ if ($action === 'export') {
                      WHERE t.task_id = :p1",
                     [$taskId]
                 ));
-                if ($infoRow) {                    $extra['team_name']        = $infoRow['team_name']        ?? '';
-                    $extra['org_name']         = $infoRow['org_name']         ?? '';
-                    $extra['assigned_to_name'] = trim($infoRow['assigned_to_name'] ?? '');
+                if ($infoRow) {
+                    $extra['team_name']        = $infoRow['team_name']        ?? $infoRow['TEAM_NAME']        ?? '';
+                    $extra['org_name']         = $infoRow['org_name']         ?? $infoRow['ORG_NAME']         ?? '';
+                    $extra['assigned_to_name'] = trim($infoRow['assigned_to_name'] ?? $infoRow['ASSIGNED_TO_NAME'] ?? '');
                 }
             }
             return array_merge($r, $extra);
@@ -247,7 +248,7 @@ if ($action === 'export') {
             $extra  = ['team_name' => '', 'org_name' => '', 'assigned_to_name' => ''];
             if ($taskId > 0) {
                 $infoRow = tm_fetch_one(tm_exec(
-                    "SELECT p.name AS project_name, tm.team_name, o.org_name,
+                    "SELECT tm.team_name, o.org_name,
                             u.first_name || ' ' || u.last_name AS assigned_to_name
                      FROM TM_Tasks t
                      LEFT JOIN TM_Teams         tm ON tm.team_id     = t.team_id
@@ -256,9 +257,10 @@ if ($action === 'export') {
                      WHERE t.task_id = :p1",
                     [$taskId]
                 ));
-                if ($infoRow) {                    $extra['team_name']        = $infoRow['team_name']        ?? '';
-                    $extra['org_name']         = $infoRow['org_name']         ?? '';
-                    $extra['assigned_to_name'] = trim($infoRow['assigned_to_name'] ?? '');
+                if ($infoRow) {
+                    $extra['team_name']        = $infoRow['team_name']        ?? $infoRow['TEAM_NAME']        ?? '';
+                    $extra['org_name']         = $infoRow['org_name']         ?? $infoRow['ORG_NAME']         ?? '';
+                    $extra['assigned_to_name'] = trim($infoRow['assigned_to_name'] ?? $infoRow['ASSIGNED_TO_NAME'] ?? '');
                 }
             }
             return array_merge($r, $extra);

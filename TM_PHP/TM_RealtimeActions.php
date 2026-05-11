@@ -191,12 +191,15 @@ switch ($action) {
         }
 
         // ── 1. Changed task IDs since `since` ───────────────────────────────
+        // Exclude changes made by the current user so the "updated by a teammate"
+        // notice only fires for changes other people made, not your own actions.
         $clStmt = tm_exec(
             "SELECT DISTINCT cl.task_id, MAX(cl.change_type) AS change_type
              FROM TM_TaskChangeLog cl
              WHERE cl.changed_at > TO_TIMESTAMP(:p1, 'YYYY-MM-DD HH24:MI:SS')
+               AND (cl.changed_by IS NULL OR cl.changed_by <> :p2)
              GROUP BY cl.task_id",
-            [$sinceTs]
+            [$sinceTs, $uid]
         );
         $changedIds = tm_fetch_all($clStmt);
 

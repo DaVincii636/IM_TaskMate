@@ -117,7 +117,7 @@ if ($tasksJson === false) { $tasksJson = '[]'; }
 // (avoids a second narrower query in TM_TaskModal.php that would miss project-linked tasks)
 $allTasksForModal = $allTasks;
 
-// ── Feature 8: Teams this user belongs to ────────────────────────────────────
+// ── Feature 8: Departments this user belongs to ────────────────────────────────────
 // ── End Feature 8 ─────────────────────────────────────────────────────────────
 
 // ── Notifications (shared partial: runs cron + builds bell HTML) ──────────────

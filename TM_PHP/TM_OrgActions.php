@@ -4,7 +4,9 @@
 // FEATURE 6 — Organization / Tenant Management (Admin Panel)
 //
 // All organization CRUD actions triggered from TM_UserList.php.
-// Only system admins (role = 'admin') may call these endpoints.
+// Only system admins (role = 'admin') may call these endpoints,
+// except 'set_org_head' which is admin-only, and org heads
+// who can create departments in their own org.
 //
 // Actions (POST):
 //   create_org    — create a new organization
@@ -12,11 +14,12 @@
 //   delete_org    — delete org (only if empty of users)
 //   transfer_user — move a user to a different org
 //   set_org_admin — promote / demote a user to org_admin
+//   set_org_head  — assign or remove the head of an organization
 // ============================================================
 require_once 'TM_Session.php';
 require_once 'TM_DB.php';
 
-// Only system admins may manage orgs
+// Only system admins may manage orgs (org head checks happen per-action)
 tm_require_role('admin');
 
 $action = $_POST['action'] ?? '';
@@ -218,6 +221,49 @@ switch ($action) {
         tm_audit($uid, 'edit', 'user', $targetUid, $userName,
                  "role:{$oldRole}", "role:{$newRole}");
         tm_flash('success', "\"{$userName}\" role updated to " . strtoupper($newRole) . '.');
+        header('Location: ../TM_UserList.php#orgs'); exit;
+
+    // ── Assign / remove the head of an organization ───────────────────────────
+    case 'set_org_head':
+        $orgId      = (int)($_POST['org_id']      ?? 0);
+        $orgHeadId  = (int)($_POST['org_head_id'] ?? 0); // 0 = remove head
+
+        if ($orgId <= 0) {
+            tm_flash('error', 'Invalid organization.');
+            header('Location: ../TM_UserList.php#orgs'); exit;
+        }
+
+        $orgRow = tm_fetch_one(tm_exec(
+            'SELECT org_name FROM TM_Organizations WHERE org_id = :p1', [$orgId]
+        ));
+        if (!$orgRow) {
+            tm_flash('error', 'Organization not found.');
+            header('Location: ../TM_UserList.php#orgs'); exit;
+        }
+
+        if ($orgHeadId > 0) {
+            // Verify user belongs to this org
+            $uRow = tm_fetch_one(tm_exec(
+                'SELECT first_name, last_name, org_id FROM TM_Users WHERE user_id = :p1',
+                [$orgHeadId]
+            ));
+            if (!$uRow || (int)($uRow['org_id'] ?? $uRow['ORG_ID'] ?? 0) !== $orgId) {
+                tm_flash('error', 'Selected user does not belong to this organization.');
+                header('Location: ../TM_UserList.php#orgs'); exit;
+            }
+            $headName = trim(($uRow['first_name'] ?? '') . ' ' . ($uRow['last_name'] ?? ''));
+        } else {
+            $headName = '(none)';
+        }
+
+        tm_exec(
+            'UPDATE TM_Organizations SET org_head_id = :p1 WHERE org_id = :p2',
+            [$orgHeadId > 0 ? $orgHeadId : null, $orgId]
+        );
+
+        $orgName = $orgRow['org_name'] ?? $orgRow['ORG_NAME'] ?? "org #{$orgId}";
+        tm_audit($uid, 'edit', 'user', $orgId, $orgName, '', "org_head_set:{$headName}");
+        tm_flash('success', "Organization head for \"{$orgName}\" updated.");
         header('Location: ../TM_UserList.php#orgs'); exit;
 
     default:

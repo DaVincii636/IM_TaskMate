@@ -189,8 +189,8 @@ switch ($action) {
      * Restricted to admin users only. Admins see all registered users in the org.
      */
     case 'list_users': {
-        // Only admin users may fetch the full user list for task assignment
-        if (!tm_is_admin()) {
+        // Admins and org_admins may fetch the user list for task assignment
+        if (!tm_is_admin() && !tm_is_org_admin()) {
             echo json_encode(['ok' => false, 'error' => 'Insufficient permissions.']);
             exit;
         }
@@ -199,18 +199,24 @@ switch ($action) {
              FROM TM_Users
              WHERE user_id <> :p1
                AND org_id  =  :p2
+               AND status  =  'active'
              ORDER BY username ASC",
             [$uid, $oid]
         );
         $users = array_map(function ($r) {
-            $full = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? ''));
+            $uid_r    = (int)($r['user_id']    ?? $r['USER_ID']    ?? 0);
+            $username = $r['username']          ?? $r['USERNAME']   ?? '';
+            $full     = trim(
+                ($r['first_name'] ?? $r['FIRST_NAME'] ?? '') . ' ' .
+                ($r['last_name']  ?? $r['LAST_NAME']  ?? '')
+            );
             return [
-                'user_id'   => (int)$r['user_id'],
-                'full_name' => $full ?: ('User #' . (int)$r['user_id']),
+                'user_id'   => $uid_r,
+                'username'  => $username,
+                'full_name' => $full ?: ('User #' . $uid_r),
             ];
         }, tm_fetch_all($stmt));
         echo json_encode(['ok' => true, 'data' => $users]);
         exit;
     }
-
-    // ──────────────────────────────────────────────────────────
+}

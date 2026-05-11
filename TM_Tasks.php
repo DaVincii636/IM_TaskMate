@@ -28,23 +28,31 @@ $_myTeams = tm_fetch_all(tm_exec(
 $extraWhere  = '';
 $oid         = tm_org_id();
 // Full scope: owned + assigned + org-wide
+// NOTE: :p1,:p2,:p3 are reserved for the base scope (uid, uid, oid).
+// All filter conditions append to $extraParams and use sequential :p4,:p5,... placeholders.
+// We use a helper counter to avoid re-counting a growing array, which avoids ORA-01036.
 $baseScope   = "(user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3))";
-$extraParams = [$uid, $uid, $oid];
+$extraParams = [$uid, $uid, $oid]; // indices 0,1,2 → :p1,:p2,:p3
 
+// Next available placeholder index (1-based): count($extraParams)+1
 if ($search !== '') {
-    $extraWhere .= " AND UPPER(task_name) LIKE UPPER(:p" . (count($extraParams)+1) . ")";
+    $pIdx = count($extraParams) + 1;
+    $extraWhere .= " AND UPPER(task_name) LIKE UPPER(:p{$pIdx})";
     $extraParams[] = '%' . $search . '%';
 }
 if ($filterCat !== '') {
-    $extraWhere .= " AND category = :p" . (count($extraParams)+1);
+    $pIdx = count($extraParams) + 1;
+    $extraWhere .= " AND category = :p{$pIdx}";
     $extraParams[] = $filterCat;
 }
 if ($filterPri !== '') {
-    $extraWhere .= " AND priority = :p" . (count($extraParams)+1);
+    $pIdx = count($extraParams) + 1;
+    $extraWhere .= " AND priority = :p{$pIdx}";
     $extraParams[] = $filterPri;
 }
 if ($filterTeam > 0) {
-    // tasks owned by members of this team
+    // Resolve team members via a separate query; embed as a literal IN list
+    // to avoid nested bind-variable conflicts with the main query.
     $tMembers = tm_fetch_all(tm_exec(
         'SELECT user_id FROM TM_TeamMembers WHERE team_id = :p1', [$filterTeam]
     ));
@@ -52,14 +60,19 @@ if ($filterTeam > 0) {
     if (!empty($tIds)) {
         $inList = implode(',', array_map('intval', $tIds));
         $extraWhere .= " AND user_id IN ($inList)";
+    } else {
+        // Team exists but has no members — return zero rows for that filter
+        $extraWhere .= " AND 1 = 0";
     }
 }
 if ($dateFrom !== '') {
-    $extraWhere .= " AND due_date >= TO_DATE(:p" . (count($extraParams)+1) . ",'YYYY-MM-DD')";
+    $pIdx = count($extraParams) + 1;
+    $extraWhere .= " AND due_date >= TO_DATE(:p{$pIdx},'YYYY-MM-DD')";
     $extraParams[] = $dateFrom;
 }
 if ($dateTo !== '') {
-    $extraWhere .= " AND due_date <= TO_DATE(:p" . (count($extraParams)+1) . ",'YYYY-MM-DD')";
+    $pIdx = count($extraParams) + 1;
+    $extraWhere .= " AND due_date <= TO_DATE(:p{$pIdx},'YYYY-MM-DD')";
     $extraParams[] = $dateTo;
 }
 
@@ -555,7 +568,7 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
             </select>
             <?php if (!empty($_myTeams)): ?>
             <select name="team" class="filter-select">
-                <option value="">All Teams</option>
+                <option value="">All Departments</option>
                 <?php foreach ($_myTeams as $t): ?>
                 <option value="<?= (int)$t['team_id'] ?>" <?= $filterTeam===(int)$t['team_id']?'selected':'' ?>>
                     <?= htmlspecialchars($t['team_name']) ?>

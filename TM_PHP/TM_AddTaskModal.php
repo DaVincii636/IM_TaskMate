@@ -69,7 +69,7 @@
                 </div>
                 <?php endif; ?>
 
-                <!-- ── Team Assignment ───────────────────────────── -->
+                <!-- ── Department Assignment ───────────────────────────── -->
                 <?php
                 $_add_uid = function_exists('tm_uid') ? tm_uid() : 0;
                 if ($_add_uid > 0) {
@@ -86,9 +86,9 @@
                 ?>
                 <?php if (!empty($_add_teams)): ?>
                 <div class="form-group">
-                    <label class="form-label">Assign to Team</label>
+                    <label class="form-label">Assign to Department</label>
                     <select name="team_id" class="form-input" id="addTeamSelect">
-                        <option value="">— No Team —</option>
+                        <option value="">— No Department —</option>
                         <?php foreach ($_add_teams as $_add_t): ?>
                         <option value="<?= (int)$_add_t['team_id'] ?>"><?= htmlspecialchars($_add_t['team_name'] ?? '') ?></option>
                         <?php endforeach; ?>

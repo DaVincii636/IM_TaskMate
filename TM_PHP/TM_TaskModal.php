@@ -1053,11 +1053,11 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                         + '</div>';
                 }
 
-                // ── Team ─────────────────────────────────────────────────────
+                // ── Department ─────────────────────────────────────────────────────
                 if (d.team_id && d.team_name) {
                     hasExtra = true;
                     gridHtml += '<div class="vm-field">'
-                        + '<span class="vm-label"><i class="fa-solid fa-people-group" style="margin-right:4px;color:var(--gray-400);"></i>Team</span>'
+                        + '<span class="vm-label"><i class="fa-solid fa-people-group" style="margin-right:4px;color:var(--gray-400);"></i>Department</span>'
                         + '<span class="vm-value">' + escHtml(d.team_name) + '</span>'
                         + '</div>';
                 }
