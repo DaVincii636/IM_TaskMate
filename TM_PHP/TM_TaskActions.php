@@ -469,15 +469,14 @@ if ($action === 'export') {
             $label   = $isOD ? 'Overdue' : ucfirst(str_replace('_', ' ', $status));
             $priCls  = match($r['priority'] ?? '') { 'high' => 'pri-high', 'low' => 'pri-low', default => 'pri-mid' };
             $priLbl  = ucfirst($r['priority'] ?? 'mid');
-            $projTag = $r['project_name'] ? '<span class="meta-tag project">' . htmlspecialchars($r['project_name']) . '</span>' : '';
-            $teamTag = $r['team_name']    ? '<span class="meta-tag team">'    . htmlspecialchars($r['team_name'])    . '</span>' : '';
+            $teamTag = $r['team_name'] ? '<span class="meta-tag team">' . htmlspecialchars($r['team_name']) . '</span>' : '';
             $asgn    = $r['assigned_to_name'] ? '<span class="meta-tag assigned">' . htmlspecialchars($r['assigned_to_name']) . '</span>' : '<span style="color:#cbd5e1">—</span>';
             echo '<tr>
   <td style="color:#94a3b8;font-size:.72rem;">' . $rowNum++ . '</td>
   <td class="task-name">' . htmlspecialchars($r['task_name'] ?? '') . '</td>
   <td>' . htmlspecialchars(ucfirst($r['category'] ?? '')) . '</td>
   <td><span class="pri-dot ' . $priCls . '"></span>' . $priLbl . '</td>
-  <td>' . ($projTag ?: '') . ($teamTag ? ' ' . $teamTag : '') . ($projTag || $teamTag ? '' : '<span style="color:#cbd5e1">—</span>') . '</td>
+  <td>' . ($teamTag ?: '<span style="color:#cbd5e1">—</span>') . '</td>
   <td>' . $asgn . '</td>
   <td style="color:#64748b;">' . htmlspecialchars($r['start_date'] ?? '') . '</td>
   <td style="' . ($isOD ? 'color:#dc2626;font-weight:700;' : 'color:#64748b;') . '">' . htmlspecialchars($r['due_date'] ?? '') . '</td>

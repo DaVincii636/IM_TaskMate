@@ -25,7 +25,6 @@ $_myTeams = tm_fetch_all(tm_exec(
      WHERE tm.user_id = :p1 ORDER BY t.team_name ASC",
     [$uid]
 ));
-$extraWhere  = '';
 $oid         = tm_org_id();
 // Full scope: owned + assigned + org-wide
 // NOTE: :p1,:p2,:p3 are reserved for the base scope (uid, uid, oid).
@@ -33,6 +32,7 @@ $oid         = tm_org_id();
 // We use a helper counter to avoid re-counting a growing array, which avoids ORA-01036.
 $baseScope   = "(user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3))";
 $extraParams = [$uid, $uid, $oid]; // indices 0,1,2 → :p1,:p2,:p3
+$extraWhere  = ''; // must be initialized before any filter appends to it
 
 // Next available placeholder index (1-based): count($extraParams)+1
 if ($search !== '') {
@@ -486,8 +486,10 @@ table.task-table tbody tr.row-overdue td:first-child {
 
 <?php
 // Count tasks for tab badges — full scope: owned + assigned + org-wide + project member
-$_cntUid = $uid;
-$_cntOid = $oid;
+// These use a FRESH scope string and their own param array, completely isolated
+// from the filter query above to prevent ORA-01036 bind variable conflicts.
+$_cntUid   = $uid;
+$_cntOid   = $oid;
 $_cntScope = "(user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3))";
 
 $_r = tm_fetch_all(tm_exec(
@@ -736,6 +738,9 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 <?php
 // Provide $allTasksForModal so TM_TaskModal.php uses the same full scope as this page.
 // The $tasks array above is filtered/paginated; we need ALL tasks for the modal lookup.
+// IMPORTANT: use only the 3 base params (uid, uid, oid) — NOT $extraParams which may
+// contain filter binds (:p4,:p5...) that would cause ORA-01036 on subsequent queries.
+$_modalBaseParams = [$uid, $uid, $oid];
 $_modalStmt = tm_exec(
     "SELECT task_id, task_name,
             TO_CHAR(start_date,'YYYY-MM-DD') AS start_date,
@@ -744,7 +749,7 @@ $_modalStmt = tm_exec(
      FROM TM_Tasks
      WHERE $baseScope
      ORDER BY due_date ASC",
-    $extraParams
+    $_modalBaseParams
 );
 $allTasksForModal = tm_fetch_all($_modalStmt);
 $allTasksForModal = array_map(function($row) {

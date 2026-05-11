@@ -129,6 +129,7 @@
                 // ── Online users ──────────────────────────────────────────
                 if (data.online) {
                     emit('tm:online-changed', { users: data.online });
+                    renderOnlineBar(data.online);
                 }
             })
             .catch(() => { /* silently swallow network errors */ })
@@ -267,6 +268,48 @@
         return String(str || '')
             .replace(/&/g, '&amp;').replace(/</g, '&lt;')
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // ── Online presence bar ───────────────────────────────────────────────────
+    function renderOnlineBar(users) {
+        // Find or create the container inside .navbar-right
+        var bar = document.getElementById('tm-online-bar');
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'tm-online-bar';
+            bar.className = 'tm-online-bar';
+            // Insert before the notification bell (or fallback: append to navbar-right)
+            var navRight = document.querySelector('.navbar-right');
+            if (!navRight) return;
+            var bell = navRight.querySelector('.tm-notif-bell-wrap, #tm-notif-bell, .notif-bell');
+            if (bell) {
+                navRight.insertBefore(bar, bell);
+            } else {
+                navRight.appendChild(bar);
+            }
+        }
+
+        if (!users || users.length === 0) {
+            bar.innerHTML = '';
+            return;
+        }
+
+        var MAX_SHOW = 4;
+        var visible  = users.slice(0, MAX_SHOW);
+        var overflow = users.length - MAX_SHOW;
+
+        var html = '<span class="tm-online-label">Online</span><div class="tm-online-avatars">';
+        visible.forEach(function (u) {
+            var initials = getInitials(u.full_name || u.username);
+            var page     = u.page_type ? u.page_type.charAt(0).toUpperCase() + u.page_type.slice(1) : '';
+            var tip      = esc(u.full_name || u.username) + (page ? ' \u2022 ' + esc(page) : '');
+            html += '<div class="tm-online-avatar" title="' + tip + '">' + esc(initials) + '</div>';
+        });
+        if (overflow > 0) {
+            html += '<div class="tm-online-avatar tm-online-more">+' + overflow + '</div>';
+        }
+        html += '</div>';
+        bar.innerHTML = html;
     }
 
     // ── Inline styles for the online bar & flash ──────────────────────────────

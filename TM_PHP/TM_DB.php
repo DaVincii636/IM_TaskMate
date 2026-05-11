@@ -58,6 +58,7 @@ function tm_lowercase_keys(array $row): array {
 
 function tm_fetch_one($stmt): ?array {
     $row = oci_fetch_assoc($stmt);
+    oci_free_statement($stmt);
     return $row ? tm_lowercase_keys($row) : null;
 }
 
@@ -66,11 +67,13 @@ function tm_fetch_all($stmt): array {
     while ($row = oci_fetch_assoc($stmt)) {
         $rows[] = tm_lowercase_keys($row);
     }
+    oci_free_statement($stmt);
     return $rows;
 }
 
 function tm_scalar($stmt) {
     $row = oci_fetch_row($stmt);
+    oci_free_statement($stmt);
     return $row ? $row[0] : null;
 }
 
