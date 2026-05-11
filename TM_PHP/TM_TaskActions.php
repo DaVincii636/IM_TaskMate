@@ -146,7 +146,7 @@ if ($action === 'export') {
             'Task ID', 'Task Name', 'Start Date', 'Due Date',
             'Category', 'Custom Category', 'Priority', 'Color',
             'Notes', 'Status', 'Recurrence', 'Created At',
-            'Team', 'Organization', 'Assigned To'
+            'Department', 'Organization', 'Assigned To'
         ]);
 
         // Data rows
@@ -452,7 +452,7 @@ if ($action === 'export') {
   <th>Task Name</th>
   <th>Category</th>
   <th>Priority</th>
-  <th>Project / Team</th>
+  <th>Project / Department</th>
   <th>Assigned To</th>
   <th>Start</th>
   <th>Due</th>

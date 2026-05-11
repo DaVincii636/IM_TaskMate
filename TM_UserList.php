@@ -255,9 +255,9 @@ require_once 'TM_PHP/TM_NavNotif.php';
         </div>
         <?php endif; ?>
         <div class="stat-card">
-            <div class="stat-label">Teams</div>
+            <div class="stat-label">Departments</div>
             <div class="stat-value"><?= count($teams) ?></div>
-            <div class="stat-desc"><?php echo $is_admin ? 'Teams across all organizations' : 'Teams in your organization'; ?></div>
+            <div class="stat-desc"><?php echo $is_admin ? 'Departments across all organizations' : 'Departments in your organization'; ?></div>
         </div>
     </div>
 
@@ -340,7 +340,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
     <div class="admin-tabs">
         <button class="admin-tab active" onclick="switchTab('tab-users', this)" title="View and manage user accounts"><i class="fa-solid fa-users" style="margin-right:6px;font-size:12px;"></i>Users</button>
         <button class="admin-tab" onclick="switchTab('tab-orgs', this)" title="<?php echo $is_admin ? 'Manage organizations' : 'View your organization'; ?>"><i class="fa-solid fa-building" style="margin-right:6px;font-size:12px;"></i>Organization<?php echo $is_admin ? 's' : ''; ?></button>
-        <button class="admin-tab" onclick="switchTab('tab-teams', this)" title="Create and manage teams within organizations"><i class="fa-solid fa-people-group" style="margin-right:6px;font-size:12px;"></i>Teams</button>
+        <button class="admin-tab" onclick="switchTab('tab-teams', this)" title="Create and manage departments within organizations"><i class="fa-solid fa-people-group" style="margin-right:6px;font-size:12px;"></i>Departments</button>
     </div>
     <?php endif; ?>
 
@@ -672,19 +672,19 @@ require_once 'TM_PHP/TM_NavNotif.php';
     <?php if ($is_admin || $is_org_admin): ?>
     <div class="tab-panel" id="tab-teams">
     <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 18px;margin-bottom:18px;font-size:13px;color:#6b7280;">
-        <strong style="color:#111;">Teams</strong> — Create teams to group users within an organization for collaborative task assignments. You can add or remove members from a team at any time.
+        <strong style="color:#111;">Departments</strong> — Create departments to group users within an organization for collaborative task assignments. You can add or remove members from a department at any time.
     </div>
 
         <div class="admin-bar">
-            <span class="admin-badge">Teams</span>
-            <button class="btn-add-user" onclick="openAdminModal('addTeamModal')">+ New Team</button>
+            <span class="admin-badge">Departments</span>
+            <button class="btn-add-user" onclick="openAdminModal('addTeamModal')">+ New Department</button>
         </div>
 
         <?php if (empty($teams)): ?>
         <div class="org-empty">
             <div class="org-empty-icon"><i class="fa-solid fa-people-group"></i></div>
-            <div class="org-empty-text">No teams yet</div>
-            <div class="org-empty-sub">Click "New Team" to create one</div>
+            <div class="org-empty-text">No departments yet</div>
+            <div class="org-empty-sub">Click "New Department" to create one</div>
         </div>
         <?php else: ?>
         <div class="org-grid">
@@ -728,10 +728,10 @@ require_once 'TM_PHP/TM_NavNotif.php';
             <?php endforeach; ?>
         </div>
 
-        <!-- Team × Member breakdown table -->
+        <!-- Department × Member breakdown table -->
         <div style="margin-top:32px;">
             <div class="admin-bar" style="margin-bottom:12px;">
-                <span class="admin-badge">Team Membership</span>
+                <span class="admin-badge">Department Membership</span>
             </div>
             <div class="table-card">
                 <div class="table-wrap">
@@ -739,7 +739,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
                         <thead>
                             <tr>
                                 <th>#</th>
-                                <th>Team</th>
+                                <th>Department</th>
                                 <?php if ($is_admin): ?><th>Org</th><?php endif; ?>
                                 <th>Member</th>
                                 <th>Role</th>
@@ -1169,26 +1169,26 @@ require_once 'TM_PHP/TM_NavNotif.php';
 <div class="modal-overlay" id="addTeamModal">
     <div class="modal-card modal-sm">
         <div class="modal-header">
-            <div class="modal-title">New Team</div>
+            <div class="modal-title">New Department</div>
             <button class="modal-close" onclick="closeAdminModal('addTeamModal')">&#x2715;</button>
         </div>
         <form method="post" action="TM_PHP/TM_TeamActions.php">
             <input type="hidden" name="action" value="create_team"/>
             <div class="modal-body">
                 <div class="form-group">
-                    <label class="form-label">Team Name</label>
+                    <label class="form-label">Department Name</label>
                     <input type="text" name="team_name" class="form-input"
                            placeholder="e.g. Engineering" required/>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Description <span style="font-size:11px;font-weight:400;color:#9ca3af">(optional)</span></label>
                     <input type="text" name="description" class="form-input"
-                           placeholder="What does this team do?"/>
+                           placeholder="What does this department do?"/>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-cancel-modal" onclick="closeAdminModal('addTeamModal')">Cancel</button>
-                <button type="submit" class="btn-save-modal">Create Team</button>
+                <button type="submit" class="btn-save-modal">Create Department</button>
             </div>
         </form>
     </div>
@@ -1198,7 +1198,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
 <div class="modal-overlay" id="editTeamModal">
     <div class="modal-card modal-sm">
         <div class="modal-header">
-            <div class="modal-title">Edit Team</div>
+            <div class="modal-title">Edit Department</div>
             <button class="modal-close" onclick="closeAdminModal('editTeamModal')">&#x2715;</button>
         </div>
         <form method="post" action="TM_PHP/TM_TeamActions.php">
@@ -1206,7 +1206,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
             <input type="hidden" name="team_id" id="editTeamId"/>
             <div class="modal-body">
                 <div class="form-group">
-                    <label class="form-label">Team Name</label>
+                    <label class="form-label">Department Name</label>
                     <input type="text" name="team_name" class="form-input" id="editTeamName" required/>
                 </div>
                 <div class="form-group">
@@ -1228,7 +1228,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
         <div class="pc-modal-icon" style="background:rgba(239,68,68,.12)">
             <i class="fa-solid fa-people-group" style="color:#ef4444"></i>
         </div>
-        <div class="pc-modal-title">Delete Team?</div>
+        <div class="pc-modal-title">Delete Department?</div>
         <div class="pc-modal-body">
             Delete <strong id="deleteTeamName"></strong>?
             All members will be removed. This <strong>cannot be undone</strong>.

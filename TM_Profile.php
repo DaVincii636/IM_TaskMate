@@ -415,8 +415,8 @@ require_once 'TM_PHP/TM_NavNotif.php';
     <div class="profile-card">
         <div class="profile-card-header">
             <i class="fa-solid fa-users" style="margin-right:8px;color:var(--gray-400)"></i>
-            My Teams
-            <span style="font-size:12px;font-weight:400;color:var(--gray-400);margin-left:8px;"><?= count($myTeams) ?> team<?= count($myTeams) !== 1 ? 's' : '' ?></span>
+            My Departments
+            <span style="font-size:12px;font-weight:400;color:var(--gray-400);margin-left:8px;"><?= count($myTeams) ?> department<?= count($myTeams) !== 1 ? 's' : '' ?></span>
         </div>
         <div class="profile-card-body" style="padding:1rem 1.5rem;">
             <div style="display:flex;flex-direction:column;gap:.75rem;">
