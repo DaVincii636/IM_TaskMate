@@ -899,6 +899,13 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
 (function () {
     'use strict';
 
+    // ── HTML escaper (mirrors esc() in the first script block, needed here too) ──
+    function escHtml(s) {
+        return String(s)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
     // ── Cached users list (shared by all mention autocompletes) ──
     var _allUsers    = null;
     var _usersLoaded = false;
@@ -1009,7 +1016,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         });
     };
 
-    // ── View modal: show full task context (assigned by/to, project, team, org, recurrence, blockers) ──
+    // ── View modal: show full task context (assigned by/to, scope, dept, org, recurrence, blockers) ──
     var _origOpenView = window.tmOpenView;
     window.tmOpenView = function (id) {
         _origOpenView(id);
@@ -1053,7 +1060,21 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                         + '</div>';
                 }
 
-                // ── Department ─────────────────────────────────────────────────────
+                // ── Scope badge: Org-Wide / Team / Personal ──────────────────
+                var scopeConfig = {
+                    org:      { label: 'Org-Wide',  bg: '#fef3c7', color: '#b45309', border: '#fde68a', icon: 'fa-building' },
+                    team:     { label: 'Team',       bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe', icon: 'fa-people-group' },
+                    personal: { label: 'Personal',   bg: '#f3f4f6', color: '#4b5563', border: '#e5e7eb', icon: 'fa-user' },
+                };
+                var sc = scopeConfig[d.scope] || scopeConfig['personal'];
+                hasExtra = true;
+                gridHtml += '<div class="vm-field">'
+                    + '<span class="vm-label"><i class="fa-solid fa-layer-group" style="margin-right:4px;color:var(--gray-400);"></i>Scope</span>'
+                    + '<span class="vm-value"><span style="display:inline-flex;align-items:center;gap:5px;background:' + sc.bg + ';color:' + sc.color + ';border:1px solid ' + sc.border + ';border-radius:50px;padding:2px 10px;font-size:11px;font-weight:600;">'
+                    + '<i class="fa-solid ' + sc.icon + '" style="font-size:9px;"></i>' + sc.label + '</span></span>'
+                    + '</div>';
+
+                // ── Department ───────────────────────────────────────────────
                 if (d.team_id && d.team_name) {
                     hasExtra = true;
                     gridHtml += '<div class="vm-field">'
@@ -1074,7 +1095,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                 // ── Recurrence ───────────────────────────────────────────────
                 if (d.recurrence && d.recurrence !== '' && d.recurrence !== 'none') {
                     hasExtra = true;
-                    var recLabel = {daily:'Daily', weekly:'Weekly', monthly:'Monthly'}[d.recurrence]
+                    var recLabel = {daily:'Daily', weekly:'Weekly', monthly:'Monthly', yearly:'Yearly'}[d.recurrence]
                                    || (d.recurrence.charAt(0).toUpperCase() + d.recurrence.slice(1));
                     gridHtml += '<div class="vm-field">'
                         + '<span class="vm-label"><i class="fa-solid fa-rotate" style="margin-right:4px;color:var(--gray-400);"></i>Recurrence</span>'

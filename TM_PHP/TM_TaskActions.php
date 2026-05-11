@@ -23,6 +23,20 @@ $uid      = tm_uid();
 $oid      = tm_org_id(); // Feature 6: org-scoped filtering
 $is_admin = tm_is_admin(); // used by the reassign action to relax task ownership check
 
+// ── Helper: distinguish "task doesn't exist" from "task exists but user can't touch it" ──
+// Returns the correct error message string for a failed ownership-scoped lookup.
+// Usage: whenever a SELECT with (user_id=:uid OR assigned_to=:uid) returns null,
+// call this to get the right message before flashing/returning the error.
+function tm_task_access_error(int $taskId, int $orgId): string {
+    $exists = tm_fetch_one(tm_exec(
+        "SELECT 1 AS found FROM TM_Tasks WHERE task_id = :p1 AND org_id = :p2",
+        [$taskId, $orgId]
+    ));
+    return $exists
+        ? 'You do not have permission to modify this task.'
+        : 'Task not found.';
+}
+
 // ── COLLABORATION helper: get username without requiring TM_CollabActions.php ─
 if (!function_exists('tm_get_username_inline')) {
     function tm_get_username_inline(int $userId): string {
@@ -641,8 +655,9 @@ switch ($action) {
             [$id, $uid, $uid, $oid]
         ));
         if (!$oldRow) {
-            if ($isApi) tm_api_err('Task not found.', 404);
-            tm_flash('error', 'Task not found.'); break;
+            $_err = tm_task_access_error($id, $oid);
+            if ($isApi) tm_api_err($_err, !str_contains($_err, 'permission') ? 404 : 403);
+            tm_flash('error', $_err); break;
         }
         $oldName   = $oldRow['task_name'] ?? '';
         $oldStatus = $oldRow['status']    ?? '';
@@ -719,8 +734,9 @@ switch ($action) {
             $is_admin ? [$taskId, $oid] : [$taskId, $oid, $uid]
         ));
         if (!$tRow) {
-            if ($isApi) tm_api_err('Task not found.', 404);
-            tm_flash('error', 'Task not found.'); break;
+            $_err = tm_task_access_error($taskId, $oid);
+            if ($isApi) tm_api_err($_err, !str_contains($_err, 'permission') ? 404 : 403);
+            tm_flash('error', $_err); break;
         }
 
         $taskName    = $tRow['task_name'] ?? $tRow['TASK_NAME'] ?? "task #{$taskId}";
@@ -787,8 +803,9 @@ switch ($action) {
             [$id, $uid, $uid, $oid]
         ));
         if (!$delRow) {
-            if ($isApi) tm_api_err('Task not found.', 404);
-            tm_flash('error', 'Task not found.'); break;
+            $_err = tm_task_access_error($id, $oid);
+            if ($isApi) tm_api_err($_err, !str_contains($_err, 'permission') ? 404 : 403);
+            tm_flash('error', $_err); break;
         }
         $delName = $delRow['task_name'] ?? "task #{$id}";
 
@@ -817,8 +834,9 @@ switch ($action) {
             [$id, $uid, $uid, $oid]
         ));
         if (!$qsRow) {
-            if ($isApi) tm_api_err('Task not found.', 404);
-            tm_flash('error', 'Task not found.'); break;
+            $_err = tm_task_access_error($id, $oid);
+            if ($isApi) tm_api_err($_err, !str_contains($_err, 'permission') ? 404 : 403);
+            tm_flash('error', $_err); break;
         }
         tm_sp_update_status($id, $uid, $newStatus);
         if ($isApi) tm_api_ok(['task_id' => $id, 'status' => $newStatus]);
@@ -841,8 +859,9 @@ switch ($action) {
             [$id, $uid, $oid]
         ));
         if (!$qdRow) {
-            if ($isApi) tm_api_err('Task not found.', 404);
-            tm_flash('error', 'Task not found.'); break;
+            $_err = tm_task_access_error($id, $oid);
+            if ($isApi) tm_api_err($_err, !str_contains($_err, 'permission') ? 404 : 403);
+            tm_flash('error', $_err); break;
         }
         $qdName  = $qdRow['task_name'] ?? "task #{$id}";
         $qdOldSt = $qdRow['status']    ?? 'pending';
@@ -930,8 +949,9 @@ switch ($action) {
             [$id, $uid, $oid]
         ));
         if (!$taskRow) {
-            if ($isApi) tm_api_err('Task not found.', 404);
-            tm_flash('error', 'Task not found.'); break;
+            $_err = tm_task_access_error($id, $oid);
+            if ($isApi) tm_api_err($_err, !str_contains($_err, 'permission') ? 404 : 403);
+            tm_flash('error', $_err); break;
         }
         if (($taskRow['status'] ?? '') !== 'done') {
             if ($isApi) tm_api_err('Task is not marked done — nothing to undo.', 409);

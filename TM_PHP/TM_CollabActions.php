@@ -124,6 +124,12 @@ function tm_get_username(int $userId): string {
 // ═══════════════════════════════════════════════════════════════
 // SWITCH on action
 // ═══════════════════════════════════════════════════════════════
+// ── Column key normaliser (Oracle returns lowercase via tm_fetch_one already,
+//    but this guards against any direct oci_fetch_assoc calls elsewhere) ───────
+function tm_col(array $row, string $key) {
+    return $row[$key] ?? $row[strtoupper($key)] ?? null;
+}
+
 switch ($action) {
 
     // ──────────────────────────────────────────────────────────
@@ -219,4 +225,115 @@ switch ($action) {
         echo json_encode(['ok' => true, 'data' => $users]);
         exit;
     }
+    // ──────────────────────────────────────────────────────────
+    // get_task_collab
+    // GET: task_id
+    // Returns full assignment/org/dept context for the view modal.
+    // ──────────────────────────────────────────────────────────
+    case 'get_task_collab': {
+        $taskId = (int)($_GET['task_id'] ?? $_POST['task_id'] ?? 0);
+        if ($taskId <= 0) {
+            ob_clean();
+            echo json_encode(['ok' => false, 'error' => 'Invalid task_id']);
+            exit;
+        }
+
+        // Main task row — owner, assignee, org, team, scope flags
+        $taskRow = tm_fetch_one(tm_exec(
+            "SELECT
+                t.task_id,
+                t.task_name,
+                t.user_id         AS owner_id,
+                t.assigned_to,
+                t.org_id,
+                t.team_id,
+                t.is_org_task,
+                t.recurrence,
+                owner.first_name  || ' ' || owner.last_name  AS owner_name,
+                owner.username                                AS owner_username,
+                asgn.first_name   || ' ' || asgn.last_name   AS assigned_full_name,
+                asgn.username                                 AS assigned_username,
+                o.org_name,
+                tm.team_name
+             FROM TM_Tasks t
+             JOIN TM_Users         owner ON owner.user_id = t.user_id
+             JOIN TM_Organizations o     ON o.org_id      = t.org_id
+             LEFT JOIN TM_Users    asgn  ON asgn.user_id  = t.assigned_to
+             LEFT JOIN TM_Teams    tm    ON tm.team_id     = t.team_id
+             WHERE t.task_id = :p1
+               AND (
+                   t.user_id     = :p2
+                OR t.assigned_to = :p3
+                OR (t.is_org_task = 1 AND t.org_id = :p4)
+               )",
+            [$taskId, $uid, $uid, $oid]
+        ));
+
+        if (!$taskRow) {
+            ob_clean();
+            echo json_encode(['ok' => false, 'error' => 'Task not found or access denied']);
+            exit;
+        }
+
+        $ownerId           = (int)tm_col($taskRow, 'owner_id');
+        $ownerName         = trim((string)tm_col($taskRow, 'owner_name'));
+        $ownerUsername     = (string)tm_col($taskRow, 'owner_username');
+        $assignedTo        = tm_col($taskRow, 'assigned_to');
+        $assignedFullName  = trim((string)tm_col($taskRow, 'assigned_full_name'));
+        $assignedUsername  = (string)tm_col($taskRow, 'assigned_username');
+        $orgName           = (string)tm_col($taskRow, 'org_name');
+        $teamId            = tm_col($taskRow, 'team_id');
+        $teamName          = (string)tm_col($taskRow, 'team_name');
+        $isOrgTask         = (int)tm_col($taskRow, 'is_org_task');
+        $recurrence        = (string)tm_col($taskRow, 'recurrence');
+        $taskName          = (string)tm_col($taskRow, 'task_name');
+
+        // Determine scope label: org-wide broadcast, team task, or personal
+        if ($isOrgTask) {
+            $scope = 'org';
+        } elseif ($teamId) {
+            $scope = 'team';
+        } else {
+            $scope = 'personal';
+        }
+
+        // Blocker tasks (Must Complete First)
+        $blockerStmt = tm_exec(
+            "SELECT t2.task_id, t2.task_name, t2.status, t2.color
+             FROM TM_TaskLinks tl
+             JOIN TM_Tasks t2 ON t2.task_id = tl.depends_on_id
+             WHERE tl.task_id    = :p1
+               AND tl.link_type  = 'blocks'
+             ORDER BY t2.due_date ASC",
+            [$taskId]
+        );
+        $blockers = array_map(function ($b) {
+            return [
+                'id'     => (int)($b['task_id']   ?? $b['TASK_ID']   ?? 0),
+                'name'   => $b['task_name']        ?? $b['TASK_NAME'] ?? '',
+                'status' => strtolower((string)($b['status'] ?? $b['STATUS'] ?? 'pending')),
+                'color'  => $b['color']            ?? $b['COLOR']     ?? '#94a3b8',
+            ];
+        }, tm_fetch_all($blockerStmt));
+
+        ob_clean();
+        echo json_encode([
+            'ok'                 => true,
+            'task_id'            => $taskId,
+            'task_name'          => $taskName,
+            'owner_id'           => $ownerId,
+            'owner_name'         => $ownerName ?: $ownerUsername,
+            'assigned_to'        => $assignedTo ? (int)$assignedTo : null,
+            'assigned_full_name' => $assignedFullName ?: ($assignedUsername ?: null),
+            'org_name'           => $orgName,
+            'team_id'            => $teamId ? (int)$teamId : null,
+            'team_name'          => $teamName ?: null,
+            'is_org_task'        => $isOrgTask,
+            'scope'              => $scope,
+            'recurrence'         => $recurrence,
+            'blockers'           => $blockers,
+        ]);
+        exit;
+    }
+
 } // end switch

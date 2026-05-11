@@ -5,10 +5,11 @@ require_once 'TM_DB.php';
 // Moderators can VIEW the user list but cannot make changes
 tm_require_role('moderator');
 
-$action   = $_POST['action'] ?? $_GET['action'] ?? '';
-$is_admin = tm_is_admin();
-$uid      = tm_uid();
-$oid      = tm_org_id(); // Feature 6: org-scoped operations
+$action       = $_POST['action'] ?? $_GET['action'] ?? '';
+$is_admin     = tm_is_admin();
+$is_org_admin = tm_is_org_admin(); // true for both org_admin and admin roles
+$uid          = tm_uid();
+$oid          = tm_org_id(); // Feature 6: org-scoped operations
 
 // ── JSON API detection ────────────────────────────────────────────────────────
 // Mirrors the detection in TM_TaskActions.php.

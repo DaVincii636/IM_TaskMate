@@ -267,7 +267,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
         ? tm_exec("SELECT user_id, first_name, last_name, email, phone FROM TM_Users WHERE status='pending' ORDER BY created_at ASC")
         : tm_exec("SELECT user_id, first_name, last_name, email, phone FROM TM_Users WHERE status='pending' AND org_id = :p1 ORDER BY created_at ASC", [$oid]);
     $pendingUsers = tm_fetch_all($pendingStmt);
-    if (($is_admin || $is_org_admin) && !empty($pendingUsers)):
+    if ($is_admin && !empty($pendingUsers)):
     ?>
     <div class="table-card" style="margin-bottom:24px;border:1.5px solid #fcd34d;">
         <div style="padding:14px 20px;background:#fffbeb;border-bottom:1px solid #fde68a;display:flex;align-items:center;gap:10px;">
@@ -350,7 +350,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
     <div class="tab-panel active" id="tab-users">
     <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 18px;margin-bottom:18px;font-size:13px;color:#6b7280;">
         <strong style="color:#111;">Users</strong> — Add, edit, suspend, or remove user accounts.
-        <?php if ($is_admin): ?>Assign roles (User, Moderator, Org Admin, Admin) and move users between organizations.<?php else: ?>Assign roles up to Org Admin within your organization.<?php endif; ?>
+        <?php if ($is_admin): ?>Assign roles (User, Org Admin, Admin) and move users between organizations.<?php else: ?>Assign roles up to Org Admin within your organization.<?php endif; ?>
     </div>
     <div class="admin-bar">
         <span class="admin-badge">User List</span>
@@ -396,7 +396,6 @@ require_once 'TM_PHP/TM_NavNotif.php';
                                 $roleLabel = match($u['role'] ?? 'user') {
                                     'admin'     => '<span style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">ADMIN</span>',
                                     'org_admin' => '<span style="background:#fce7f3;color:#9d174d;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">ORG ADMIN</span>',
-                                    'moderator' => '<span style="background:#ede9fe;color:#7c3aed;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">MOD</span>',
                                     default     => '<span style="background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">USER</span>',
                                 };
                                 echo $roleLabel;
@@ -426,19 +425,8 @@ require_once 'TM_PHP/TM_NavNotif.php';
                                 $isPending  = $userStatus === 'pending';
                                 ?>
                                 <?php if ($is_org_admin && $isPending): ?>
-                                <!-- Org admin: approve or reject pending users in their org -->
-                                <div class="td-actions">
-                                    <form method="post" action="TM_PHP/TM_UserActions.php" style="display:inline">
-                                        <input type="hidden" name="action" value="approve"/>
-                                        <input type="hidden" name="id" value="<?= $u['user_id'] ?>"/>
-                                        <button type="submit" style="padding:6px 14px;font-size:12px;font-weight:600;border-radius:6px;border:1px solid #6ee7b7;background:#ecfdf5;color:#065f46;cursor:pointer;font-family:'Poppins',sans-serif;">Approve</button>
-                                    </form>
-                                    <form method="post" action="TM_PHP/TM_UserActions.php" style="display:inline">
-                                        <input type="hidden" name="action" value="suspend"/>
-                                        <input type="hidden" name="id" value="<?= $u['user_id'] ?>"/>
-                                        <button type="submit" class="btn-delete-user">Reject</button>
-                                    </form>
-                                </div>
+                                <!-- Org admin: no actions on pending users -->
+                                <span style="font-size:12px;color:#9ca3af">Pending</span>
                                 <?php else: ?>
                                 <div class="td-actions">
                                     <button class="btn-edit-user"
@@ -584,7 +572,6 @@ require_once 'TM_PHP/TM_NavNotif.php';
                                 $roleBadge = match($uRole) {
                                     'admin'     => '<span style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">ADMIN</span>',
                                     'org_admin' => '<span style="background:#fce7f3;color:#9d174d;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">ORG ADMIN</span>',
-                                    'moderator' => '<span style="background:#ede9fe;color:#7c3aed;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">MOD</span>',
                                     default     => '<span style="background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">USER</span>',
                                 };
                                 echo $roleBadge;
@@ -635,7 +622,6 @@ require_once 'TM_PHP/TM_NavNotif.php';
                                 $roleBadge = match($uRole) {
                                     'admin'     => '<span style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">ADMIN</span>',
                                     'org_admin' => '<span style="background:#fce7f3;color:#9d174d;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">ORG ADMIN</span>',
-                                    'moderator' => '<span style="background:#ede9fe;color:#7c3aed;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">MOD</span>',
                                     default     => '<span style="background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">USER</span>',
                                 };
                                 echo $roleBadge;
@@ -882,7 +868,6 @@ require_once 'TM_PHP/TM_NavNotif.php';
                 <label class="form-label">Role</label>
                 <select name="role" class="form-input">
                     <option value="user">User</option>
-                    <option value="moderator">Moderator</option>
                     <option value="org_admin">Org Admin</option>
                     <?php if ($is_admin): ?>
                     <option value="admin">Admin</option>
@@ -1154,7 +1139,6 @@ require_once 'TM_PHP/TM_NavNotif.php';
                     <label class="form-label">New Role</label>
                     <select name="new_role" class="modal-select" id="setRoleSelect">
                         <option value="user">User — standard task access</option>
-                        <option value="moderator">Moderator — can view admin panel</option>
                         <option value="org_admin">Org Admin — manages their own org's users</option>
                         <option value="admin">Admin — full system access</option>
                     </select>
@@ -1330,7 +1314,7 @@ function openEditModal(btn) {
     document.getElementById('edit_phone_hidden').value   = btn.dataset.phone;
     // Role is read-only in this modal — shown for context, changed via "Set Role" button
     var roleVal = btn.dataset.role || 'user';
-    var roleLabels = { user: 'User', moderator: 'Moderator', org_admin: 'Org Admin', admin: 'Admin' };
+    var roleLabels = { user: 'User', org_admin: 'Org Admin', admin: 'Admin' };
     var roleDisplay = document.getElementById('edit_role_display');
     var roleHidden  = document.getElementById('edit_role');
     if (roleDisplay) roleDisplay.value = roleLabels[roleVal] || roleVal;
