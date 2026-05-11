@@ -35,9 +35,8 @@ if (!isset($allTasksForModal)) {
          WHERE user_id = :p1
             OR assigned_to = :p2
             OR (is_org_task = 1 AND org_id = :p3)
-            OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id = :p4)
          ORDER BY due_date ASC",
-        [$_modal_uid, $_modal_uid, $_modal_oid, $_modal_uid]
+        [$_modal_uid, $_modal_uid, $_modal_oid]
     );
     $allTasksForModal = tm_fetch_all($_modal_stmt);
     // Resolve CLOB/LOB
@@ -136,18 +135,6 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                     </select>
                 </div>
 
-                <!-- ── Project selector ─────────────── -->
-                <div class="form-group" id="tmEditProjectGroup">
-                    <label class="form-label">
-                        <i class="fa-solid fa-folder" style="margin-right:4px;color:var(--gray-400)"></i>
-                        Project
-                    </label>
-                    <select name="project_id" class="form-input" id="tmEditProjectSelect">
-                        <option value="">— Personal (no project) —</option>
-                    </select>
-                    <input type="hidden" name="project_id" id="tmEditProjectInput" value=""/>
-                </div>
-
                 <!-- ── Assign to user ───────────────── -->
                 <div class="form-group" id="tmEditAssignGroup">
                     <label class="form-label">
@@ -237,38 +224,6 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                               style="resize:none;overflow:hidden;"></textarea>
                 </div>
 
-                <!-- Comments section — shown only on Calendar page (injected by TM_Calendar.php) -->
-                <div class="form-group" id="tmEditCommentsSection" style="margin-top:1.25rem;display:none;">
-                    <label class="form-label" style="display:flex;align-items:center;gap:6px;">
-                        <i class="fa-solid fa-comments" style="color:var(--gray-400)"></i>
-                        Comments
-                        <span id="tmCommentCount" style="color:var(--gray-400);font-weight:400;font-size:11px;"></span>
-                    </label>
-                    <!-- comment list -->
-                    <div id="tmCommentList"
-                         style="max-height:200px;overflow-y:auto;margin-bottom:.6rem;display:flex;flex-direction:column;gap:.5rem;">
-                        <div id="tmCommentsLoading" style="text-align:center;padding:.75rem;color:var(--gray-400);font-size:12px;">
-                            <i class="fa-solid fa-spinner fa-spin"></i> Loading…
-                        </div>
-                    </div>
-                    <!-- new comment input -->
-                    <div style="display:flex;gap:8px;align-items:flex-end;">
-                        <div style="flex:1;position:relative;">
-                            <textarea id="tmNewCommentInput"
-                                      class="form-input tm-auto-expand"
-                                      placeholder="Add a comment…"
-                                      rows="2"
-                                      style="resize:none;overflow:hidden;font-size:13px;"></textarea>
-                            <div id="commentMentionSuggestions" class="tm-mention-suggestions" style="display:none;"></div>
-                        </div>
-                        <button type="button" class="btn-save"
-                                id="tmPostCommentBtn"
-                                style="padding:8px 14px;flex-shrink:0;"
-                                onclick="tmPostComment()">
-                            <i class="fa-solid fa-paper-plane"></i>
-                        </button>
-                    </div>
-                </div>
             </div>
             <div class="modal-footer" style="justify-content:space-between;">
                 <button type="button" class="btn-cancel" style="color:#ef4444;"
@@ -899,53 +854,7 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
      COLLABORATION STYLES (Changes 1–4)
      ══════════════════════════════════════════════════════════ -->
 <style>
-/* ── Comments ─────────────────────────────────────────────── */
-.tm-comment-item {
-    background: var(--bg);
-    border-radius: 8px;
-    padding: .55rem .75rem;
-    font-size: 13px;
-    line-height: 1.5;
-}
-.tm-comment-meta {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 3px;
-}
-.tm-comment-author {
-    font-weight: 700;
-    font-size: 12px;
-    color: var(--black);
-}
-.tm-comment-time {
-    font-size: 11px;
-    color: var(--gray-400);
-}
-.tm-comment-text {
-    color: var(--gray-500);
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-.tm-comment-text .mention {
-    color: var(--primary, #3b82f6);
-    font-weight: 600;
-}
-.tm-comment-delete {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--gray-400);
-    padding: 0 4px;
-    margin-left: auto;
-    font-size: 11px;
-    opacity: 0;
-    transition: opacity .15s;
-}
-.tm-comment-item:hover .tm-comment-delete { opacity: 1; }
-.tm-comment-delete:hover { color: #ef4444; }
-
-/* ── @mention autocomplete ────────────────────────────────── */
+/* ── @mention autocomplete ─────────────────────────────────────────── */ */
 .tm-mention-suggestions {
     position: absolute;
     z-index: 9999;
@@ -1021,24 +930,6 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
         });
     }
 
-    // ── Populate project dropdown ─────────────────────────────────
-    function populateProjectSelect(selId, currentProjectId) {
-        var sel = document.getElementById(selId);
-        if (!sel) return;
-        fetch('TM_PHP/TM_CollabActions.php?action=list_projects')
-            .then(function (r) { return r.json(); })
-            .then(function (d) {
-                while (sel.options.length > 1) sel.remove(1);
-                (d.data || []).forEach(function (p) {
-                    var opt      = document.createElement('option');
-                    opt.value    = p.project_id;
-                    opt.textContent = p.name;
-                    if (parseInt(currentProjectId, 10) === p.project_id) opt.selected = true;
-                    sel.appendChild(opt);
-                });
-            }).catch(function () {});
-    }
-
     // ── Patch tmOpenEdit to load collab fields ────────────────────
     var _origOpenEdit = window.tmOpenEdit;
 
@@ -1050,134 +941,17 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
             .then(function (d) {
                 if (!d.ok) return;
                 var assignedTo = d.assigned_to || 0;
-                var projectId  = d.project_id  || 0;
-                populateAssignSelect('tmEditAssignSelect', assignedTo);
-                populateProjectSelect('tmEditProjectSelect', projectId);
+                populateAssignSelect('tmEditAssignSelect', d.assigned_to || 0);
             }).catch(function () {
                 populateAssignSelect('tmEditAssignSelect', 0);
                 populateProjectSelect('tmEditProjectSelect', 0);
             });
-        if (typeof window.tmLoadComments === 'function') {
-            window.tmLoadComments(id);
-        }
-        if (typeof window.tmInitMentionAutocomplete === 'function') {
-            window.tmInitMentionAutocomplete(
-                document.getElementById('tmNewCommentInput'),
-                document.getElementById('commentMentionSuggestions')
-            );
-        }
+
     };
 
     window.tmOpenEdit = function (id) {
         _origOpenEdit(id);
         window.tmLoadCollabForTask(id);
-    };
-
-    // ── CHANGE 3: Load & render comments ─────────────────────────
-    var _currentCommentTaskId = null;
-
-    window.tmLoadComments = function (taskId) {
-        _currentCommentTaskId = taskId;
-        var list  = document.getElementById('tmCommentList');
-        var count = document.getElementById('tmCommentCount');
-        if (!list) return;
-        list.innerHTML = '<div id="tmCommentsLoading" style="text-align:center;padding:.75rem;color:var(--gray-400);font-size:12px;"><i class="fa-solid fa-spinner fa-spin"></i> Loading…</div>';
-
-        fetch('TM_PHP/TM_CollabActions.php?action=get_comments&task_id=' + encodeURIComponent(taskId))
-            .then(function (r) { return r.json(); })
-            .then(function (d) {
-                list.innerHTML = '';
-                if (!d.ok || !d.data || d.data.length === 0) {
-                    list.innerHTML = '<div style="text-align:center;color:var(--gray-400);font-size:12px;padding:.5rem;">No comments yet.</div>';
-                    if (count) count.textContent = '';
-                    return;
-                }
-                if (count) count.textContent = '(' + d.data.length + ')';
-                d.data.forEach(function (c) {
-                    list.appendChild(tmBuildCommentEl(c));
-                });
-                list.scrollTop = list.scrollHeight;
-            }).catch(function () {
-                list.innerHTML = '<div style="color:#ef4444;font-size:12px;padding:.5rem;">Failed to load comments.</div>';
-            });
-    };
-
-    function escHtml(s) {
-        return String(s)
-            .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-            .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
-
-    function highlightMentions(text) {
-        return escHtml(text).replace(/@([\w]+)/g,
-            '<span class="mention">@$1</span>');
-    }
-
-    function tmBuildCommentEl(c) {
-        var el = document.createElement('div');
-        el.className = 'tm-comment-item';
-        el.dataset.commentId = c.comment_id;
-
-        var displayName = (c.full_name && c.full_name.trim())
-            ? c.full_name
-            : ('User #' + c.user_id);
-
-        el.innerHTML =
-            '<div class="tm-comment-meta">' +
-                '<span class="tm-comment-author">' + displayName + '</span>' +
-                '<span class="tm-comment-time">' + escHtml(c.created_fmt) + '</span>' +
-                '<button class="tm-comment-delete" title="Delete comment" ' +
-                        'onclick="tmDeleteComment(' + c.comment_id + ',this)">' +
-                    '<i class="fa-solid fa-trash-can"></i>' +
-                '</button>' +
-            '</div>' +
-            '<div class="tm-comment-text">' + highlightMentions(c.content) + '</div>';
-        return el;
-    }
-
-    window.tmPostComment = function () {
-        var inp    = document.getElementById('tmNewCommentInput');
-        var btn    = document.getElementById('tmPostCommentBtn');
-        var content = inp ? inp.value.trim() : '';
-        if (!content || !_currentCommentTaskId) return;
-
-        btn && (btn.disabled = true);
-        var fd = new FormData();
-        fd.append('action',  'add_comment');
-        fd.append('task_id', _currentCommentTaskId);
-        fd.append('content', content);
-
-        fetch('TM_PHP/TM_CollabActions.php', { method: 'POST', body: fd })
-            .then(function (r) { return r.json(); })
-            .then(function (d) {
-                if (!d.ok) { alert(d.error || 'Failed to post comment'); return; }
-                inp.value = '';
-                inp.style.height = 'auto';
-                tmLoadComments(_currentCommentTaskId);
-            })
-            .catch(function () { alert('Network error posting comment.'); })
-            .finally(function () { btn && (btn.disabled = false); });
-    };
-
-    window.tmDeleteComment = function (commentId, btnEl) {
-        if (!confirm('Delete this comment?')) return;
-        var fd = new FormData();
-        fd.append('action',     'delete_comment');
-        fd.append('comment_id', commentId);
-        fetch('TM_PHP/TM_CollabActions.php', { method: 'POST', body: fd })
-            .then(function (r) { return r.json(); })
-            .then(function (d) {
-                if (!d.ok) { alert(d.error || 'Failed to delete'); return; }
-                var item = btnEl ? btnEl.closest('.tm-comment-item') : null;
-                if (item) item.remove();
-                // Update count
-                var list  = document.getElementById('tmCommentList');
-                var count = document.getElementById('tmCommentCount');
-                if (list && count) {
-                    var remaining = list.querySelectorAll('.tm-comment-item').length;
-                    count.textContent = remaining > 0 ? '(' + remaining + ')' : '';
-                }
-            }).catch(function () {});
     };
 
     // ── CHANGE 4: @mention autocomplete ──────────────────────────
@@ -1276,18 +1050,6 @@ if ($_modalTasksJson === false) $_modalTasksJson = '[]';
                         + '<span class="vm-value"><span class="vm-assign-pill">'
                         + '<i class="fa-solid fa-user" style="font-size:9px;"></i>'
                         + escHtml(assigneeName) + '</span></span>'
-                        + '</div>';
-                }
-
-                // ── Project ──────────────────────────────────────────────────
-                if (d.project_id && d.project_name) {
-                    hasExtra = true;
-                    var dotClr = d.project_color ? 'background:' + escHtml(d.project_color) + ';' : 'background:#6366f1;';
-                    gridHtml += '<div class="vm-field">'
-                        + '<span class="vm-label"><i class="fa-solid fa-folder" style="margin-right:4px;color:var(--gray-400);"></i>Project</span>'
-                        + '<span class="vm-value" style="display:flex;align-items:center;gap:6px;">'
-                        + '<span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;display:inline-block;' + dotClr + '"></span>'
-                        + escHtml(d.project_name) + '</span>'
                         + '</div>';
                 }
 

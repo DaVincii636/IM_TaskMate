@@ -88,7 +88,6 @@ CREATE TABLE TM_Notifications (
     is_read      NUMBER(1)     DEFAULT 0 NOT NULL,
     source_type  VARCHAR2(20)  DEFAULT NULL,
     mentioned_by NUMBER(10)    DEFAULT NULL,
-    comment_id   NUMBER(10)    DEFAULT NULL,
     created_at   TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_tm_notif        PRIMARY KEY (notif_id),
     CONSTRAINT fk_notif_user      FOREIGN KEY (user_id)

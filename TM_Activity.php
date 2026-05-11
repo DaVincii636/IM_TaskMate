@@ -14,20 +14,9 @@ $flash     = tm_get_flash();
 // ── Filters ───────────────────────────────────────────────────────────────────
 $filterAction  = trim($_GET['action']  ?? '');
 $filterType    = trim($_GET['type']    ?? '');
-$filterProject = (int)($_GET['project'] ?? 0);
 $filterTeam    = (int)($_GET['team']    ?? 0);
 
-// Load projects/teams for filter dropdowns
-$_actMyProjects = tm_fetch_all(tm_exec(
-    "SELECT p.project_id, p.name FROM TM_Projects p
-     JOIN TM_ProjectMembers pm ON pm.project_id = p.project_id
-     WHERE pm.user_id = :p1
-     UNION
-     SELECT p.project_id, p.name FROM TM_Projects p
-     WHERE p.created_by = :p2
-     ORDER BY 2 ASC",
-    [$uid, $uid]
-));
+// Load teams for filter dropdowns
 $_actMyTeams = tm_fetch_all(tm_exec(
     "SELECT t.team_id, t.team_name FROM TM_Teams t
      JOIN TM_TeamMembers tm ON tm.team_id = t.team_id
@@ -51,9 +40,8 @@ $where  = 'WHERE (a.user_id = :p1 OR a.entity_id IN (
     SELECT task_id FROM TM_Tasks
     WHERE assigned_to = :p2
        OR (is_org_task = 1 AND org_id = :p3)
-       OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id = :p4)
 ))';
-$params = [$uid, $uid, $oid, $uid];
+$params = [$uid, $uid, $oid];
 
 if ($filterType !== '') {
     $params[] = $filterType;
@@ -63,10 +51,6 @@ if ($filterType !== '') {
 if ($filterAction !== '') {
     $params[] = $filterAction;
     $where   .= ' AND a.action = :p' . count($params);
-}
-if ($filterProject > 0) {
-    $where .= ' AND a.entity_id IN (SELECT task_id FROM TM_Tasks WHERE project_id = :p' . (count($params)+1) . ')';
-    $params[] = $filterProject;
 }
 if ($filterTeam > 0) {
     $tMems = tm_fetch_all(tm_exec('SELECT user_id FROM TM_TeamMembers WHERE team_id = :p1', [$filterTeam]));
@@ -323,7 +307,6 @@ require_once 'TM_PHP/TM_NavNotif.php';
         <a href="TM_Dashboard.php" class="btn-logout">Home</a>
         <a href="TM_Calendar.php"  class="btn-logout">Calendar</a>
         <a href="TM_Tasks.php"     class="btn-logout">To-Do List</a>
-        <a href="TM_Projects.php"  class="btn-logout">Projects</a>
         <a href="TM_Activity.php"  class="btn-logout" style="font-weight:700;">Activity</a>
         <a href="TM_Analytics.php" class="btn-logout">Analytics</a>
                 <!-- Global Search (Feature 5) -->
@@ -404,18 +387,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
             <option value="">All Types</option>
             <option value="task" <?= $filterType === 'task' ? 'selected' : '' ?>>Tasks</option>
             <option value="user" <?= $filterType === 'user' ? 'selected' : '' ?>>Users</option>
-        </select>
-        <?php if (!empty($_actMyProjects)): ?>
-        <select name="project" class="filter-select">
-            <option value="">All Projects</option>
-            <?php foreach ($_actMyProjects as $p): ?>
-            <option value="<?= (int)$p['project_id'] ?>" <?= $filterProject===(int)$p['project_id']?'selected':'' ?>>
-                <?= htmlspecialchars($p['name']) ?>
-            </option>
-            <?php endforeach; ?>
-        </select>
-        <?php endif; ?>
-        <?php if (!empty($_actMyTeams)): ?>
+        </select>        <?php if (!empty($_actMyTeams)): ?>
         <select name="team" class="filter-select">
             <option value="">All Teams</option>
             <?php foreach ($_actMyTeams as $t): ?>
@@ -432,7 +404,7 @@ require_once 'TM_PHP/TM_NavNotif.php';
         <button type="submit" class="btn-filter-apply">
             <i class="fa-solid fa-filter"></i> Apply
         </button>
-        <?php if ($filterType !== '' || $sortOrder !== 'desc' || $filterProject || $filterTeam): ?>
+        <?php if ($filterType !== '' || $sortOrder !== 'desc' || $filterTeam): ?>
         <a href="TM_Activity.php" class="btn-filter-clear">Clear</a>
         <?php endif; ?>
     </form>

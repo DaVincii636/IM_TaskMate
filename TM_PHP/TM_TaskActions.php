@@ -112,22 +112,19 @@ if ($action === 'export') {
         // Enrich rows with project, team, org, assigned-to info
         $enrichedRows = array_map(function ($r) {
             $taskId = (int)($r['task_id'] ?? 0);
-            $extra  = ['project_name' => '', 'team_name' => '', 'org_name' => '', 'assigned_to_name' => ''];
+            $extra  = ['team_name' => '', 'org_name' => '', 'assigned_to_name' => ''];
             if ($taskId > 0) {
                 $infoRow = tm_fetch_one(tm_exec(
                     "SELECT p.name AS project_name, tm.team_name, o.org_name,
                             u.first_name || ' ' || u.last_name AS assigned_to_name
                      FROM TM_Tasks t
-                     LEFT JOIN TM_Projects      p  ON p.project_id  = t.project_id
                      LEFT JOIN TM_Teams         tm ON tm.team_id     = t.team_id
                      LEFT JOIN TM_Organizations o  ON o.org_id       = t.org_id
                      LEFT JOIN TM_Users         u  ON u.user_id      = t.assigned_to
                      WHERE t.task_id = :p1",
                     [$taskId]
                 ));
-                if ($infoRow) {
-                    $extra['project_name']     = $infoRow['project_name']     ?? '';
-                    $extra['team_name']        = $infoRow['team_name']        ?? '';
+                if ($infoRow) {                    $extra['team_name']        = $infoRow['team_name']        ?? '';
                     $extra['org_name']         = $infoRow['org_name']         ?? '';
                     $extra['assigned_to_name'] = trim($infoRow['assigned_to_name'] ?? '');
                 }
@@ -148,7 +145,7 @@ if ($action === 'export') {
             'Task ID', 'Task Name', 'Start Date', 'Due Date',
             'Category', 'Custom Category', 'Priority', 'Color',
             'Notes', 'Status', 'Recurrence', 'Created At',
-            'Project', 'Team', 'Organization', 'Assigned To'
+            'Team', 'Organization', 'Assigned To'
         ]);
 
         // Data rows
@@ -165,9 +162,7 @@ if ($action === 'export') {
                 $r['notes']                  ?? '',
                 $r['status']                 ?? '',
                 $r['recurrence']             ?? '',
-                $r['created_at']             ?? '',
-                $r['project_name']           ?? '',
-                $r['team_name']              ?? '',
+                $r['created_at']             ?? '',                $r['team_name']              ?? '',
                 $r['org_name']               ?? '',
                 $r['assigned_to_name']       ?? '',
             ]);
@@ -249,22 +244,19 @@ if ($action === 'export') {
         // ── Enrich rows with project / team / org / assigned-to names ──────────
         $enrichedHtmlRows = array_map(function ($r) {
             $taskId = (int)($r['task_id'] ?? 0);
-            $extra  = ['project_name' => '', 'team_name' => '', 'org_name' => '', 'assigned_to_name' => ''];
+            $extra  = ['team_name' => '', 'org_name' => '', 'assigned_to_name' => ''];
             if ($taskId > 0) {
                 $infoRow = tm_fetch_one(tm_exec(
                     "SELECT p.name AS project_name, tm.team_name, o.org_name,
                             u.first_name || ' ' || u.last_name AS assigned_to_name
                      FROM TM_Tasks t
-                     LEFT JOIN TM_Projects      p  ON p.project_id  = t.project_id
                      LEFT JOIN TM_Teams         tm ON tm.team_id     = t.team_id
                      LEFT JOIN TM_Organizations o  ON o.org_id       = t.org_id
                      LEFT JOIN TM_Users         u  ON u.user_id      = t.assigned_to
                      WHERE t.task_id = :p1",
                     [$taskId]
                 ));
-                if ($infoRow) {
-                    $extra['project_name']     = $infoRow['project_name']     ?? '';
-                    $extra['team_name']        = $infoRow['team_name']        ?? '';
+                if ($infoRow) {                    $extra['team_name']        = $infoRow['team_name']        ?? '';
                     $extra['org_name']         = $infoRow['org_name']         ?? '';
                     $extra['assigned_to_name'] = trim($infoRow['assigned_to_name'] ?? '');
                 }
@@ -474,9 +466,7 @@ if ($action === 'export') {
             $bClass  = $isOD ? 'b-overdue' : 'b-' . str_replace(' ','_',$status);
             $label   = $isOD ? 'Overdue' : ucfirst(str_replace('_', ' ', $status));
             $priCls  = match($r['priority'] ?? '') { 'high' => 'pri-high', 'low' => 'pri-low', default => 'pri-mid' };
-            $priLbl  = ucfirst($r['priority'] ?? 'mid');
-            $projTag = $r['project_name'] ? '<span class="meta-tag project">' . htmlspecialchars($r['project_name']) . '</span>' : '';
-            $teamTag = $r['team_name']    ? '<span class="meta-tag team">'    . htmlspecialchars($r['team_name'])    . '</span>' : '';
+            $priLbl  = ucfirst($r['priority'] ?? 'mid');            $teamTag = $r['team_name']    ? '<span class="meta-tag team">'    . htmlspecialchars($r['team_name'])    . '</span>' : '';
             $asgn    = $r['assigned_to_name'] ? '<span class="meta-tag assigned">' . htmlspecialchars($r['assigned_to_name']) . '</span>' : '<span style="color:#cbd5e1">—</span>';
             echo '<tr>
   <td style="color:#94a3b8;font-size:.72rem;">' . $rowNum++ . '</td>
@@ -513,7 +503,6 @@ switch ($action) {
         $notes      = trim($_POST['notes']          ?? '');
         $recur      = trim($_POST['recurrence']     ?? '');
         $assignedTo = (int)($_POST['assigned_to']   ?? 0);
-        $projectId  = (int)($_POST['project_id']    ?? 0);
         $isOrgTask  = isset($_POST['is_org_task']) && $_POST['is_org_task'] ? 1 : 0;
         $teamId     = isset($_POST['team_id']) && (int)$_POST['team_id'] > 0
                         ? (int)$_POST['team_id'] : null;
@@ -544,16 +533,14 @@ switch ($action) {
         // ── End stored procedure call ─────────────────────────────────────────
 
         // ── CHANGE 1 & 2: Update assigned_to, project_id, and team_id after SP insert ──
-        if ($newId > 0 && ($assignedTo > 0 || $projectId > 0 || $teamId !== null)) {
+        if ($newId > 0 && ($assignedTo > 0 || $teamId !== null)) {
             tm_exec(
                 "UPDATE TM_Tasks SET
                     assigned_to = :p1,
-                    project_id  = :p2,
-                    team_id     = :p4
-                 WHERE task_id = :p3",
+                    team_id     = :p3
+                 WHERE task_id = :p2",
                 [
                     $assignedTo > 0 ? $assignedTo : null,
-                    $projectId  > 0 ? $projectId  : null,
                     $newId,
                     $teamId,
                 ]
@@ -635,7 +622,6 @@ switch ($action) {
         $recur  = trim($_POST['recurrence']     ?? '');
         // CHANGE 1 & 2: Assignment and project
         $assignedTo = array_key_exists('assigned_to', $_POST) ? (int)$_POST['assigned_to'] : -1;
-        $projectId  = array_key_exists('project_id',  $_POST) ? (int)$_POST['project_id']  : -1;
         if (!in_array($recur, ['daily','weekly','monthly','yearly'])) $recur = '';
         $allowed_statuses = ['pending', 'in_progress', 'review', 'done', 'done_late', 'cancelled'];
         if (!in_array($status, $allowed_statuses)) { $status = 'pending'; }
@@ -667,12 +653,10 @@ switch ($action) {
              priority=:p6, color=:p7, notes=:p8,
              status=:p9, recurrence=:p10,
              assigned_to=CASE WHEN :p11 = -1 THEN assigned_to ELSE :p12 END,
-             project_id =CASE WHEN :p13 = -1 THEN project_id  ELSE :p14 END
              WHERE task_id=:p15 AND (user_id=:p16 OR assigned_to=:p17)",
             [
                 $name, $start, $due, $cat, $ccat, $pri, $col, $notes, $status, $recur ?: null,
                 $assignedTo, $assignedTo > 0 ? $assignedTo : null, // p11/p12
-                $projectId,  $projectId  > 0 ? $projectId  : null, // p13/p14
                 $id, $uid, $uid,
             ]
         );

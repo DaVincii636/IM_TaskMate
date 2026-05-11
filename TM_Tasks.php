@@ -16,38 +16,20 @@ $filterCat     = trim($_GET['cat']     ?? '');
 $filterPri     = trim($_GET['pri']     ?? '');
 $dateFrom      = trim($_GET['from']    ?? '');
 $dateTo        = trim($_GET['to']      ?? '');
-$filterProject = (int)($_GET['project'] ?? 0);
 $filterTeam    = (int)($_GET['team']    ?? 0);
-$filterOrg     = (int)($_GET['org']     ?? 0);
 
-// Load projects/teams for filter dropdowns
-$_myProjects = tm_fetch_all(tm_exec(
-    "SELECT p.project_id, p.name FROM TM_Projects p
-     JOIN TM_ProjectMembers pm ON pm.project_id = p.project_id
-     WHERE pm.user_id = :p1
-     UNION
-     SELECT p.project_id, p.name FROM TM_Projects p
-     WHERE p.created_by = :p2
-     ORDER BY 2 ASC",
-    [$uid, $uid]
-));
+// Load teams for filter dropdowns
 $_myTeams = tm_fetch_all(tm_exec(
     "SELECT t.team_id, t.team_name FROM TM_Teams t
      JOIN TM_TeamMembers tm ON tm.team_id = t.team_id
      WHERE tm.user_id = :p1 ORDER BY t.team_name ASC",
     [$uid]
 ));
-$_myOrgs = tm_fetch_all(tm_exec(
-    "SELECT org_id, org_name FROM TM_Organizations ORDER BY org_name ASC",
-    []
-));
-
 $extraWhere  = '';
 $oid         = tm_org_id();
-// Full scope: owned + assigned + org-wide + project member
-$baseScope   = "(user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3)
-                 OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id = :p4))";
-$extraParams = [$uid, $uid, $oid, $uid];
+// Full scope: owned + assigned + org-wide
+$baseScope   = "(user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3))";
+$extraParams = [$uid, $uid, $oid];
 
 if ($search !== '') {
     $extraWhere .= " AND UPPER(task_name) LIKE UPPER(:p" . (count($extraParams)+1) . ")";
@@ -61,10 +43,6 @@ if ($filterPri !== '') {
     $extraWhere .= " AND priority = :p" . (count($extraParams)+1);
     $extraParams[] = $filterPri;
 }
-if ($filterProject > 0) {
-    $extraWhere .= " AND project_id = :p" . (count($extraParams)+1);
-    $extraParams[] = $filterProject;
-}
 if ($filterTeam > 0) {
     // tasks owned by members of this team
     $tMembers = tm_fetch_all(tm_exec(
@@ -75,10 +53,6 @@ if ($filterTeam > 0) {
         $inList = implode(',', array_map('intval', $tIds));
         $extraWhere .= " AND user_id IN ($inList)";
     }
-}
-if ($filterOrg > 0) {
-    $extraWhere .= " AND org_id = :p" . (count($extraParams)+1);
-    $extraParams[] = $filterOrg;
 }
 if ($dateFrom !== '') {
     $extraWhere .= " AND due_date >= TO_DATE(:p" . (count($extraParams)+1) . ",'YYYY-MM-DD')";
@@ -457,7 +431,6 @@ table.task-table tbody tr.row-overdue td:first-child {
         <a href="TM_Dashboard.php" class="btn-logout">Home</a>
         <a href="TM_Calendar.php" class="btn-logout">Calendar</a>
         <a href="TM_Tasks.php"    class="btn-logout">To-Do List</a>
-        <a href="TM_Projects.php" class="btn-logout">Projects</a>
         <a href="TM_Activity.php" class="btn-logout">Activity</a>
         <a href="TM_Analytics.php" class="btn-logout">Analytics</a>
                 <!-- Global Search (Feature 5) -->
@@ -502,12 +475,11 @@ table.task-table tbody tr.row-overdue td:first-child {
 // Count tasks for tab badges — full scope: owned + assigned + org-wide + project member
 $_cntUid = $uid;
 $_cntOid = $oid;
-$_cntScope = "(user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)
-               OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id=:p4))";
+$_cntScope = "(user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3))";
 
 $_r = tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks WHERE $_cntScope",
-    [$_cntUid, $_cntUid, $_cntOid, $_cntUid]
+    [$_cntUid, $_cntUid, $_cntOid]
 ));
 $cntAll = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 
@@ -515,7 +487,7 @@ $_r = tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
      WHERE ($_cntScope)
        AND due_date < SYSDATE AND status NOT IN ('done','cancelled')",
-    [$_cntUid, $_cntUid, $_cntOid, $_cntUid]
+    [$_cntUid, $_cntUid, $_cntOid]
 ));
 $cntMissing = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 
@@ -523,7 +495,7 @@ $_r = tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
      WHERE ($_cntScope)
        AND status IN ('done','done_late')",
-    [$_cntUid, $_cntUid, $_cntOid, $_cntUid]
+    [$_cntUid, $_cntUid, $_cntOid]
 ));
 $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
 ?>
@@ -581,16 +553,6 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
                 <option value="mid"  <?= $filterPri==='mid' ?'selected':'' ?>>Mid</option>
                 <option value="low"  <?= $filterPri==='low' ?'selected':'' ?>>Low</option>
             </select>
-            <?php if (!empty($_myProjects)): ?>
-            <select name="project" class="filter-select">
-                <option value="">All Projects</option>
-                <?php foreach ($_myProjects as $p): ?>
-                <option value="<?= (int)$p['project_id'] ?>" <?= $filterProject===(int)$p['project_id']?'selected':'' ?>>
-                    <?= htmlspecialchars($p['name']) ?>
-                </option>
-                <?php endforeach; ?>
-            </select>
-            <?php endif; ?>
             <?php if (!empty($_myTeams)): ?>
             <select name="team" class="filter-select">
                 <option value="">All Teams</option>
@@ -608,7 +570,7 @@ $cntDone = (int)($_r[0]['n'] ?? $_r[0]['N'] ?? 0);
             <button type="submit" class="btn-filter-apply" id="filterSubmitBtn" style="display:none;">
                 <i class="fa-solid fa-filter"></i> Filter
             </button>
-            <?php if ($search || $filterCat || $filterPri || $dateFrom || $dateTo || $filterProject || $filterTeam || $filterOrg): ?>
+            <?php if ($search || $filterCat || $filterPri || $dateFrom || $dateTo || $filterTeam): ?>
             <a href="TM_Tasks.php?view=<?= $view ?>" class="btn-filter-clear">Clear</a>
             <?php endif; ?>
         </div>

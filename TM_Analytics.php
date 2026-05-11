@@ -13,11 +13,8 @@ $oid       = tm_org_id();
 
 
 $scopeWhere  = "(user_id = :uid_scope OR assigned_to = :uid_scope2
-                 OR (is_org_task = 1 AND org_id = :oid_scope)
-                 OR project_id IN (
-                     SELECT project_id FROM TM_ProjectMembers WHERE user_id = :uid_scope3
-                 ))";
-$scopeParams = [$uid, $uid, $oid, $uid]; // self + assigned + org-wide + project member
+                 OR (is_org_task = 1 AND org_id = :oid_scope))";
+$scopeParams = [$uid, $uid, $oid]; // self + assigned + org-wide + project member
 
 // ── Notifications (bell) ──────────────────────────────────────────────────────
 require_once 'TM_PHP/TM_NavNotif.php';
@@ -52,22 +49,20 @@ $stmtWeekly = tm_exec(
                    SELECT task_id FROM TM_Tasks
                    WHERE assigned_to = :p2
                       OR (is_org_task = 1 AND org_id = :p3)
-                      OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id = :p4)
                )
            )
          UNION ALL
          SELECT (TRUNC(due_date) - MOD(TRUNC(due_date) - DATE'1970-01-05', 7)) AS week_start,
                 0 AS completed, 1 AS total_due
          FROM TM_Tasks
-         WHERE (user_id = :p5 OR assigned_to = :p6
-                OR (is_org_task = 1 AND org_id = :p7)
-                OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id = :p8))
+         WHERE (user_id = :p4 OR assigned_to = :p5
+                OR (is_org_task = 1 AND org_id = :p6))
            AND due_date >= TRUNC(SYSDATE) - 56
            AND due_date <  TRUNC(SYSDATE) + 7
      )
      GROUP BY week_start
      ORDER BY week_start ASC",
-    [$uid, $uid, $oid, $uid, $uid, $uid, $oid, $uid]
+    [$uid, $uid, $oid, $uid, $uid, $oid]
 );
 $weeklyRaw = tm_fetch_all($stmtWeekly);
 
@@ -103,8 +98,7 @@ $stmtMissed = tm_exec(
             COUNT(*) AS missed_count
      FROM TM_Tasks
      WHERE (user_id = :p1 OR assigned_to = :p2
-            OR (is_org_task = 1 AND org_id = :p3)
-            OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id = :p4))
+            OR (is_org_task = 1 AND org_id = :p3))
        AND due_date < TRUNC(SYSDATE)
        AND status NOT IN ('done','cancelled')
      GROUP BY CASE WHEN category = 'others' AND custom_category IS NOT NULL
@@ -112,7 +106,7 @@ $stmtMissed = tm_exec(
                    ELSE INITCAP(category)
               END
      ORDER BY COUNT(*) DESC",
-    [$uid, $uid, $oid, $uid]
+    [$uid, $uid, $oid]
 );
 $missedRows = tm_fetch_all($stmtMissed);
 
@@ -135,15 +129,13 @@ $stmtAvgDays = tm_exec(
                SELECT task_id FROM TM_Tasks
                WHERE user_id = :p1 OR assigned_to = :p2
                   OR (is_org_task = 1 AND org_id = :p3)
-                  OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id = :p4)
            )
          GROUP BY entity_id
      ) d ON d.entity_id = t.task_id
-     WHERE (t.user_id = :p5 OR t.assigned_to = :p6
-            OR (t.is_org_task = 1 AND t.org_id = :p7)
-            OR t.project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id = :p8))
+     WHERE (t.user_id = :p4 OR t.assigned_to = :p5
+            OR (t.is_org_task = 1 AND t.org_id = :p6))
        AND t.status IN ('done', 'done_late')",
-    [$uid, $uid, $oid, $uid, $uid, $uid, $oid, $uid]
+    [$uid, $uid, $oid, $uid, $uid, $oid]
 );
 $avgDaysRow  = tm_fetch_all($stmtAvgDays);
 $avgDays     = _an_val($avgDaysRow, 'avg_days',    null);
@@ -198,19 +190,18 @@ foreach ($allDays as $d) {
 // QUERY 5 — Top-level summary numbers for the hero strip
 // ══════════════════════════════════════════════════════════════════════════════
 $fullScope = "(user_id=:p1 OR assigned_to=:p2
-               OR (is_org_task=1 AND org_id=:p3)
-               OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id=:p4))";
+               OR (is_org_task=1 AND org_id=:p3))";
 $cntDone    = (int)_an_val(tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks WHERE $fullScope AND status IN ('done','done_late')",
-    [$uid, $uid, $oid, $uid])), 'n');
+    [$uid, $uid, $oid])), 'n');
 $cntTotal   = (int)_an_val(tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks WHERE $fullScope",
-    [$uid, $uid, $oid, $uid])), 'n');
+    [$uid, $uid, $oid])), 'n');
 $cntOverdue = (int)_an_val(tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
      WHERE ($fullScope) AND due_date < TRUNC(SYSDATE) AND status NOT IN ('done','cancelled')
-        OR (user_id=:p5 AND status = 'done_late')",
-    [$uid, $uid, $oid, $uid, $uid])), 'n');
+        OR (user_id=:p4 AND status = 'done_late')",
+    [$uid, $uid, $oid, $uid])), 'n');
 $completionPct = $cntTotal > 0 ? round($cntDone / $cntTotal * 100) : 0;
 
 // ── Pass data to JS for the bar chart ─────────────────────────────────────────
@@ -357,7 +348,6 @@ $chartDue       = array_column(array_values($weeks), 'total_due');
         <a href="TM_Dashboard.php" class="btn-logout">Home</a>
         <a href="TM_Calendar.php"  class="btn-logout">Calendar</a>
         <a href="TM_Tasks.php"     class="btn-logout">To-Do List</a>
-        <a href="TM_Projects.php"  class="btn-logout">Projects</a>
         <a href="TM_Activity.php"  class="btn-logout">Activity</a>
         <a href="TM_Analytics.php" class="btn-logout" style="font-weight:700;">Analytics</a>
                 <!-- Global Search (Feature 5) -->

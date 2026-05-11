@@ -17,7 +17,6 @@
  *
  * COLLABORATION ADDITIONS (Changes 1 & 2):
  *   - assigned_to: user dropdown populated via TM_CollabActions.php
- *   - project_id:  project dropdown populated via TM_CollabActions.php
  */
 ?>
 <!-- ══════════════════════════════════════════════════════════
@@ -46,12 +45,6 @@
                         <label class="form-label">Due Date</label>
                         <input type="date" name="dueDate" class="form-input" id="addTaskDue" required/>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Project</label>
-                    <select name="project_id" class="form-input" id="addProjectSelect">
-                        <option value="">— No Project —</option>
-                    </select>
                 </div>
 
                 <!-- ── Organization task checkbox (admin only) ──────── -->
@@ -200,33 +193,11 @@
                 if (m.attributeName === 'class' &&
                     overlay.classList.contains('active')) {
                     loadUsers();
-                    loadProjectsDropdown();
                 }
             });
         });
         observer.observe(overlay, { attributes: true });
     }
-
-    // ── Populate project dropdown ─────────────────────────────────────────────
-    var _projsLoaded = false;
-    function loadProjectsDropdown() {
-        if (_projsLoaded) return;
-        fetch('TM_PHP/TM_CollabActions.php?action=list_projects')
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (!data.ok) return;
-                _projsLoaded = true;
-                var sel = document.getElementById('addProjectSelect');
-                if (!sel) return;
-                (data.data || []).forEach(function(p) {
-                    var opt = document.createElement('option');
-                    opt.value = p.project_id;
-                    opt.textContent = p.name;
-                    sel.appendChild(opt);
-                });
-            }).catch(function() {});
-    }
-
     // ── Org-wide toggle hides Assign To ───────────────────────────────────────
     var orgCheckbox   = document.getElementById('addIsOrgTask');
     var assignGroup   = document.getElementById('addAssignGroup');

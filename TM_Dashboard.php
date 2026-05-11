@@ -29,48 +29,37 @@ function _tm_count(array $rows): int {
 
 $cntTotal = _tm_count(tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)
-        OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id=:p4)",
-    [$uid, $uid, $oid, $uid]
+     WHERE user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)",
+    [$uid, $uid, $oid]
 )));
 
 $cntPending = _tm_count(tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)
-            OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id=:p4))
+     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3))
        AND status NOT IN ('done','cancelled')",
-    [$uid, $uid, $oid, $uid]
+    [$uid, $uid, $oid]
 )));
 
 $cntDone = _tm_count(tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)
-            OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id=:p4))
+     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3))
        AND status IN ('done','done_late')",
-    [$uid, $uid, $oid, $uid]
+    [$uid, $uid, $oid]
 )));
 
 $cntOverdue = _tm_count(tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)
-            OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id=:p4))
+     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3))
        AND TRUNC(due_date) < TRUNC(SYSDATE) AND status NOT IN ('done','cancelled')",
-    [$uid, $uid, $oid, $uid]
+    [$uid, $uid, $oid]
 )));
 
 // ── In-Progress count ─────────────────────────────────────────────────────────
 $cntInProgress = _tm_count(tm_fetch_all(tm_exec(
     "SELECT COUNT(*) AS n FROM TM_Tasks
-     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)
-            OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id=:p4))
+     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3))
        AND status = 'in_progress'",
-    [$uid, $uid, $oid, $uid]
-)));
-
-// ── Projects count (projects the user is a member of) ─────────────────────────
-$cntProjects = _tm_count(tm_fetch_all(tm_exec(
-    "SELECT COUNT(*) AS n FROM TM_ProjectMembers WHERE user_id = :p1",
-    [$uid]
+    [$uid, $uid, $oid]
 )));
 
 // ── 5 upcoming tasks (not done/cancelled, closest due date first) ─────────────
@@ -83,14 +72,13 @@ $stmtUpcoming = tm_exec(
          SELECT task_id, task_name, start_date, due_date,
                 category, custom_category, priority, color, status, notes
          FROM TM_Tasks
-         WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)
-                OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id=:p4))
+         WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3))
            AND status NOT IN ('done','cancelled')
            AND due_date >= TRUNC(SYSDATE)
          ORDER BY due_date ASC
      )
      WHERE ROWNUM <= 5",
-    [$uid, $uid, $oid, $uid]
+    [$uid, $uid, $oid]
 );
 $upcoming = tm_fetch_all($stmtUpcoming);
 // Resolve CLOB fields
@@ -109,10 +97,9 @@ $stmtAllTasks = tm_exec(
             TO_CHAR(due_date,'YYYY-MM-DD') AS due_date,
             category, custom_category, priority, color, notes, status, recurrence
      FROM TM_Tasks
-     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3)
-            OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id=:p4))
+     WHERE (user_id=:p1 OR assigned_to=:p2 OR (is_org_task=1 AND org_id=:p3))
      ORDER BY due_date ASC",
-    [$uid, $uid, $oid, $uid]
+    [$uid, $uid, $oid]
 );
 $allTasks = tm_fetch_all($stmtAllTasks);
 $allTasks = array_map(function($row) {
@@ -363,7 +350,6 @@ function statusLabel(string $s): string {
         <a href="TM_Dashboard.php" class="btn-logout">Home</a>
         <a href="TM_Calendar.php"  class="btn-logout">Calendar</a>
         <a href="TM_Tasks.php"     class="btn-logout">To-Do List</a>
-        <a href="TM_Projects.php"  class="btn-logout">Projects</a>
         <a href="TM_Activity.php"  class="btn-logout">Activity</a>
         <a href="TM_Analytics.php" class="btn-logout">Analytics</a>
                 <!-- Global Search (Feature 5) -->
@@ -439,11 +425,7 @@ function statusLabel(string $s): string {
             <div class="stat-value"><?= (int)$cntOverdue ?></div>
             <div class="stat-label">Overdue</div>
         </div>
-        <div class="stat-card" style="border-left:3px solid #6366f1;">
-            <div class="stat-icon" style="background:#ede9fe;color:#4338ca;"><i class="fa-solid fa-folder-open"></i></div>
-            <div class="stat-value"><?= (int)$cntProjects ?></div>
-            <div class="stat-label">Projects</div>
-        </div>
+
     </div>
 
     <!-- Quick actions -->
@@ -462,9 +444,6 @@ function statusLabel(string $s): string {
         </a>
         <a href="TM_Calendar.php" class="qa-btn">
             <i class="fa-regular fa-calendar"></i> Calendar
-        </a>
-        <a href="TM_Projects.php" class="qa-btn">
-            <i class="fa-solid fa-folder-open"></i> Projects
         </a>
     </div>
 

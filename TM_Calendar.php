@@ -8,23 +8,7 @@ $uid   = tm_uid();
 $oid   = tm_org_id();
 
 // ── Feature 8: Team filter ────────────────────────────────────────────────────
-$filterTeam    = (int)($_GET['team']    ?? 0);
-$filterProject = (int)($_GET['project'] ?? 0);
-
-// Load projects the current user belongs to (for the project filter dropdown)
-// FIX: owner_id does not exist on TM_Projects — use created_by instead.
-// The UNION ensures both members and creators see their projects.
-$_pstmt   = tm_exec(
-    "SELECT p.project_id, p.name FROM TM_Projects p
-     JOIN TM_ProjectMembers pm ON pm.project_id = p.project_id
-     WHERE pm.user_id = :p1
-     UNION
-     SELECT p.project_id, p.name FROM TM_Projects p
-     WHERE p.created_by = :p2
-     ORDER BY 2 ASC",
-    [$uid, $uid]
-);
-$myProjects = tm_fetch_all($_pstmt);
+$filterTeam = (int)($_GET['team'] ?? 0);
 
 // Load teams the current user belongs to (for the filter dropdown)
 $_tstmt  = tm_exec(
@@ -36,33 +20,10 @@ $_tstmt  = tm_exec(
 );
 $myTeams = tm_fetch_all($_tstmt);
 
-// Build the WHERE clause and params based on whether a team filter is active
-// Default: own tasks + assigned tasks + org-wide tasks + project member tasks
-$taskWhere  = '(user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3)
-                OR project_id IN (SELECT project_id FROM TM_ProjectMembers WHERE user_id = :p4))';
-$taskParams = [$uid, $uid, $oid, $uid];
-$activeTeamName    = '';
-$activeProjectName = '';
-
-// ── Project filter ────────────────────────────────────────────────────────────
-if ($filterProject > 0) {
-    // Verify user has access to this project (member OR creator)
-    // FIX: owner_id → created_by
-    $chkP    = tm_exec('SELECT COUNT(*) FROM TM_ProjectMembers WHERE project_id = :p1 AND user_id = :p2',
-                        [$filterProject, $uid]);
-    $chkPOwn = tm_exec('SELECT COUNT(*) FROM TM_Projects WHERE project_id = :p1 AND created_by = :p2',
-                        [$filterProject, $uid]);
-    if ((int)tm_scalar($chkP) > 0 || (int)tm_scalar($chkPOwn) > 0) {
-        // FIX: tm_exec binds positionally (:p1, :p2 …), NOT named binds like :p_proj.
-        // Using :p_proj caused ORA-01036 (illegal variable name) + ORA-01008 (not all bound).
-        $taskWhere  = 'project_id = :p1';
-        $taskParams = [$filterProject];
-        $pnRow = tm_fetch_one(tm_exec('SELECT name FROM TM_Projects WHERE project_id = :p1', [$filterProject]));
-        $activeProjectName = $pnRow['name'] ?? '';
-    } else {
-        $filterProject = 0; // reset invalid/unauthorised filter
-    }
-}
+// Default scope: own + assigned + org-wide tasks
+$taskWhere  = '(user_id = :p1 OR assigned_to = :p2 OR (is_org_task = 1 AND org_id = :p3))';
+$taskParams = [$uid, $uid, $oid];
+$activeTeamName = '';
 
 if ($filterTeam > 0) {
     // Security: verify the current user actually belongs to this team
@@ -76,7 +37,6 @@ if ($filterTeam > 0) {
         $memberIds = array_column(tm_fetch_all($mStmt), 'user_id');
         if (!empty($memberIds)) {
             $inList = implode(',', array_map('intval', $memberIds));
-            // FIX: :p_oid is not a valid bind name for tm_exec — use :p1 positionally.
             $taskWhere  = "(user_id IN ($inList) OR (is_org_task = 1 AND org_id = :p1))";
             $taskParams = [$oid];
         }
@@ -165,7 +125,6 @@ $blockerMapJson = json_encode($blockerMap);
         <a href="TM_Dashboard.php" class="btn-logout">Home</a>
         <a href="TM_Calendar.php"  class="btn-logout" style="font-weight:700;">Calendar</a>
         <a href="TM_Tasks.php"    class="btn-logout">To-Do List</a>
-        <a href="TM_Projects.php" class="btn-logout">Projects</a>
         <a href="TM_Activity.php" class="btn-logout">Activity</a>
         <a href="TM_Analytics.php" class="btn-logout">Analytics</a>
                 <!-- Global Search (Feature 5) -->

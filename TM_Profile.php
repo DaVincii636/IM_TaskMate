@@ -242,7 +242,6 @@ require_once 'TM_PHP/TM_NavNotif.php';
         <a href="TM_Dashboard.php" class="btn-logout">Home</a>
         <a href="TM_Calendar.php"  class="btn-logout">Calendar</a>
         <a href="TM_Tasks.php"     class="btn-logout">Tasks</a>
-        <a href="TM_Projects.php"  class="btn-logout">Projects</a>
         <a href="TM_Activity.php"  class="btn-logout">Activity</a>
         <a href="TM_Analytics.php" class="btn-logout">Analytics</a>
         <!-- Global Search (Feature 5) -->
