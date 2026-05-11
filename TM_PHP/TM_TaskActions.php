@@ -468,7 +468,9 @@ if ($action === 'export') {
             $bClass  = $isOD ? 'b-overdue' : 'b-' . str_replace(' ','_',$status);
             $label   = $isOD ? 'Overdue' : ucfirst(str_replace('_', ' ', $status));
             $priCls  = match($r['priority'] ?? '') { 'high' => 'pri-high', 'low' => 'pri-low', default => 'pri-mid' };
-            $priLbl  = ucfirst($r['priority'] ?? 'mid');            $teamTag = $r['team_name']    ? '<span class="meta-tag team">'    . htmlspecialchars($r['team_name'])    . '</span>' : '';
+            $priLbl  = ucfirst($r['priority'] ?? 'mid');
+            $projTag = $r['project_name'] ? '<span class="meta-tag project">' . htmlspecialchars($r['project_name']) . '</span>' : '';
+            $teamTag = $r['team_name']    ? '<span class="meta-tag team">'    . htmlspecialchars($r['team_name'])    . '</span>' : '';
             $asgn    = $r['assigned_to_name'] ? '<span class="meta-tag assigned">' . htmlspecialchars($r['assigned_to_name']) . '</span>' : '<span style="color:#cbd5e1">—</span>';
             echo '<tr>
   <td style="color:#94a3b8;font-size:.72rem;">' . $rowNum++ . '</td>

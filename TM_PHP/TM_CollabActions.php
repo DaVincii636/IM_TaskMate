@@ -219,4 +219,4 @@ switch ($action) {
         echo json_encode(['ok' => true, 'data' => $users]);
         exit;
     }
-}
+} // end switch
